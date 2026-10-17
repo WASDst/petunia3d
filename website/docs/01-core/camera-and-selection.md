@@ -59,3 +59,14 @@ IDs persistentes deverão usar newtypes quando isso aumentar segurança e legibi
 O [contrato contextual](../02-application/contextual-editor-contract.md) separa navegação, centro de transformação e origem persistente. `NavigationAnchor::ViewTarget` é o default; `Cursor3D` é escolha explícita da sessão. Orbitar no modo Cursor3D transforma olho e alvo em torno da âncora sem reenquadrar antes do gesto; zoom preserva a posição projetada da referência. Pan/frame não movem cursor; trocar modo não altera câmera imediatamente. Ferramenta ativa e `PivotPoint` não decidem navegação.
 
 `select_through` é política de picking da sessão, independente de `show_xray` e Wireframe. Clique, hover, regiões e candidatos de snap usam essa política; a renderização mantém suas opções visuais próprias. `ViewportSession` projeta e restaura ambas as escolhas. A exposição Qt e seus gates continuam em H33; APIs headless não comprovam acesso físico no frontend.
+
+## Matriz de implementação e conformidade (A05)
+
+| Requisito / Invariante                                     | Status    | Evidência / Implementação em Código                                                               |
+|------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------|
+| SelectionDomain como autoridade única de interação         | [x] DONE  | `SelectionDomain` governa `Object`, `Vertex`, `Edge`, `Face` com equivalência segura a SelectMode. |
+| IDs tipados e newtypes seguros                             | [x] DONE  | Newtypes `VertexIndex`, `FaceIndex`, `EdgeKey` integrados à struct `Selection` sem confusão crua. |
+| Remap topológico resiliente                                | [x] DONE  | `Selection::remap(&ElementRemap)` preserva índices remapeados e descarta arestas/faces colapsadas.|
+| Application como autoridade primária da seleção            | [x] DONE  | `AppState::session.selection` governa a seleção; `apply_to_mesh` sincroniza apenas para export/GL. |
+| Preservação de seleção após Undo/Redo                      | [x] DONE  | Undo restaura e poda stale references de objetos deletados sem panics ou referências nulas.       |
+

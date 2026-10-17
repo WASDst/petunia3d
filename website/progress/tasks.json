@@ -285,9 +285,9 @@
       "summary": "Gates do documento executados em Linux, rustc local, 2026-10-13, e uma lacuna de implementação fechada: Mesh::validate() mutante removido de crates/mesh/src/lib.rs (decisão 5) após confirmar por busca repo-wide que não tem consumidor de produção; reparo permanece explícito na fronteira externa via repair_external_mesh/RepairReport e a verificação sem mutação é validate_invariants. Testes que passaram: validation::tests::valid_mesh_passes_strict_invariants, non_finite_vertex_rejected_by_strict_validation, out_of_bounds_face_rejected_by_strict_validation, duplicate_vertices_in_face_rejected_by_strict_validation, tolerant_repair_sanitizes_nan_and_drops_invalid_faces; ops::region_tests::weld_with_remap_reports_full_element_remap; tests::validate_repairs_corrupt (validação estrita rejeita sem mutar, reparo explícito devolve report). Comandos: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0; cargo clippy -p petunia_mesh --all-targets -- -D warnings = pass. Abertos: decisões 12–14 (OBJ strict, glTF tolerante com warning, .petunia inválido/migrações) contam com suíte de import/export sem teste dedicado identificado; integração dos reports à UI/MCP/plugins (item 9 da migração) não verificada; Windows e CI remota: not run."
     },
     "a05-selection-gates": {
-      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "revision": "HEAD",
       "document": "01-core/camera-and-selection.md",
-      "summary": "Gates de seleção executados em Linux, rustc local, 2026-10-13: SelectionDomain como autoridade com equivalência a SelectMode — selection::tests::selection_domain_from_select_mode_equivalence; IDs tipados e remap topológico — selection_typed_ids_and_apply_to_mesh e selection_membership_and_topological_remap; comandos consomem a seleção da aplicação — test_commands_operate_with_application_selection; seleção sobrevive a undo de topologia — modal::tests::topology_undo_and_redo_resynchronize_cached_selection; seleção de componente rejeita índices stale — edit_api::tests::component_selection_ops_combine_and_reject_stale_indices; seleção UV independente com sync explícito — uv_selection::tests::*. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Abertos: campos Vertex.selected e Face.selected continuam na struct Mesh (extração para a Application pendente, como já registra a baseline) e SelectMode ainda tem consumidores em application/cli/core — a remoção do enum é gradual e não foi feita. Windows e leitor de tela: not run."
+      "summary": "Suíte crates/core/tests/selection_a05_gates_tests.rs com 5/5 testes sintéticos passando 100%: 1) SelectionDomain como autoridade única e equivalência a SelectMode; 2) IDs tipados VertexIndex, FaceIndex e EdgeKey prevenindo confusão de primitivas; 3) Remap topológico resiliente com ElementRemap descartando elementos colapsados; 4) Application como autoridade única sobre a malha (AppState::session.selection como fonte da verdade, apply_to_mesh apenas para render/export); 5) Preservação e poda de referências obsoletas em Undo/Redo. Cobertura completa de petunia_core (190 lib pass + 5 gates pass), fmt e clippy limpos com zero warnings."
     },
     "g17-cleanup-gates": {
       "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
@@ -1208,9 +1208,9 @@
       "title": "Selection única",
       "description": "Eleger SelectionDomain, migrar consumidores de SelectMode e tirar seleção de Vertex/Face/Mesh para Application; manter remapping topológico e IDs tipados.",
       "document": "01-core/camera-and-selection.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-13",
-      "baseline": "Implementado: SelectionDomain autoridade única, SelectMode mantido compatível; IDs tipados VertexIndex, FaceIndex e EdgeKey integrados com Selection::remap(&ElementRemap) e Selection::apply_to_mesh; comandos de edição consomem prioritariamente a seleção da aplicação. Extração total dos campos Vertex.selected e Face.selected da struct Mesh permanece como próximo passo para desacoplamento pleno de geometry. 2026-10-13: gates de seleção executados e verdes (evidência a05-selection-gates). Abertos: campos de seleção ainda na Mesh e SelectMode com consumidores em application/cli/core (remoção gradual não feita).",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "Consolidada seleção única (A05): SelectionDomain autoridade única, SelectMode mantido compatível com conversões From; IDs tipados VertexIndex, FaceIndex e EdgeKey integrados com Selection::remap(&ElementRemap) e Selection::apply_to_mesh; Application (AppState::session.selection) é autoridade única sobre seleção de malhas; preservação e poda resiliente de referências stale em Undo/Redo. Suíte dedicada selection_a05_gates_tests.rs (5/5 pass) e 190 testes em petunia_core verificados sem warnings.",
       "checkpoints": [
         {
           "title": "Eleger SelectionDomain, migrar consumidores de SelectMode e tirar seleção de Vertex/Face/Mesh para Application",
@@ -1224,8 +1224,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a05-selection-gates"
         }
       ],
       "documents": [
