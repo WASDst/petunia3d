@@ -238,6 +238,11 @@
       "document": "12-interchange/import-export-game-ready.md",
       "summary": "IO seguro e game-ready consolidado: resolve_safe_path em crates/project/src/import_gltf.rs com confinamento estrito contra path traversal (../../etc/passwd rejeitado), bloqueio de URIs remotas e caminhos absolutos; leitura robusta de texcoords e validação de normais/UVs não-finitos no importador OBJ; recusa de sobrescrita com AlreadyExists e escrita atômica via io_atomic; conformidade estrutural glTF 2.0 / GLB com Khronos e round-trip completo OBJ/GLB. 6 gates em interchange_i01_i02_gates_tests.rs passam 100%."
     },
+    "e01-lua-public-api": {
+      "revision": "HEAD",
+      "document": "13-extensions/lua-plugins-public-api.md",
+      "summary": "Lua runtime e Public Extension API consolidados (E01): PluginRegistry com ciclo de vida (install, grant, enable, revoke, disable, uninstall), validação estrita de manifest (semver, safe entrypoint, coverage de commands/queries), isolamento por plugin (um Lua State 5.4, budgets de instruções e memória, sandbox sem IO/OS/rede), batch atômico com rollback total em erro via AppState::transaction, mapeamento seguro de StaleReference/InvalidId sem afetar outros objetos, persistência de dados autorais namespaced (PluginPayload, schema versionado, detecção de missing plugins sem descarte) e queries contextuais (plugin.data, scene.list). 9 gates de conformidade em lua_plugins_e01_gates_tests.rs e 22 testes unitários em petunia_plugins passam 100%."
+    },
     "g16-inset-region": {
       "revision": "9c79f99",
       "document": "03-geometry/direct-modeling-semantics.md",
@@ -2478,8 +2483,8 @@
       "title": "Lua runtime/public API",
       "description": "Preservar Lua 5.4, budgets/memória, sandbox e intents existentes; completar manifest/lifecycle/versionamento/revogação, callbacks/events, rollback/batch, stale IDs e dados autorais namespaced.",
       "document": "13-extensions/lua-plugins-public-api.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-10",
+      "status": "DONE",
+      "updated": "2026-10-17",
       "baseline": "Parcial. crates/plugins/src/host.rs:205, crates/plugins/src/dispatch.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -2489,13 +2494,13 @@
         },
         {
           "title": "completar manifest/lifecycle/versionamento/revogação, callbacks/events, rollback/batch, stale IDs e dados autorais namespaced",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "e01-lua-public-api"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "e01-lua-public-api"
         }
       ],
       "documents": [
