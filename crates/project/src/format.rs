@@ -320,6 +320,15 @@ fn finish_load(
     if mode == LoadMode::Strict && !repairs.is_empty() {
         return Err(ProjectError::RepairRequired(repairs.join(", ")));
     }
+    // Migração de schema (não é reparo): pilha legada de modifiers → Operation Graph.
+    let mut project = project;
+    let migrated = project.migrate_legacy_modifiers();
+    let mut repairs = repairs;
+    if migrated > 0 {
+        repairs.push(format!(
+            "modifiers legados migrados para o Operation Graph: {migrated}"
+        ));
+    }
     Ok((
         project,
         LoadReport {

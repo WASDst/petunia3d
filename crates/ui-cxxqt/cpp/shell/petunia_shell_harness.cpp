@@ -23,6 +23,7 @@
 
 #include <QAccessible>
 #include <QApplication>
+#include <cmath>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -295,6 +296,11 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(4);
         h.add("nodes:ctrl-arrow-moves-node", canvas->nodeScenePosition(opId).x() > before.x() + 10,
               QStringLiteral("%1 -> %2").arg(before.x()).arg(canvas->nodeScenePosition(opId).x()));
+        c->request("undo");
+        settle(4);
+        window.syncNow();
+        h.add("nodes:undo-restores-node-position", std::abs(canvas->nodeScenePosition(opId).x() - before.x()) < 0.5,
+              QStringLiteral("%1 vs %2").arg(canvas->nodeScenePosition(opId).x()).arg(before.x()));
         // Desconectar pela mesma via do menu por teclado.
         canvas->disconnectOperation(opId, wallNode);
         settle(6);

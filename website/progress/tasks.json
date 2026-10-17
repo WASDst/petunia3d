@@ -836,6 +836,21 @@
       "revision": "fb431953+working tree",
       "document": "09-ui/shell-v2-proposal.md",
       "summary": "Correção de rastreabilidade (2026-10-17): QAccessible por nó não existia quando o3-nodes-drawer-a11y foi escrita. Agora PetuniaNodeAccessible (ListItem com nome, descrição com ligações, estados selectable/selected/focused/disabled e retângulo global) é filho de PetuniaCanvasAccessible; testado no harness via QAccessible::queryAccessibleInterface (filhos == nós, nome/papel/descrição, estado, pai). Limitação: leitor de tela real e AT-SPI/pywinauto não executados (not run); undo de MoveNode não reflete no canvas."
+    },
+    "o02-boolean-parity-verified": {
+      "revision": "d9a1621d+working tree",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Teste core op_graph_commands::boolean_node_matches_destructive_boolean_command: nó Boolean × BooleanOpCmd para União/Diferença/Interseção com e sem limpeza — mesmas faces e mesmas posições (quantizadas 1e-4): pass. Corrigido no caminho: o nó ignorava o parâmetro cleanup (sempre boolean_meshes_clean). Diferença restante documentada: BooleanOpCmd transfere textura/UV (boolean_texture::transfer) e o nó não."
+    },
+    "o02-modifier-migration-verified": {
+      "revision": "d9a1621d+working tree",
+      "document": "03-geometry/modifiers-evaluation.md",
+      "summary": "Correção de rastreabilidade: a evidência o02-modifier-migration descrevia nós Mirror/Symmetry, não migração. Agora Project::migrate_legacy_modifiers (chamada em format::finish_load) converte Asset.modifiers em nós do grafo: mesma ordem, enabled, parâmetros e UUID; antes das operações existentes; idempotente; parâmetro fora da faixa mantém o legado (sem perda). Testes petunia_project (modifier_stack 7/7, incluindo roundtrip via arquivo e equivalência geométrica) pass; clippy -D warnings e fmt limpos. Comandos legados AddModifier (MCP/Lua) ainda escrevem a pilha legada, que migra no próximo load."
+    },
+    "o01-extraction-not-done": {
+      "revision": "d9a1621d+working tree",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Correção de rastreabilidade: o núcleo do Operation Graph é um módulo novo (crates/project/src/op_graph.rs); SurfaceRecipe continua com seu próprio grafo — a extração de um núcleo genérico comum NÃO foi feita, nem fuzz de .petunia hostil específico do grafo."
     }
   },
   "tasks": [
@@ -4656,14 +4671,14 @@
       "title": "Operation Graph — núcleo genérico e comandos",
       "description": "Extrair núcleo de SurfaceRecipe, NodeDescriptor, comandos graph.* e fonte Graph(output); ADR-C13.",
       "document": "03-geometry/operation-graph.md",
-      "status": "DONE",
+      "status": "IN PROGRESS",
       "updated": "2026-10-17",
       "baseline": "2026-10-17: núcleo do Operation Graph implementado e testado (project 263, core 197 pass); extração genérica de SurfaceRecipe pendente.",
       "checkpoints": [
         {
           "title": "Extração do núcleo com SurfaceRecipe e .petunia retrocompatíveis.",
-          "completed": true,
-          "evidence": "o01-core-extraction"
+          "completed": false,
+          "evidence": "o01-extraction-not-done"
         },
         {
           "title": "NodeDescriptor e comandos graph.* com Undo.",
@@ -4699,7 +4714,7 @@
         {
           "title": "Nó Boolean com paridade ao BooleanOpCmd atual.",
           "completed": true,
-          "evidence": "o02-boolean-node"
+          "evidence": "o02-boolean-parity-verified"
         },
         {
           "title": "Saída de Objeto, Distribuir e Bake com Undo.",
@@ -4709,7 +4724,7 @@
         {
           "title": "Migração de ModifierKind sem perda.",
           "completed": true,
-          "evidence": "o02-modifier-migration"
+          "evidence": "o02-modifier-migration-verified"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",

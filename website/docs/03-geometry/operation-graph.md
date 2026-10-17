@@ -93,12 +93,18 @@
 
 | ID  | Entrega                                                                                                              | Gates                                                                                  | Status       |
 |-----|----------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|--------------|
-| O01 | ADR-C13; extração do núcleo de grafo a partir de `SurfaceRecipe`; `NodeDescriptor`; comandos `graph.*`               | ciclos, tipos, retrocompatibilidade de `.petunia`, fuzz de arquivos hostis, sem panics | [x] DONE     |
+| O01 | ADR-C13; extração do núcleo de grafo a partir de `SurfaceRecipe`; `NodeDescriptor`; comandos `graph.*`               | ciclos, tipos, retrocompatibilidade de `.petunia`, fuzz de arquivos hostis, sem panics | [-] IN PROGRESS |
 | O02 | Nó Boolean + Saída de Objeto + Bake; migração de Mirror/Symmetry                                                     | paridade com `BooleanOpCmd` atual; Undo; operandos inválidos; resultado vazio          | [x] DONE     |
 | O03 | Pilha no Inspector + Gaveta "Nós" + HUD gerados do descriptor                                                        | `EditorController` headless (Camada 2); QTestLib offscreen; teclado/a11y               | [x] DONE     |
 | O04 | Materiais/texturas/PBR como nós; catálogo N1                                                                         | visual parity; export/bake; cache por revisão                                          | [x] DONE     |
 
 Cada tarefa fecha com testes de regressão, evidência com SHA e `not run / pass / fail / blocked`.
+
+**Estado verificado (2026-10-17):**
+
+- O01: `NodeDescriptor`, grafo tipado e comandos `OpGraphCmd` com Undo estão implementados e testados (`crates/project/src/op_graph.rs`, `crates/core/src/op_graph_commands.rs`). **Pendente:** o núcleo é um módulo novo; `SurfaceRecipe` mantém seu próprio grafo (extração comum não feita) e não há fuzz de `.petunia` hostil específico do grafo.
+- O02: paridade nó Boolean × `BooleanOpCmd` testada (3 operações × limpeza ligada/desligada, mesmas faces e posições). Diferença conhecida: o comando destrutivo transfere textura/UV (`boolean_texture::transfer`) e o nó não. A pilha legada `Asset.modifiers` migra ao carregar (`Project::migrate_legacy_modifiers`): mesma ordem, estado, parâmetros e UUID; parâmetro fora da faixa mantém o legado. Os comandos `AddModifier` (MCP/Lua) ainda escrevem a pilha legada, que migra no próximo carregamento.
+- Fan-out: "ligar a mais de um objeto" é inerente (uma saída de operação alimenta N objetos; cada um avalia a operação no próprio frame). Não existe nó "Distribuir" separado.
 
 ## 9. Efeito sobre documentos existentes
 

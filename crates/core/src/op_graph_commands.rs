@@ -342,6 +342,83 @@ mod tests {
         })
     }
 
+    /// Posições ordenadas (quantizadas) para comparar malhas independentemente da
+    /// ordem de vértices.
+    fn sorted_positions(mesh: &Mesh) -> Vec<[i64; 3]> {
+        let mut out: Vec<[i64; 3]> = mesh
+            .verts
+            .iter()
+            .map(|v| v.pos.map(|c| (f64::from(c) * 1e4).round() as i64))
+            .collect();
+        out.sort_unstable();
+        out
+    }
+
+    /// O nó Boolean produz a mesma geometria que o `BooleanOpCmd` destrutivo para
+    /// as três operações, com e sem limpeza de topologia (O02).
+    #[test]
+    fn boolean_node_matches_destructive_boolean_command() {
+        use petunia_mesh::boolean::BooleanOp;
+        for (name, op) in [
+            ("union", BooleanOp::Union),
+            ("difference", BooleanOp::Difference),
+            ("intersection", BooleanOp::Intersection),
+        ] {
+            for cleanup in [true, false] {
+                let (mut graph_state, wall, cutter) = state_with_two_cubes();
+                graph_state
+                    .dispatch(&OpGraphCmd::new(GraphOp::AddBoolean {
+                        tool: cutter,
+                        targets: vec![wall],
+                        operation: name.into(),
+                        hide_tool: true,
+                    }))
+                    .unwrap();
+                let node = graph_state
+                    .project
+                    .project
+                    .op_graph
+                    .operations_using_tool(cutter)[0]
+                    .id;
+                graph_state
+                    .dispatch(&OpGraphCmd::new(GraphOp::SetParam {
+                        node,
+                        key: "cleanup".into(),
+                        value: ParamValue::Bool(cleanup),
+                    }))
+                    .unwrap();
+                graph_state.project.project.refresh_op_graph();
+                assert!(
+                    graph_state.project.project.op_graph_errors.is_empty(),
+                    "{name}/{cleanup}: {:?}",
+                    graph_state.project.project.op_graph_errors
+                );
+                let from_graph = graph_state.project.project.assets[0].evaluated_mesh();
+
+                let (mut command_state, _, cutter) = state_with_two_cubes();
+                command_state.session.tools.boolean_operand = Some(cutter);
+                command_state.session.tools.boolean_cleanup = cleanup;
+                command_state
+                    .dispatch(&crate::BooleanOpCmd::new(op))
+                    .unwrap();
+                let from_command = command_state.project.project.assets[0]
+                    .mesh
+                    .to_owned_value();
+
+                assert_eq!(
+                    from_graph.faces.len(),
+                    from_command.faces.len(),
+                    "{name}/{cleanup}: faces"
+                );
+                assert_eq!(
+                    sorted_positions(&from_graph),
+                    sorted_positions(&from_command),
+                    "{name}/{cleanup}: posições"
+                );
+            }
+        }
+    }
+
     #[test]
     fn add_boolean_is_one_undo_step_and_keeps_the_authored_mesh() {
         let (mut state, wall, cutter) = state_with_two_cubes();

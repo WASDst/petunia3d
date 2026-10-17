@@ -1401,10 +1401,98 @@ impl Project {
         recomputed
     }
 
+    /// Migra a pilha legada `Asset.modifiers` (Mirror/Symmetry) para operações do
+    /// Operation Graph, sem perda: mesma ordem, mesmo estado ligado/desligado, mesmos
+    /// parâmetros e o UUID do modifier vira o id do nó. As operações migradas ficam
+    /// **antes** das que já agiam no objeto (o legado sempre era avaliado primeiro).
+    /// Um objeto cuja migração falharia (limites do grafo, parâmetro fora da faixa)
+    /// mantém o legado intacto. Retorna quantos modifiers migraram.
+    pub fn migrate_legacy_modifiers(&mut self) -> usize {
+        let mut migrated = 0;
+        for index in 0..self.assets.len() {
+            let Some(asset) = self.assets.get(index) else {
+                continue;
+            };
+            if asset.modifiers.is_empty() {
+                continue;
+            }
+            let (asset_id, modifiers) = (asset.id, asset.modifiers.clone());
+            let mut graph = self.op_graph.clone();
+            if migrate_modifiers_into(&mut graph, asset_id, &modifiers).is_err() {
+                continue;
+            }
+            self.op_graph = graph;
+            if let Some(asset) = self.assets.get_mut(index) {
+                asset.modifiers.clear();
+                asset.eval_cache = None;
+            }
+            migrated += modifiers.len();
+        }
+        if migrated > 0 {
+            self.refresh_op_graph();
+        }
+        migrated
+    }
+
     /// Primeira luz habilitada da cena, se houver.
     pub fn active_light(&self) -> Option<&Light> {
         self.lights.iter().find(|light| light.enabled)
     }
+}
+
+/// Converte `modifiers` em nós do grafo ligados ao objeto `asset` (ver
+/// [`Project::migrate_legacy_modifiers`]). Erro = nada deve ser aplicado.
+fn migrate_modifiers_into(
+    graph: &mut op_graph::OpGraph,
+    asset: Uuid,
+    modifiers: &[ModifierInstance],
+) -> Result<(), op_graph::GraphError> {
+    use op_graph::ParamValue;
+    const AXES: [&str; 3] = ["x", "y", "z"];
+    let axis = |axis: usize| ParamValue::Choice(AXES.get(axis).copied().unwrap_or("x").to_string());
+    let object = graph.ensure_object_node(asset)?;
+    let mut created = Vec::with_capacity(modifiers.len());
+    for (row, modifier) in modifiers.iter().enumerate() {
+        let position = [-260.0, row as f32 * 110.0];
+        let node = match modifier.kind {
+            ModifierKind::Mirror { axis: a, weld } => graph.add_node(
+                op_graph::TYPE_MIRROR,
+                &[
+                    ("axis", axis(a)),
+                    ("weld", ParamValue::Float(f64::from(weld))),
+                ],
+                position,
+            )?,
+            ModifierKind::Symmetry {
+                axis: a,
+                positive_to_negative,
+                weld,
+            } => graph.add_node(
+                op_graph::TYPE_SYMMETRY,
+                &[
+                    ("axis", axis(a)),
+                    (
+                        "positive_to_negative",
+                        ParamValue::Bool(positive_to_negative),
+                    ),
+                    ("weld", ParamValue::Float(f64::from(weld))),
+                ],
+                position,
+            )?,
+        };
+        // Identidade estável: o nó herda o UUID do modifier quando livre.
+        let node = if graph.node(modifier.id).is_none() {
+            graph.rename_node(node, modifier.id)?;
+            modifier.id
+        } else {
+            node
+        };
+        graph.set_enabled(node, modifier.enabled)?;
+        graph.connect(node, 0, object, 0)?;
+        created.push(node);
+    }
+    graph.move_inputs_first(object, 0, &created);
+    Ok(())
 }
 
 impl Default for Project {

@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use petunia_mesh::Mesh;
-use petunia_mesh::boolean::{BooleanOp, boolean_meshes_clean};
+use petunia_mesh::boolean::{BooleanOp, boolean_meshes, boolean_meshes_clean};
 
 use crate::Asset;
 
@@ -588,6 +588,53 @@ impl OpGraph {
         Ok(())
     }
 
+    /// Troca o id de um nó **ainda sem arestas** (migrações que preservam a
+    /// identidade de dados legados).
+    pub fn rename_node(&mut self, node: Uuid, new_id: Uuid) -> Result<(), GraphError> {
+        if self.node(new_id).is_some() {
+            return Err(GraphError::InvalidParam {
+                key: "id".into(),
+                reason: "already in use".into(),
+            });
+        }
+        if self
+            .edges
+            .iter()
+            .any(|edge| edge.from == node || edge.to == node)
+        {
+            return Err(GraphError::InvalidPort { node, port: 0 });
+        }
+        let entry = self.node_mut(node).ok_or(GraphError::UnknownNode(node))?;
+        entry.id = new_id;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    /// Coloca as arestas vindas de `first` (nessa ordem) antes das demais que chegam
+    /// em `to.to_port` — a ordem das arestas é a ordem de avaliação das operações.
+    pub fn move_inputs_first(&mut self, to: Uuid, to_port: u16, first: &[Uuid]) {
+        let is_input = |edge: &OpEdge| edge.to == to && edge.to_port == to_port;
+        let mut moved: Vec<OpEdge> = Vec::with_capacity(first.len());
+        for from in first {
+            if let Some(index) = self
+                .edges
+                .iter()
+                .position(|edge| is_input(edge) && edge.from == *from)
+            {
+                moved.push(self.edges.remove(index));
+            }
+        }
+        let at = self
+            .edges
+            .iter()
+            .position(is_input)
+            .unwrap_or(self.edges.len());
+        for (offset, edge) in moved.into_iter().enumerate() {
+            self.edges.insert(at + offset, edge);
+        }
+        self.revision = self.revision.wrapping_add(1);
+    }
+
     pub fn set_enabled(&mut self, node: Uuid, enabled: bool) -> Result<(), GraphError> {
         let node = self.node_mut(node).ok_or(GraphError::UnknownNode(node))?;
         if node.enabled != enabled {
@@ -894,9 +941,19 @@ impl OpGraph {
                     "intersection" => BooleanOp::Intersection,
                     _ => BooleanOp::Difference,
                 };
-                let (result, _report) = boolean_meshes_clean(mesh, &tool_mesh, op)
-                    .map_err(|error| GraphError::Boolean(error.to_string()))?;
-                Ok(result)
+                // Mesmo kernel do `BooleanOpCmd`: com limpeza, `boolean_meshes_clean`;
+                // sem limpeza, o resultado triangulado bruto do kernel.
+                if bool_param(operation, "cleanup", true) {
+                    let (result, _report) = boolean_meshes_clean(mesh, &tool_mesh, op)
+                        .map_err(|error| GraphError::Boolean(error.to_string()))?;
+                    Ok(result)
+                } else {
+                    let (mut a, mut b) = (mesh.clone(), tool_mesh);
+                    a.triangulate();
+                    b.triangulate();
+                    boolean_meshes(&a, &b, op)
+                        .map_err(|error| GraphError::Boolean(error.to_string()))
+                }
             }
             other => Err(GraphError::UnknownType(other.to_string())),
         }

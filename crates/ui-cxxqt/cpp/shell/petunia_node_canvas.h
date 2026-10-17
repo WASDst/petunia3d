@@ -84,6 +84,8 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QGraphicsScene *m_scene;
     QHash<QString, PetuniaNodeItem *> m_nodes;
     QHash<QString, QAccessible::Id> m_accessible;
+    /// Última posição publicada pelo documento por nó: mudança = Undo/Redo ou outro cliente.
+    QHash<QString, QPointF> m_serverPositions;
     QList<PetuniaWireItem *> m_wires;
     QJsonArray m_nodeRows;
     QJsonArray m_edgeRows;

@@ -25,6 +25,11 @@
 #include <cmath>
 
 namespace {
+QPointF rowPosition(const QJsonObject &row) {
+    const auto position = row["position"].toArray();
+    return QPointF(position.size() > 0 ? position[0].toDouble() : 0.0, position.size() > 1 ? position[1].toDouble() : 0.0);
+}
+
 constexpr qreal kNodeWidth = 176;
 constexpr qreal kHeader = 26;
 constexpr qreal kRow = 22;
@@ -423,8 +428,16 @@ void PetuniaNodeCanvas::sync(const QJsonObject &state) {
         // Mesma estrutura: atualiza só dados (parâmetros, posição, ativo) sem recriar itens.
         for (const auto &n : nodes) {
             const auto row = n.toObject();
-            if (auto *item = m_nodes.value(row["id"].toString()))
-                item->setRow(row);
+            const QString id = row["id"].toString();
+            auto *item = m_nodes.value(id);
+            if (!item)
+                continue;
+            item->setRow(row);
+            // A posição do documento mudou sem gesto deste canvas (Undo/Redo): segue-a.
+            const QPointF server = rowPosition(row);
+            if (m_serverPositions.contains(id) && m_serverPositions.value(id) != server && item != m_dragNode)
+                item->setPos(server);
+            m_serverPositions.insert(id, server);
         }
     }
     for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
@@ -465,8 +478,8 @@ void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges
         const bool op = row["type_id"].toString() != QLatin1String("petunia.object");
         const int column = op ? 1 : (toolObjects.contains(id) ? 0 : 2);
         const QPointF fallback(column * 260.0, rowInColumn[column]++ * 120.0);
-        const auto position = row["position"].toArray();
-        QPointF pos(position.size() > 0 ? position[0].toDouble() : 0.0, position.size() > 1 ? position[1].toDouble() : 0.0);
+        QPointF pos = rowPosition(row);
+        m_serverPositions.insert(id, pos);
         if (previous.contains(id))
             pos = previous.value(id);
         const QString key = QString::number(qRound(pos.x() / 8)) + QLatin1Char(',') + QString::number(qRound(pos.y() / 8));

@@ -267,7 +267,10 @@ fn test_qt_viewport_command_and_outliner_ffi() {
 #[test]
 fn test_widgets_studio_window_creation() {
     reset_editor_fixture();
-    if std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok() {
+    if std::env::var("DISPLAY").is_ok()
+        || std::env::var("WAYLAND_DISPLAY").is_ok()
+        || std::env::var("QT_QPA_PLATFORM").as_deref() == Ok("offscreen")
+    {
         let _app = petunia_ui_cxxqt::widgets::PetuniaWidgetsApp::new();
         let window = petunia_ui_cxxqt::widgets::PetuniaStudioWindow::new();
         window.show();

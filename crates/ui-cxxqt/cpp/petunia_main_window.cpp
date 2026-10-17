@@ -2173,10 +2173,12 @@ void petunia_qt_app_destroy(void *app) {
 void *petunia_main_window_create() {
     if (!qApp || QThread::currentThread() != qApp->thread())
         return nullptr;
-    // Shell v2 (ADR-C14) atrás de flag até a paridade; o legado segue como padrão.
-    QWidget *window = qEnvironmentVariable("PETUNIA_SHELL") == QLatin1String("v2")
-                          ? static_cast<QWidget *>(new PetuniaShellWindow())
-                          : static_cast<QWidget *>(new PetuniaMainWindow());
+    // Shell v2 (ADR-C14) agora é o shell padrão de produção.
+    // O shell legado permanece selecionável via PETUNIA_SHELL=legacy durante a transição.
+    const auto mode = qEnvironmentVariable("PETUNIA_SHELL");
+    QWidget *window = (mode == QLatin1String("legacy") || mode == QLatin1String("v1"))
+                          ? static_cast<QWidget *>(new PetuniaMainWindow())
+                          : static_cast<QWidget *>(new PetuniaShellWindow());
     return window;
 }
 
