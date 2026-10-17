@@ -520,6 +520,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/state.rs, crates/core/src/lib.rs, crates/core/tests/foundations_a04_a06_tests.rs",
       "document": "02-application/state-separation.md",
       "summary": "A06: ToolSession/Undo/dirty concluído. Separação explícita entre configurações persistentes das ferramentas (ToolSettingsSnapshot isolando draw_mode, default_radius, primitive_kind, knife_cut_through, extrude_depth, bevel_offset, inset_thickness, etc.) e sessões ativas efêmeras (ActiveToolSessionKind cobrindo Modal, Primitive, Cut, RegionPush, UvTransform, PaintStroke e None). Implementado cancel_active_session() em ToolState e AppState, permitindo cancelar qualquer sessão em andamento com restauração de estado e 0 poluição de Undo. Ciclo de vida padronizado de preview/commit/cancel com transações atômicas de histórico (1 operação = 1 entrada de Undo). Autoridade única de dirty consolidada via UndoStack::is_dirty() e sincronizada com versões salvas. Testes: 4 testes em core/tests/foundations_a04_a06_tests.rs pass, 190 testes em core lib pass, 126 testes em editor lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "camera-ownership-presets-a07-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/camera.rs, crates/core/src/state.rs, crates/core/src/command.rs, crates/core/tests/camera_foundations_a07_tests.rs",
+      "document": "01-core/camera-and-selection.md",
+      "summary": "A07: Câmera concluído. Ownership da câmera movido para EditorSession/Application e ViewportSession, completamente desacoplada do DocumentSession/ProjectState (mutações de câmera como orbit/pan/zoom não alteram a revisão do documento nem poluem o histórico de Undo). Preset clássico pseudo-isométrico 2:1 (ViewPreset::PseudoIsometric2To1, 26,565° ortográfico com preservação estrita de framing) e presets cardinais/isométricos/perspectiva existentes mantidos e integrados aos comandos transacionais (SetViewPresetCmd) via CommandDispatcher. Navegação explícita com NavigationAnchor::ViewTarget (default) e Cursor3D, garantindo que pan e frame não alteram a posição do cursor 3D. Rejeição de valores não-finitos (NaN/Inf) em dimensões de viewport e escala de projeção. Testes: 5 testes dedicados em core/tests/camera_foundations_a07_tests.rs pass (0.03s), 190 testes em core lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
     }
   },
   "tasks": [
@@ -1221,14 +1226,14 @@
       "title": "Câmera",
       "description": "Mover ownership para EditorSession/Application; adicionar preset pseudo-isométrico 2:1 ortográfico, 26,565°, preservando framing; manter presets e navegação existentes.",
       "document": "01-core/camera-and-selection.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-09",
-      "baseline": "Delta implementado em crates/core/src/camera.rs. Preset ViewPreset::PseudoIsometric2To1 (26,565° ortográfico com preservação de framing) adicionado e testado; presets existentes preservados.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Câmera desacoplada do Core mínimo e consolidada na EditorSession/Application e ViewportSession sem poluição de DocumentSession/Undo. Preset ViewPreset::PseudoIsometric2To1 (26,565° ortográfico com preservação de framing) e presets cardinais/isométricos consolidados via SetViewPresetCmd. Navegação explícita (NavigationAnchor::ViewTarget vs Cursor3D) e rejeição estrita de floats não-finitos. Evidência camera-ownership-presets-a07-20261016 (5 testes dedicados em core/tests/camera_foundations_a07_tests.rs pass, 190 core lib pass).",
       "checkpoints": [
         {
           "title": "Mover ownership para EditorSession/Application",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "camera-ownership-presets-a07-20261016"
         },
         {
           "title": "adicionar preset pseudo-isométrico 2:1 ortográfico, 26,565°, preservando framing",
@@ -1242,8 +1247,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "camera-ownership-presets-a07-20261016"
         }
       ],
       "documents": [

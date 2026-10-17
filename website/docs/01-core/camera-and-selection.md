@@ -26,6 +26,15 @@ ViewPreset::PseudoIsometric2To1
 
 O preset deverá usar projeção ortográfica e preservar o framing da câmera.
 
+### Ownership e isolamento transacional
+
+- A câmera reside exclusivamente em `EditorSession` e é projetada em `ViewportSession`.
+- `DocumentSession` e `ProjectState` não contêm campos de câmera; mutações de navegação (orbit, pan, zoom, frame) não alteram o hash de revisão do documento e não geram entradas na pilha de Undo.
+- Alinhamentos canônicos e isométricos são despachados como comandos transacionais via `SetViewPresetCmd`, emitindo requisição de redesenho sem marcar o documento como modificado.
+- Operações numéricas rejeitam floats não-finitos (`NaN`/`Inf`), preservando a altura visível anterior e garantindo estabilidade matemática contínua das matrizes de projeção.
+- Gates de câmera e regressões automatizadas validados em `crates/core/tests/camera_foundations_a07_tests.rs`.
+
+
 ## Seleção
 
 `SelectionDomain` será a autoridade única para o domínio de interação:
