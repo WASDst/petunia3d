@@ -871,6 +871,11 @@
       "revision": "923450ee+working tree",
       "document": "03-geometry/operation-graph.md",
       "summary": "crates/project/tests/op_graph_hostile.rs: 400 documentos com mutações estruturais determinísticas do op_graph (tipos desconhecidos, nós duplicados, arestas órfãs/autolaço/ciclo, portas fora da faixa, parâmetros de tipo errado e extremos, 600 nós/2100 arestas acima dos limites, chaves ausentes, schema/version/revision máximos) passam por validate + migração + refresh + avaliação: sem pânico, grafo válido após validate e malhas finitas; pilha legada com weld/axis extremos idem. 2/2 pass, clippy -D warnings limpo. Limite: um parâmetro inválido descarta o grafo inteiro (política atual de validate), não só o nó."
+    },
+    "o01-graph-repair": {
+      "revision": "a6fc87dc+working tree",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "OpGraph::repair (chamado por Project::validate antes do último recurso de descartar o grafo): limites, ids duplicados, parâmetros inválidos → default, arestas reconstruídas pelas regras de connect (órfãs, portas, tipos, duplicatas, ocupação, ciclos) e ligações de nós fantasmas preservadas. Antes, um único defeito descartava todas as operações do documento e parâmetros fora da faixa não eram verificados. Testes op_graph::tests::repair_* (4) e suíte petunia_project completa pass; core 198 pass; clippy -D warnings limpo."
     }
   },
   "tasks": [

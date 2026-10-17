@@ -772,6 +772,87 @@ impl OpGraph {
     // ── Validação ───────────────────────────────────────────────────────────
 
     /// Valida limites, referências, tipos e ciclos (o arquivo é entrada hostil).
+    /// Repara um grafo vindo de arquivo **por defeito**, sem descartar o resto:
+    /// corta acima dos limites, remove ids duplicados, volta parâmetros inválidos
+    /// de nós conhecidos ao default e reconstrói as arestas com as regras de
+    /// [`Self::connect`] (existência, portas, tipos, duplicatas, ocupação, ciclos).
+    /// Nós desconhecidos (fantasmas) mantêm suas ligações quando não formam ciclo.
+    /// Retorna quantos defeitos foram corrigidos; o resultado passa em [`Self::validate`].
+    pub fn repair(&mut self) -> usize {
+        // A reconstrução das arestas passa por `connect` (que sobe a revisão);
+        // um grafo já válido sai idêntico, revisão incluída.
+        let revision = self.revision;
+        let mut fixes = 0;
+        if self.nodes.len() > MAX_NODES {
+            fixes += self.nodes.len() - MAX_NODES;
+            self.nodes.truncate(MAX_NODES);
+        }
+        let mut seen = HashSet::new();
+        let before = self.nodes.len();
+        self.nodes.retain(|node| seen.insert(node.id));
+        fixes += before - self.nodes.len();
+        for node in &mut self.nodes {
+            let Some(descriptor) = descriptor(&node.type_id) else {
+                continue;
+            };
+            for spec in descriptor.params {
+                let invalid = node
+                    .params
+                    .get(spec.key)
+                    .is_some_and(|value| validate_param(spec, value).is_err());
+                if !invalid {
+                    continue;
+                }
+                fixes += 1;
+                match ParamValue::from_default(spec.default) {
+                    Some(default) => {
+                        node.params.insert(spec.key.to_string(), default);
+                    }
+                    None => {
+                        node.params.remove(spec.key);
+                    }
+                }
+            }
+        }
+        let edges = std::mem::take(&mut self.edges);
+        let total = edges.len();
+        let mut processed = 0;
+        for edge in edges {
+            if self.edges.len() >= MAX_EDGES {
+                break;
+            }
+            processed += 1;
+            let phantom = [edge.from, edge.to].iter().any(|id| {
+                self.node(*id)
+                    .is_some_and(|node| descriptor(&node.type_id).is_none())
+            });
+            let kept = if phantom {
+                let exists = self.node(edge.from).is_some() && self.node(edge.to).is_some();
+                let acyclic = edge.from != edge.to && !self.reaches(edge.to, edge.from);
+                if exists && acyclic && !self.edges.contains(&edge) {
+                    self.edges.push(edge);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                self.connect(edge.from, edge.from_port, edge.to, edge.to_port)
+                    .is_ok()
+            };
+            if !kept {
+                fixes += 1;
+            }
+        }
+        // Arestas acima do limite nem chegam a ser examinadas.
+        fixes += total - processed;
+        self.revision = if fixes > 0 {
+            revision.wrapping_add(1)
+        } else {
+            revision
+        };
+        fixes
+    }
+
     pub fn validate(&self) -> Result<(), GraphError> {
         if self.nodes.len() > MAX_NODES {
             return Err(GraphError::TooLarge("nodes"));
@@ -1509,5 +1590,106 @@ mod tests {
             serde_json::from_str(r#"{"schema_version":1,"nodes":[],"edges":[],"revision":0}"#)
                 .unwrap();
         assert!(minimal.is_empty());
+    }
+
+    fn sample_graph() -> (OpGraph, Uuid, Uuid, Uuid) {
+        let mut graph = OpGraph::default();
+        let wall = graph.ensure_object_node(Uuid::new_v4()).unwrap();
+        let cutter = graph.ensure_object_node(Uuid::new_v4()).unwrap();
+        let boolean = graph.add_node(TYPE_BOOLEAN, &[], [0.0; 2]).unwrap();
+        graph.connect(cutter, 0, boolean, 0).unwrap();
+        graph.connect(boolean, 0, wall, 0).unwrap();
+        (graph, wall, cutter, boolean)
+    }
+
+    #[test]
+    fn repair_drops_only_the_broken_edge_and_keeps_the_operation() {
+        let (mut graph, wall, _, boolean) = sample_graph();
+        graph.edges.push(OpEdge {
+            from: Uuid::new_v4(),
+            from_port: 0,
+            to: wall,
+            to_port: 0,
+        });
+        graph.edges.push(OpEdge {
+            from: boolean,
+            from_port: 9,
+            to: wall,
+            to_port: 0,
+        });
+        assert!(graph.validate().is_err());
+        assert_eq!(graph.repair(), 2);
+        assert!(graph.validate().is_ok());
+        assert_eq!(graph.edges.len(), 2, "as ligações válidas sobrevivem");
+        let into_wall: Vec<Uuid> = graph
+            .edges
+            .iter()
+            .filter(|e| e.to == wall)
+            .map(|e| e.from)
+            .collect();
+        assert_eq!(into_wall, vec![boolean]);
+    }
+
+    #[test]
+    fn repair_resets_invalid_params_to_defaults() {
+        let (mut graph, _, _, boolean) = sample_graph();
+        let node = graph.nodes.iter_mut().find(|n| n.id == boolean).unwrap();
+        node.params
+            .insert("operation".into(), ParamValue::Choice("xor".into()));
+        node.params
+            .insert("cleanup".into(), ParamValue::Float(f64::NAN));
+        assert_eq!(graph.repair(), 2);
+        let node = graph.node(boolean).unwrap();
+        assert_eq!(
+            node.params["operation"],
+            ParamValue::Choice("difference".into())
+        );
+        assert_eq!(node.params["cleanup"], ParamValue::Bool(true));
+    }
+
+    #[test]
+    fn repair_breaks_cycles_and_removes_duplicate_ids_but_keeps_phantom_links() {
+        let (mut graph, wall, cutter, boolean) = sample_graph();
+        // Ciclo: o alvo alimenta de volta a ferramenta da própria booleana.
+        graph.edges.push(OpEdge {
+            from: wall,
+            from_port: 0,
+            to: boolean,
+            to_port: 0,
+        });
+        let duplicate = graph.node(cutter).unwrap().clone();
+        graph.nodes.push(duplicate);
+        let phantom = Uuid::new_v4();
+        graph.nodes.push(OpNode {
+            id: phantom,
+            type_id: "plugin.unknown".into(),
+            version: 1,
+            params: BTreeMap::new(),
+            enabled: true,
+            position: [0.0; 2],
+        });
+        graph.edges.push(OpEdge {
+            from: phantom,
+            from_port: 3,
+            to: wall,
+            to_port: 0,
+        });
+        assert!(graph.validate().is_err());
+        assert!(graph.repair() >= 2);
+        assert!(graph.validate().is_ok());
+        assert!(graph.node(phantom).is_some(), "nó fantasma preservado");
+        assert!(
+            graph.edges.iter().any(|e| e.from == phantom),
+            "ligação do fantasma preservada"
+        );
+        assert!(graph.node(boolean).is_some());
+    }
+
+    #[test]
+    fn repair_on_a_valid_graph_changes_nothing() {
+        let (mut graph, ..) = sample_graph();
+        let before = graph.clone();
+        assert_eq!(graph.repair(), 0);
+        assert_eq!(graph, before);
     }
 }

@@ -2745,6 +2745,8 @@ impl Project {
     pub fn validate(&mut self) {
         // Operation Graph vindo de arquivo é entrada hostil: inválido = descartado
         // (a malha autoral dos objetos nunca depende dele).
+        // Defeitos são corrigidos um a um; descartar o grafo inteiro é o último recurso.
+        self.op_graph.repair();
         if self.op_graph.validate().is_err() {
             self.op_graph = Default::default();
         }
