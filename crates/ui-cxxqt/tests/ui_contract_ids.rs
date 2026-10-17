@@ -13,7 +13,10 @@ const COMMAND_NAMESPACES: &[&str] = &[
 /// entrada exige justificativa; a lista só pode encolher.
 const NOT_DISPATCHER_IDS: &[(&str, &str)] = &[
     // Intent local do viewport (`petunia_gl_widget`), não é comando de documento.
-    ("view.isolate", "intent de visualização tratado em actionTriggered"),
+    (
+        "view.isolate",
+        "intent de visualização tratado em actionTriggered",
+    ),
 ];
 
 /// Fontes Rust onde um id pode ser tratado (dispatcher, editor, ponte Qt).
@@ -23,7 +26,9 @@ fn rust_sources() -> String {
     for dir in ["core/src", "editor/src", "ui-cxxqt/src"] {
         let mut stack = vec![crates.join(dir)];
         while let Some(path) = stack.pop() {
-            let Ok(read) = fs::read_dir(&path) else { continue };
+            let Ok(read) = fs::read_dir(&path) else {
+                continue;
+            };
             for entry in read.flatten() {
                 let p = entry.path();
                 if p.is_dir() {

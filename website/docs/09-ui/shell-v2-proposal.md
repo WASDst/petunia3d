@@ -88,8 +88,10 @@
 | F5   | Núcleo de operações (só Rust, paralelo desde F1): ver [Operation Graph](../03-geometry/operation-graph.md)                                      | O01, O02       | [x] DONE     |
 | F6   | UI de nós: Pilha no Inspector → Gaveta "Nós" → materiais/texturas → descriptors                                                                 | O03, O04       | [x] DONE     |
 | F7   | Workspaces PAINT, UV e ANIMATE no v2                                                                                                            | U16–U18        | [x] DONE     |
-| F8   | Swap: v2 vira padrão, remoção do shell legado, do FFI legado e dos testes legados; fechar U01–U09 antigos                                       | U19            | [ ] TODO     |
+| F8   | Swap: v2 vira padrão, remoção do shell legado, do FFI legado e dos testes legados; fechar U01–U09 antigos                                       | U19            | [-] IN PROGRESS |
 | F9   | Gates finais: QTestLib offscreen, golden frames FBO, a11y (AT-SPI), matriz manual Linux/Windows/GPU baixa                                       | Q08            | [ ] TODO     |
+
+**U19 (2026-10-17):** Shell v2 é a única janela (`petunia_app_host.cpp`; `PETUNIA_SHELL` não existe mais). Removidos `PetuniaMainWindow`, cartões flutuantes legados (`petunia_overlay_cards`), `PetuniaDockManager`, `PetuniaPieMenu`, o harness `qt_parity_acceptance` e 47 funções `petunia_qt_app_*` usadas só pelo shell legado. `PetuniaColorWheel`/`PetuniaColorPickerPopover` foram movidos para `petunia_color_picker` (cromo por tokens). A cobertura de `bridge_test` foi portada para os pedidos JSON reais da GUI (12 testes) e a guarda de thread de UI ganhou binário próprio (`ui_thread_guard`). Pendente: reconciliar U01–U09.
 
 **Regra de fatia:** inventário → contrato → componente na Gallery → teste Camada 2 → widget → teste QTestLib offscreen → screenshot → remover o legado correspondente → atualizar `tasks.json` no mesmo commit → handoff (Intent / Sources / Gap / Changed / Verification / Risks / Next checkpoint).
 

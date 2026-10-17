@@ -1,6 +1,6 @@
 #include "petunia_structure_panel.h"
 #include "../petunia_icons.h"
-#include "../petunia_overlay_cards.h"
+#include "../petunia_color_picker.h"
 #include "../petunia_placeholder_message.h"
 #include "../petunia_theme.h"
 

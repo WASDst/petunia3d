@@ -851,6 +851,21 @@
       "revision": "d9a1621d+working tree",
       "document": "03-geometry/operation-graph.md",
       "summary": "Correção de rastreabilidade: o núcleo do Operation Graph é um módulo novo (crates/project/src/op_graph.rs); SurfaceRecipe continua com seu próprio grafo — a extração de um núcleo genérico comum NÃO foi feita, nem fuzz de .petunia hostil específico do grafo."
+    },
+    "u19-v2-only": {
+      "revision": "8fb9c5d5+working tree",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Shell v2 é a única janela: petunia_app_host.cpp cria PetuniaShellWindow (fallback PETUNIA_SHELL=legacy removido). Binário petunia3d-qt com XDG isolado e QT_QPA_PLATFORM=offscreen permanece vivo ≥20 s sem erros no log (2026-10-17). Paridade funcional coberta por shell_v2 (harness offscreen com capturas) e editor_parity."
+    },
+    "u19-legacy-removed": {
+      "revision": "8fb9c5d5+working tree",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Removidos PetuniaMainWindow (~3,3k linhas), petunia_overlay_cards (classe PetuniaOperationHud duplicada no binário), PetuniaDockManager, PetuniaPieMenu, example qt_parity_acceptance e 47 FFI petunia_qt_app_* exclusivos do shell legado. Cobertura portada: bridge_test reescrito sobre os pedidos JSON da GUI (histórico, outliner, transform digitado, material, sombreamento, salvar/abrir/exportar, domínios, raycast, gizmo, pilha legada, timeline/keyframes, align) 12/12 pass sem --skip; guarda de thread de UI em tests/ui_thread_guard.rs 1/1 pass; editor_parity portado para petunia_qt_editor_request 21/21 pass."
+    },
+    "u19-gates": {
+      "revision": "8fb9c5d5+working tree",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen, --test-threads=1: bridge_test 12, ui_thread_guard 1, editor_parity 21, shell_v2 1, gallery_test 1, component_contracts 1, ui_contract_ids 3, ui_i18n_catalog 3 (21 textos de petunia_structure_panel adicionados ao catálogo), lib 2 — pass; clippy -p petunia_ui_cxxqt --all-targets -D warnings limpo; fmt limpo. Achado: escala digitada na seção Transform em objeto já girado (Z 90°) resulta em escala local diferente dos campos (ex.: [1.5, 2, 0.5] para 2/3/0.5) — investigar. Manuais (GPU física, Windows, leitor de tela) seguem em Q08: not run."
     }
   },
   "tasks": [
@@ -4573,24 +4588,24 @@
       "title": "Shell v2 F8 — troca e remoção do legado",
       "description": "v2 como padrão; remover shell legado, FFI legado e testes legados; fechar U01–U09 antigos.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "baseline": "2026-10-17: v2 único, legado e FFI legado removidos com cobertura portada e gates offscreen pass; pendente reconciliar U01–U09.",
       "checkpoints": [
         {
           "title": "Paridade verificada e v2 como padrão.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u19-v2-only"
         },
         {
           "title": "Remoção do legado sem perder cobertura.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u19-legacy-removed"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u19-gates"
         }
       ],
       "documents": [

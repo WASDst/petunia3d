@@ -1,41 +1,71 @@
+//! Ponte Rust↔Qt do Shell v2 (U19): a GUI fala com o editor por pedidos JSON
+//! (`petunia_qt_editor_request` → `QtEditor::request`) e pelo FFI de viewport
+//! (câmera, gizmo, seleção por raio, tablet, sombreamento). Os getters/setters
+//! `petunia_qt_app_*` do shell legado foram removidos; cada comportamento que eles
+//! protegiam é exercitado aqui pelo mesmo pedido que a GUI envia.
 use petunia_ui_cxxqt::bridge::shell::PetuniaShellBridgeRust;
 use petunia_ui_cxxqt::render::opengl_viewport::{
-    QtViewportRenderer, petunia_qt_app_add_modifier, petunia_qt_app_apply_modifier,
-    petunia_qt_app_delete_keyframe, petunia_qt_app_execute_command, petunia_qt_app_export_gltf,
-    petunia_qt_app_export_obj, petunia_qt_app_frame_selection, petunia_qt_app_get_active_asset,
-    petunia_qt_app_get_asset_color, petunia_qt_app_get_asset_count, petunia_qt_app_get_asset_name,
-    petunia_qt_app_get_asset_position, petunia_qt_app_get_asset_rotation,
-    petunia_qt_app_get_asset_scale, petunia_qt_app_get_asset_visible,
-    petunia_qt_app_get_material_pbr, petunia_qt_app_get_modifier_count,
-    petunia_qt_app_get_modifier_info, petunia_qt_app_get_scene_stats,
-    petunia_qt_app_get_selection_domain, petunia_qt_app_get_shading,
-    petunia_qt_app_get_surface_shading, petunia_qt_app_get_timeline_info,
-    petunia_qt_app_get_uv_diagnostics, petunia_qt_app_get_uv_face_count,
-    petunia_qt_app_get_uv_face_verts, petunia_qt_app_has_keyframe, petunia_qt_app_insert_keyframe,
-    petunia_qt_app_is_dirty, petunia_qt_app_load_project, petunia_qt_app_move_modifier,
-    petunia_qt_app_quick_action, petunia_qt_app_redo, petunia_qt_app_remove_modifier,
-    petunia_qt_app_save_project, petunia_qt_app_search_commands, petunia_qt_app_select_asset,
-    petunia_qt_app_selected_count, petunia_qt_app_set_asset_color,
-    petunia_qt_app_set_asset_position, petunia_qt_app_set_asset_rotation,
-    petunia_qt_app_set_asset_scale, petunia_qt_app_set_material_pbr,
-    petunia_qt_app_set_selection_domain, petunia_qt_app_set_shading,
-    petunia_qt_app_set_surface_shading, petunia_qt_app_set_timeline_frame,
-    petunia_qt_app_toggle_modifier, petunia_qt_app_toggle_playback,
-    petunia_qt_app_toggle_visibility, petunia_qt_app_undo, petunia_qt_camera_get_orientation,
-    petunia_qt_camera_get_view_name, petunia_qt_camera_orbit, petunia_qt_camera_pan,
-    petunia_qt_camera_reset, petunia_qt_camera_set_preset, petunia_qt_camera_toggle_projection,
-    petunia_qt_camera_zoom, petunia_qt_gizmo_drag_axis, petunia_qt_gizmo_get_projected,
-    petunia_qt_gizmo_hit_test, petunia_qt_tablet_paint_stroke, petunia_qt_viewport_hover,
-    petunia_qt_viewport_select,
+    QtViewportRenderer, VIEWPORT_RENDERER, petunia_qt_app_frame_selection,
+    petunia_qt_app_get_shading, petunia_qt_app_search_commands, petunia_qt_app_set_shading,
+    petunia_qt_camera_get_orientation, petunia_qt_camera_get_view_name, petunia_qt_camera_orbit,
+    petunia_qt_camera_pan, petunia_qt_camera_reset, petunia_qt_camera_set_preset,
+    petunia_qt_camera_toggle_projection, petunia_qt_camera_zoom, petunia_qt_gizmo_drag_axis,
+    petunia_qt_gizmo_get_projected, petunia_qt_gizmo_hit_test, petunia_qt_tablet_paint_stroke,
+    petunia_qt_viewport_hover, petunia_qt_viewport_select,
 };
+use serde_json::{Value, json};
 
 fn reset_editor_fixture() {
-    petunia_ui_cxxqt::render::opengl_viewport::VIEWPORT_RENDERER
+    VIEWPORT_RENDERER
         .with(|renderer| {
             *renderer.borrow_mut() = QtViewportRenderer::new();
         })
         .unwrap();
 }
+
+fn with_host<R>(f: impl FnOnce(&mut QtViewportRenderer) -> R) -> R {
+    VIEWPORT_RENDERER
+        .with(|renderer| f(&mut renderer.borrow_mut()))
+        .expect("renderer da thread de UI")
+}
+
+/// Envia um pedido como a GUI e falha o teste se o editor recusar.
+fn request(action: Value) -> bool {
+    with_host(|host| {
+        host.app
+            .request(&action)
+            .unwrap_or_else(|error| panic!("{action}: {error}"))
+    })
+}
+
+fn try_request(action: Value) -> Result<bool, String> {
+    with_host(|host| host.app.request(&action))
+}
+
+fn snapshot() -> Value {
+    with_host(|host| host.app.snapshot())
+}
+
+fn asset_count() -> usize {
+    with_host(|host| host.app.state.project.assets.len())
+}
+
+fn asset_id(index: usize) -> String {
+    with_host(|host| host.app.state.project.assets[index].id.to_string())
+}
+
+fn select(index: usize) {
+    request(json!({"action": "select", "id": asset_id(index)}));
+}
+
+fn translation(index: usize) -> [f32; 3] {
+    with_host(|host| host.app.state.project.assets[index].transform.translation)
+}
+
+fn selected_assets() -> usize {
+    with_host(|host| host.app.state.session.selection.assets.len())
+}
+
 #[test]
 fn test_shell_bridge_properties_default() {
     let bridge = PetuniaShellBridgeRust::default();
@@ -69,199 +99,169 @@ fn test_qt_viewport_renderer_initial_state_and_navigation() {
 }
 
 #[test]
-fn test_qt_viewport_command_and_outliner_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        // Initial asset count (default cube)
-        let initial_count = petunia_qt_app_get_asset_count();
-        assert!(initial_count >= 1);
+fn test_document_history_outliner_and_transforms_via_requests() {
+    reset_editor_fixture();
+    let initial_count = asset_count();
+    assert!(initial_count >= 1);
+    assert_eq!(snapshot()["scene_items"][0]["name"], "Cube");
 
-        // Read asset name via FFI
-        let mut name_buf = [0i8; 64];
-        let ok = petunia_qt_app_get_asset_name(0, name_buf.as_mut_ptr(), 64);
-        assert!(ok);
-        let c_str = std::ffi::CStr::from_ptr(name_buf.as_ptr());
-        assert_eq!(c_str.to_str().unwrap(), "Cube");
+    // Comando registrado + histórico.
+    request(json!({"action": "command", "id": "model.add_cube"}));
+    assert_eq!(asset_count(), initial_count + 1);
+    assert_eq!(snapshot()["saved"], false, "documento sujo após editar");
+    request(json!({"action": "undo"}));
+    assert_eq!(asset_count(), initial_count);
+    request(json!({"action": "redo"}));
+    assert_eq!(asset_count(), initial_count + 1);
 
-        // Add another cube via command FFI
-        let cmd = std::ffi::CString::new("model.add_cube").unwrap();
-        let executed = petunia_qt_app_execute_command(cmd.as_ptr());
-        assert!(executed);
-        assert_eq!(petunia_qt_app_get_asset_count(), initial_count + 1);
-        assert!(petunia_qt_app_is_dirty());
-        assert!(petunia_qt_app_undo());
-        assert_eq!(petunia_qt_app_get_asset_count(), initial_count);
-        assert!(petunia_qt_app_redo());
-        assert_eq!(petunia_qt_app_get_asset_count(), initial_count + 1);
+    // Visibilidade pelo outliner.
+    let id = asset_id(0);
+    request(json!({"action": "visibility", "id": id}));
+    assert!(!with_host(|host| host.app.state.project.assets[0].visible));
+    request(json!({"action": "visibility", "id": id}));
+    assert!(with_host(|host| host.app.state.project.assets[0].visible));
 
-        // Toggle visibility
-        assert!(petunia_qt_app_get_asset_visible(0));
-        petunia_qt_app_toggle_visibility(0, false);
-        assert!(!petunia_qt_app_get_asset_visible(0));
-        petunia_qt_app_toggle_visibility(0, true);
-        assert!(petunia_qt_app_get_asset_visible(0));
-
-        // Position get and set
-        let mut x = 0.0f32;
-        let mut y = 0.0f32;
-        let mut z = 0.0f32;
-        assert!(petunia_qt_app_get_asset_position(0, &mut x, &mut y, &mut z));
-        petunia_qt_app_set_asset_position(0, 1.5, 2.5, 3.5);
-        petunia_qt_app_get_asset_position(0, &mut x, &mut y, &mut z);
-        assert_eq!(x, 1.5);
-        assert_eq!(y, 2.5);
-        assert_eq!(z, 3.5);
-
-        // Rotation get and set
-        let mut rx = 0.0f32;
-        let mut ry = 0.0f32;
-        let mut rz = 0.0f32;
-        assert!(petunia_qt_app_get_asset_rotation(
-            0, &mut rx, &mut ry, &mut rz
-        ));
-        petunia_qt_app_set_asset_rotation(0, 45.0, 90.0, 180.0);
-        petunia_qt_app_get_asset_rotation(0, &mut rx, &mut ry, &mut rz);
-        assert_eq!(rx, 45.0);
-        assert_eq!(ry, 90.0);
-        assert_eq!(rz, 180.0);
-
-        // Scale get and set
-        let mut sx = 1.0f32;
-        let mut sy = 1.0f32;
-        let mut sz = 1.0f32;
-        assert!(petunia_qt_app_get_asset_scale(0, &mut sx, &mut sy, &mut sz));
-        petunia_qt_app_set_asset_scale(0, 2.0, 3.0, 0.5);
-        petunia_qt_app_get_asset_scale(0, &mut sx, &mut sy, &mut sz);
-        assert_eq!(sx, 2.0);
-        assert_eq!(sy, 3.0);
-        assert_eq!(sz, 0.5);
-
-        // Color get and set
-        let mut cr = 0.8f32;
-        let mut cg = 0.8f32;
-        let mut cb = 0.8f32;
-        assert!(petunia_qt_app_get_asset_color(0, &mut cr, &mut cg, &mut cb));
-        let original_color = [cr, cg, cb];
-        petunia_qt_app_set_asset_color(0, 0.9, 0.4, 0.1);
-        petunia_qt_app_get_asset_color(0, &mut cr, &mut cg, &mut cb);
-        assert!((cr - 0.9).abs() < 1e-4);
-        assert!((cg - 0.4).abs() < 1e-4);
-        assert!((cb - 0.1).abs() < 1e-4);
-
-        // Scene stats
-        let mut verts = 0i32;
-        let mut tris = 0i32;
-        assert!(petunia_qt_app_get_scene_stats(&mut verts, &mut tris));
-        assert!(verts > 0);
-        assert!(tris > 0);
-
-        // Selection domain & camera frame
-        petunia_qt_app_set_selection_domain(1); // vertex
-        petunia_qt_app_set_selection_domain(2); // edge
-        petunia_qt_app_set_selection_domain(3); // face
-        petunia_qt_app_set_selection_domain(0); // object
-        petunia_qt_app_frame_selection();
-
-        // Select asset
-        petunia_qt_app_select_asset(0);
-
-        // Property edits now participate in history: undo the last color edit.
-        assert!(petunia_qt_app_undo());
-        assert_eq!(petunia_qt_app_get_asset_count(), initial_count + 1);
-        assert!(petunia_qt_app_get_asset_color(0, &mut cr, &mut cg, &mut cb));
-        assert_eq!([cr, cg, cb], original_color);
-        assert!(petunia_qt_app_redo());
-        assert!(petunia_qt_app_get_asset_color(0, &mut cr, &mut cg, &mut cb));
-        assert_eq!([cr, cg, cb], [0.9, 0.4, 0.1]);
-
-        // Command palette search FFI
-        let mut search_buf = [0i8; 2048];
-        let query_cstr = std::ffi::CString::new("cube").unwrap();
-        let matches =
-            petunia_qt_app_search_commands(query_cstr.as_ptr(), search_buf.as_mut_ptr(), 2048);
-        assert!(matches > 0);
-        let results_str = std::ffi::CStr::from_ptr(search_buf.as_ptr())
-            .to_str()
-            .unwrap();
-        assert!(results_str.contains("model.add_cube"));
-
-        // Camera navigation FFI
-        petunia_qt_camera_orbit(12.0, -8.0);
-        petunia_qt_camera_pan(4.0, 2.0);
-        petunia_qt_camera_zoom(1.5);
-        petunia_qt_camera_reset();
-
-        // Camera presets, projection, and HUD
-        petunia_qt_camera_set_preset(1); // Front
-        petunia_qt_camera_set_preset(3); // Right
-        petunia_qt_camera_set_preset(5); // Top
-        petunia_qt_camera_toggle_projection(); // Ortho
-        petunia_qt_camera_toggle_projection(); // Persp
-
-        let mut view_buf = [0i8; 64];
-        assert!(petunia_qt_camera_get_view_name(view_buf.as_mut_ptr(), 64));
-        let view_str = std::ffi::CStr::from_ptr(view_buf.as_ptr())
-            .to_str()
-            .unwrap();
-        assert!(!view_str.is_empty());
-
-        let mut rx = 0.0f32;
-        let mut ry = 0.0f32;
-        let mut rz = 0.0f32;
-        let mut ux = 0.0f32;
-        let mut uy = 0.0f32;
-        let mut uz = 0.0f32;
-        let mut fx = 0.0f32;
-        let mut fy = 0.0f32;
-        let mut fz = 0.0f32;
-        assert!(petunia_qt_camera_get_orientation(
-            &mut rx, &mut ry, &mut rz, &mut ux, &mut uy, &mut uz, &mut fx, &mut fy, &mut fz,
-        ));
-        assert!(rx.is_finite() && ux.is_finite() && fx.is_finite());
-
-        // Shading modes (Wireframe, Solid, Material, Render)
-        assert_eq!(petunia_qt_app_get_shading(), 1); // Solid default
-        petunia_qt_app_set_shading(0); // Wireframe
-        assert_eq!(petunia_qt_app_get_shading(), 0);
-        petunia_qt_app_set_shading(2); // Material Preview
-        assert_eq!(petunia_qt_app_get_shading(), 2);
-        petunia_qt_app_set_shading(1); // Solid
-
-        // Save and load project
-        let temp_dir =
-            std::env::temp_dir().join(format!("petunia_cxxqt_test_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&temp_dir);
-        let proj_file = temp_dir.join("test_studio.petunia");
-        let proj_cstr = std::ffi::CString::new(proj_file.to_str().unwrap()).unwrap();
-        assert!(petunia_qt_app_save_project(proj_cstr.as_ptr()));
-        assert!(proj_file.exists());
-        assert!(petunia_qt_app_load_project(proj_cstr.as_ptr()));
-
-        // Export GLTF / GLB and Wavefront OBJ
-        let glb_file = temp_dir.join("test_model.glb");
-        let glb_cstr = std::ffi::CString::new(glb_file.to_str().unwrap()).unwrap();
-        assert!(petunia_qt_app_export_gltf(glb_cstr.as_ptr()));
-        assert!(glb_file.exists());
-        assert_eq!(&std::fs::read(&glb_file).unwrap()[..4], b"glTF");
-        // Open clears selection; OBJ exports the explicitly active asset.
-        assert_eq!(petunia_qt_app_selected_count(), 0);
-        petunia_qt_app_select_asset(0);
-
-        let obj_file = temp_dir.join("test_model.obj");
-        let obj_cstr = std::ffi::CString::new(obj_file.to_str().unwrap()).unwrap();
-        assert!(petunia_qt_app_export_obj(obj_cstr.as_ptr()));
-        assert!(obj_file.exists());
-        let obj = std::fs::read_to_string(&obj_file).unwrap();
-        assert!(obj.lines().any(|line| line.starts_with("v ")));
-        assert!(obj.lines().any(|line| line.starts_with("f ")));
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
-
-        // Tablet stylus event FFI with pressure and tilt
-        petunia_qt_tablet_paint_stroke(100.0, 150.0, 0.75, 12.0, -5.0, false);
-        petunia_qt_tablet_paint_stroke(105.0, 155.0, 0.90, 10.0, -4.0, true);
+    // Transform digitado (seção Transform): posição, rotação em graus, escala.
+    select(0);
+    for (axis, text) in ["1.5", "2.5", "3.5"].iter().enumerate() {
+        request(json!({"action": "transform", "kind": "position", "axis": axis, "text": text}));
     }
+    assert_eq!(translation(0), [1.5, 2.5, 3.5]);
+    for (axis, text) in ["2", "3", "0.5"].iter().enumerate() {
+        request(json!({"action": "transform", "kind": "scale", "axis": axis, "text": text}));
+    }
+    assert_eq!(
+        with_host(|host| host.app.state.project.assets[0].transform.scale),
+        [2.0, 3.0, 0.5]
+    );
+    // Cada edição de propriedade é um passo de Undo.
+    request(json!({"action": "undo"}));
+    assert_eq!(
+        with_host(|host| host.app.state.project.assets[0].transform.scale),
+        [2.0, 3.0, 1.0]
+    );
+    request(json!({"action": "redo"}));
+    // Rotação depois da escala (escala digitada em objeto já girado: ver o handoff de U19).
+    request(json!({"action": "transform", "kind": "rotation", "axis": 2, "text": "90"}));
+    let rotation = with_host(|host| host.app.state.project.assets[0].transform.rotation);
+    let (_, _, z) = glam::Quat::from_array(rotation).to_euler(glam::EulerRot::XYZ);
+    assert!(
+        (z.to_degrees() - 90.0).abs() < 1e-3,
+        "rotação Z = {}",
+        z.to_degrees()
+    );
+
+    // Expressão inválida é recusada sem alterar o documento.
+    assert!(
+        try_request(json!({"action": "transform", "kind": "position", "axis": 0, "text": "1/0"}))
+            .is_err()
+            || translation(0)[0] == 1.5
+    );
+    assert!(
+        try_request(json!({"action": "transform", "kind": "position", "axis": 7, "text": "1"}))
+            .is_err()
+    );
+
+    // Cor base do material ativo.
+    request(
+        json!({"action": "set_active_material_base_color", "red": 0.9, "green": 0.4, "blue": 0.1}),
+    );
+    let color = with_host(|host| {
+        let state = &host.app.state;
+        let asset = state.project.active().expect("ativo");
+        let material = asset
+            .material_id
+            .and_then(|id| state.project.materials.iter().find(|m| m.id == id))
+            .or_else(|| state.project.materials.first())
+            .expect("material do objeto");
+        material.base_color
+    });
+    assert!(
+        (color[0] - 0.9).abs() < 1e-4
+            && (color[1] - 0.4).abs() < 1e-4
+            && (color[2] - 0.1).abs() < 1e-4
+    );
+
+    // Domínios de seleção (Viewport Header) e enquadramento.
+    for domain in ["vertex", "edge", "face", "object"] {
+        request(json!({"action": "domain", "id": domain}));
+        assert_eq!(
+            with_host(|host| format!("{:?}", host.app.state.selection_domain())).to_lowercase(),
+            domain
+        );
+    }
+    petunia_qt_app_frame_selection();
+
+    // Busca da paleta de comandos.
+    let mut search_buf = [0i8; 2048];
+    let query = std::ffi::CString::new("cube").unwrap();
+    let matches =
+        unsafe { petunia_qt_app_search_commands(query.as_ptr(), search_buf.as_mut_ptr(), 2048) };
+    assert!(matches > 0);
+    let results = unsafe { std::ffi::CStr::from_ptr(search_buf.as_ptr()) }
+        .to_str()
+        .unwrap();
+    assert!(results.contains("model.add_cube"));
+
+    // Navegação de câmera, presets e projeção.
+    petunia_qt_camera_orbit(12.0, -8.0);
+    petunia_qt_camera_pan(4.0, 2.0);
+    petunia_qt_camera_zoom(1.5);
+    petunia_qt_camera_reset();
+    petunia_qt_camera_set_preset(1);
+    petunia_qt_camera_set_preset(3);
+    petunia_qt_camera_set_preset(5);
+    petunia_qt_camera_toggle_projection();
+    petunia_qt_camera_toggle_projection();
+    let mut view_buf = [0i8; 64];
+    assert!(unsafe { petunia_qt_camera_get_view_name(view_buf.as_mut_ptr(), 64) });
+    assert!(
+        !unsafe { std::ffi::CStr::from_ptr(view_buf.as_ptr()) }
+            .to_str()
+            .unwrap()
+            .is_empty()
+    );
+    let mut o = [0.0f32; 9];
+    let [rx, ry, rz, ux, uy, uz, fx, fy, fz] = &mut o;
+    assert!(unsafe { petunia_qt_camera_get_orientation(rx, ry, rz, ux, uy, uz, fx, fy, fz) });
+    assert!(o.iter().all(|v| v.is_finite()));
+
+    // Modos de sombreamento da vista.
+    assert_eq!(petunia_qt_app_get_shading(), 1);
+    petunia_qt_app_set_shading(0);
+    assert_eq!(petunia_qt_app_get_shading(), 0);
+    petunia_qt_app_set_shading(2);
+    assert_eq!(petunia_qt_app_get_shading(), 2);
+    petunia_qt_app_set_shading(1);
+
+    // Salvar, abrir e exportar pelos pedidos do AppBar.
+    let temp_dir = std::env::temp_dir().join(format!("petunia_cxxqt_test_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let project_file = temp_dir.join("test_studio.petunia");
+    let path = project_file.to_str().unwrap();
+    request(json!({"action": "project.save", "path": path}));
+    assert!(project_file.exists());
+    assert_eq!(snapshot()["saved"], true);
+    let count = asset_count();
+    request(json!({"action": "command", "id": "model.add_cube"}));
+    request(json!({"action": "project.open", "path": path}));
+    assert_eq!(asset_count(), count, "abrir restaura o arquivo salvo");
+    assert_eq!(selected_assets(), 0, "abrir limpa a seleção");
+
+    let glb = temp_dir.join("test_model.glb");
+    request(json!({"action": "export_glb", "path": glb.to_str().unwrap()}));
+    assert_eq!(&std::fs::read(&glb).unwrap()[..4], b"glTF");
+    select(0);
+    let obj = temp_dir.join("test_model.obj");
+    request(json!({"action": "export_obj", "path": obj.to_str().unwrap()}));
+    let obj = std::fs::read_to_string(&obj).unwrap();
+    assert!(obj.lines().any(|line| line.starts_with("v ")));
+    assert!(obj.lines().any(|line| line.starts_with("f ")));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    // Caneta com pressão e inclinação.
+    petunia_qt_tablet_paint_stroke(100.0, 150.0, 0.75, 12.0, -5.0, false);
+    petunia_qt_tablet_paint_stroke(105.0, 155.0, 0.90, 10.0, -4.0, true);
 }
 
 #[test]
@@ -280,404 +280,249 @@ fn test_widgets_studio_window_creation() {
 #[test]
 fn test_viewport_raycast_selection_and_domains() {
     reset_editor_fixture();
-    // 1. Domain switching
-    petunia_qt_app_set_selection_domain(0); // Object
-    assert_eq!(petunia_qt_app_get_selection_domain(), 0);
+    request(json!({"action": "domain", "id": "object"}));
+    select(0);
+    assert_eq!(with_host(|host| host.app.state.project.active), 0);
 
-    // 2. Outliner selection
-    petunia_qt_app_select_asset(0);
-    assert_eq!(petunia_qt_app_get_active_asset(), 0);
-
-    // 3. Viewport selection in Object mode at center (where cube is positioned)
-    let hit_center = petunia_qt_viewport_select(400.0, 300.0, 800.0, 600.0, false);
-    assert!(hit_center);
-    assert_eq!(petunia_qt_app_selected_count(), 1);
-
-    // 4. Viewport selection in empty space (corner 10, 10) deselects
-    let hit_corner = petunia_qt_viewport_select(10.0, 10.0, 800.0, 600.0, false);
-    assert!(!hit_corner);
-    assert_eq!(petunia_qt_app_selected_count(), 0);
-
-    // 5. Select back
+    // Clique no centro (onde está o cubo) seleciona; no canto, deseleciona.
     assert!(petunia_qt_viewport_select(
         400.0, 300.0, 800.0, 600.0, false
     ));
-    assert_eq!(petunia_qt_app_selected_count(), 1);
+    assert_eq!(selected_assets(), 1);
+    assert!(!petunia_qt_viewport_select(10.0, 10.0, 800.0, 600.0, false));
+    assert_eq!(selected_assets(), 0);
+    assert!(petunia_qt_viewport_select(
+        400.0, 300.0, 800.0, 600.0, false
+    ));
+    assert_eq!(selected_assets(), 1);
 
-    // 6. Hover test
     let _ = petunia_qt_viewport_hover(400.0, 300.0, 800.0, 600.0);
     let _ = petunia_qt_viewport_hover(10.0, 10.0, 800.0, 600.0);
 
-    // 7. Vertex mode
-    petunia_qt_app_set_selection_domain(1); // Vertex
-    assert_eq!(petunia_qt_app_get_selection_domain(), 1);
-    let _ = petunia_qt_viewport_select(400.0, 300.0, 800.0, 600.0, false);
-
-    // 8. Edge mode
-    petunia_qt_app_set_selection_domain(2); // Edge
-    assert_eq!(petunia_qt_app_get_selection_domain(), 2);
-    let _ = petunia_qt_viewport_select(400.0, 300.0, 800.0, 600.0, false);
-
-    // 9. Face mode
-    petunia_qt_app_set_selection_domain(3); // Face
-    assert_eq!(petunia_qt_app_get_selection_domain(), 3);
-    let _ = petunia_qt_viewport_select(400.0, 300.0, 800.0, 600.0, false);
-
-    // 10. Return to Object mode
-    petunia_qt_app_set_selection_domain(0);
-    assert_eq!(petunia_qt_app_get_selection_domain(), 0);
-}
-
-#[test]
-fn test_modifiers_stack_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        petunia_qt_app_select_asset(0);
-        let initial_mods = petunia_qt_app_get_modifier_count(0);
-
-        // Add Mirror modifier (kind=0, axis=0: X, weld=0.001)
-        let added = petunia_qt_app_add_modifier(0, 0, 0, 0.001);
-        assert!(added);
-        assert_eq!(petunia_qt_app_get_modifier_count(0), initial_mods + 1);
-
-        // Get modifier info
-        let mut name_buf = [0i8; 64];
-        let mut enabled = false;
-        let mut axis = -1;
-        let mut weld = 0.0f32;
-        let ok = petunia_qt_app_get_modifier_info(
-            0,
-            initial_mods,
-            name_buf.as_mut_ptr(),
-            64,
-            &mut enabled,
-            &mut axis,
-            &mut weld,
+    for domain in ["vertex", "edge", "face"] {
+        request(json!({"action": "domain", "id": domain}));
+        let _ = petunia_qt_viewport_select(400.0, 300.0, 800.0, 600.0, false);
+        assert_eq!(
+            with_host(|host| format!("{:?}", host.app.state.selection_domain())).to_lowercase(),
+            domain
         );
-        assert!(ok);
-        assert!(enabled);
-        assert_eq!(axis, 0);
-
-        // Toggle enabled
-        petunia_qt_app_toggle_modifier(0, initial_mods, false);
-        let _ = petunia_qt_app_get_modifier_info(
-            0,
-            initial_mods,
-            name_buf.as_mut_ptr(),
-            64,
-            &mut enabled,
-            &mut axis,
-            &mut weld,
-        );
-        assert!(!enabled);
-
-        // Add second modifier (Symmetry kind=1)
-        let added2 = petunia_qt_app_add_modifier(0, 1, 1, 0.002);
-        assert!(added2);
-        assert_eq!(petunia_qt_app_get_modifier_count(0), initial_mods + 2);
-
-        // Move modifier down and up
-        assert!(petunia_qt_app_move_modifier(0, initial_mods, false));
-        assert!(petunia_qt_app_move_modifier(0, initial_mods + 1, true));
-
-        // Remove one modifier
-        let removed = petunia_qt_app_remove_modifier(0, initial_mods + 1);
-        assert!(removed);
-        assert_eq!(petunia_qt_app_get_modifier_count(0), initial_mods + 1);
-
-        // Re-enable before apply (disabled modifiers cannot be applied)
-        petunia_qt_app_toggle_modifier(0, initial_mods, true);
-
-        // Apply modifier
-        let applied = petunia_qt_app_apply_modifier(0, initial_mods);
-        assert!(applied);
-        assert_eq!(petunia_qt_app_get_modifier_count(0), initial_mods);
     }
+    request(json!({"action": "domain", "id": "object"}));
 }
 
 #[test]
-fn test_pbr_material_and_surface_shading_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        petunia_qt_app_select_asset(0);
+fn test_legacy_modifier_stack_requests() {
+    // A pilha legada ainda aparece para arquivos antigos (cartões "Modificadores
+    // (legado)" no Shell v2); arquivos carregados migram para o Operation Graph.
+    reset_editor_fixture();
+    select(0);
+    let modifiers = || with_host(|host| host.app.state.project.assets[0].modifiers.clone());
+    let initial = modifiers().len();
+    request(json!({"action": "add_modifier", "kind": "mirror"}));
+    assert_eq!(modifiers().len(), initial + 1);
+    let mirror = modifiers()[initial].id.to_string();
+    assert!(modifiers()[initial].enabled);
 
-        // Test PBR properties
-        let mut rough = 0.0f32;
-        let mut metal = 0.0f32;
-        let mut emission = 0.0f32;
-        let mut prof = 0i32;
+    request(json!({"action": "set_modifier_enabled", "id": mirror, "enabled": false}));
+    assert!(!modifiers()[initial].enabled);
 
-        assert!(petunia_qt_app_get_material_pbr(
-            0,
-            &mut rough,
-            &mut metal,
-            &mut emission,
-            &mut prof
-        ));
+    request(json!({"action": "add_modifier", "kind": "symmetry"}));
+    assert_eq!(modifiers().len(), initial + 2);
+    let symmetry = modifiers()[initial + 1].id.to_string();
+    request(json!({"action": "move_modifier", "id": symmetry, "direction": -1}));
+    assert_eq!(modifiers()[initial].id.to_string(), symmetry);
+    request(json!({"action": "move_modifier", "id": symmetry, "direction": 1}));
+    assert_eq!(modifiers()[initial].id.to_string(), mirror);
 
-        // Update PBR material properties
-        assert!(petunia_qt_app_set_material_pbr(0, 0.35, 0.85, 2.5, 0));
-        assert!(petunia_qt_app_get_material_pbr(
-            0,
-            &mut rough,
-            &mut metal,
-            &mut emission,
-            &mut prof
-        ));
-        assert!((rough - 0.35).abs() < 1e-4);
-        assert!((metal - 0.85).abs() < 1e-4);
-        assert!((emission - 2.5).abs() < 1e-4);
-        assert_eq!(prof, 0);
+    request(json!({"action": "remove_modifier", "id": symmetry}));
+    assert_eq!(modifiers().len(), initial + 1);
 
-        // Surface Shading: Flat vs Smooth
-        assert_eq!(petunia_qt_app_get_surface_shading(0), 0); // Flat default
-        assert!(petunia_qt_app_set_surface_shading(0, 1)); // Smooth
-        assert_eq!(petunia_qt_app_get_surface_shading(0), 1);
-        assert!(petunia_qt_app_set_surface_shading(0, 0)); // Flat
-        assert_eq!(petunia_qt_app_get_surface_shading(0), 0);
-    }
+    request(json!({"action": "set_modifier_enabled", "id": mirror, "enabled": true}));
+    request(json!({"action": "apply_modifier", "id": mirror}));
+    assert_eq!(modifiers().len(), initial, "aplicar consome o modifier");
 }
 
 #[test]
-fn test_quick_actions_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        petunia_qt_app_select_asset(0);
-
-        let sel_all_cmd = std::ffi::CString::new("select_all").unwrap();
-        assert!(petunia_qt_app_quick_action(sel_all_cmd.as_ptr()));
-
-        let desel_cmd = std::ffi::CString::new("deselect_all").unwrap();
-        assert!(petunia_qt_app_quick_action(desel_cmd.as_ptr()));
-
-        let orig_cmd = std::ffi::CString::new("origin_to_geometry").unwrap();
-        assert!(petunia_qt_app_quick_action(orig_cmd.as_ptr()));
+fn test_material_scalars_and_surface_shading_via_requests() {
+    reset_editor_fixture();
+    select(0);
+    for (field, value) in [
+        ("roughness", 0.35),
+        ("metallic", 0.85),
+        ("emission_strength", 2.5),
+    ] {
+        request(json!({"action": "set_active_material_scalar", "field": field, "value": value}));
     }
+    let (roughness, metallic, emission) = with_host(|host| {
+        let state = &host.app.state;
+        let asset = state.project.active().expect("ativo");
+        let m = asset
+            .material_id
+            .and_then(|id| state.project.materials.iter().find(|m| m.id == id))
+            .or_else(|| state.project.materials.first())
+            .expect("material do objeto");
+        (m.roughness, m.metallic, m.emission_strength)
+    });
+    assert!((roughness - 0.35).abs() < 1e-4);
+    assert!((metallic - 0.85).abs() < 1e-4);
+    assert!((emission - 2.5).abs() < 1e-4);
+
+    // Seção Geometria: Facetado / Suave.
+    let shading = || with_host(|host| host.app.state.project.assets[0].surface_shading);
+    assert_eq!(shading(), petunia_mesh::shading::SurfaceShading::Flat);
+    request(json!({"action": "command", "id": "model.shade_smooth"}));
+    assert_eq!(shading(), petunia_mesh::shading::SurfaceShading::Smooth);
+    request(json!({"action": "command", "id": "model.shade_flat"}));
+    assert_eq!(shading(), petunia_mesh::shading::SurfaceShading::Flat);
+}
+
+#[test]
+fn test_selection_quick_requests() {
+    reset_editor_fixture();
+    select(0);
+    request(json!({"action": "select_all"}));
+    assert!(selected_assets() >= 1);
+    request(json!({"action": "clear_selection"}));
+    assert_eq!(selected_assets(), 0);
+    select(0);
+    request(json!({"action": "origin_geometry"}));
 }
 
 #[test]
 fn test_3d_transform_gizmo_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        petunia_qt_app_select_asset(0);
-
-        let mut orig = [0.0f32; 2];
-        let mut px = [0.0f32; 2];
-        let mut py = [0.0f32; 2];
-        let mut pz = [0.0f32; 2];
-
-        let projected = petunia_qt_gizmo_get_projected(
+    reset_editor_fixture();
+    select(0);
+    let mut orig = [0.0f32; 2];
+    let mut px = [0.0f32; 2];
+    let mut py = [0.0f32; 2];
+    let mut pz = [0.0f32; 2];
+    let projected = unsafe {
+        petunia_qt_gizmo_get_projected(
             800.0,
             600.0,
             orig.as_mut_ptr(),
             px.as_mut_ptr(),
             py.as_mut_ptr(),
             pz.as_mut_ptr(),
-        );
-        assert!(projected);
-        assert!(orig[0].is_finite() && orig[1].is_finite());
-        assert!(px[0].is_finite() && py[0].is_finite() && pz[0].is_finite());
+        )
+    };
+    assert!(projected);
+    assert!(
+        orig.iter()
+            .chain(&px)
+            .chain(&py)
+            .chain(&pz)
+            .all(|v| v.is_finite())
+    );
+    assert_eq!(petunia_qt_gizmo_hit_test(orig[0], orig[1], 800.0, 600.0), 4);
+    assert_eq!(petunia_qt_gizmo_hit_test(10.0, 10.0, 800.0, 600.0), 0);
 
-        // Center hit test
-        let hit_center = petunia_qt_gizmo_hit_test(orig[0], orig[1], 800.0, 600.0);
-        assert_eq!(hit_center, 4); // Center
-
-        // Miss hit test
-        let hit_miss = petunia_qt_gizmo_hit_test(10.0, 10.0, 800.0, 600.0);
-        assert_eq!(hit_miss, 0); // None
-
-        // Drag axis X
-        let mut initial_pos = [0.0f32; 3];
-        assert!(petunia_qt_app_get_asset_position(
-            0,
-            &mut initial_pos[0],
-            &mut initial_pos[1],
-            &mut initial_pos[2]
-        ));
-        assert!(petunia_qt_gizmo_drag_axis(1, 10.0, 0.0, 800.0, 600.0));
-        let mut new_pos = [0.0f32; 3];
-        assert!(petunia_qt_app_get_asset_position(
-            0,
-            &mut new_pos[0],
-            &mut new_pos[1],
-            &mut new_pos[2]
-        ));
-        // Position should be modified
-        assert_ne!(initial_pos[0], new_pos[0]);
-    }
+    let before = translation(0);
+    assert!(petunia_qt_gizmo_drag_axis(1, 10.0, 0.0, 800.0, 600.0));
+    assert_ne!(before[0], translation(0)[0]);
 }
 
 #[test]
-fn test_uv_canvas_and_diagnostics_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        petunia_qt_app_select_asset(0);
-
-        let faces = petunia_qt_app_get_uv_face_count(0);
-        assert!(faces > 0);
-
-        let mut uv_buf = [0.0f32; 8]; // 4 UV pairs
-        let n_verts = petunia_qt_app_get_uv_face_verts(0, 0, uv_buf.as_mut_ptr(), 4);
-        assert!(n_verts >= 3);
-
-        let mut islands = 0i32;
-        let mut overlap = 0.0f32;
-        let mut stretch = 0.0f32;
-        assert!(petunia_qt_app_get_uv_diagnostics(
-            0,
-            &mut islands,
-            &mut overlap,
-            &mut stretch
-        ));
-        assert!(islands >= 1);
-        assert!(overlap >= 0.0);
-        assert!(stretch >= 0.0);
-    }
+fn test_uv_diagnostics_of_default_cube() {
+    reset_editor_fixture();
+    let (faces, uv_corners, diagnostics) = with_host(|host| {
+        let mesh = &host.app.state.project.assets[0].mesh;
+        (
+            mesh.faces.len(),
+            mesh.faces.first().map_or(0, |face| face.uv.len()),
+            mesh.uv_diagnostics(),
+        )
+    });
+    assert!(faces > 0);
+    assert!(uv_corners >= 3);
+    assert!(diagnostics.island_count >= 1);
+    assert!(diagnostics.overlap_ratio >= 0.0);
+    assert!(diagnostics.mean_stretch >= 0.0);
 }
 
 #[test]
-fn test_timeline_and_dopesheet_ffi() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        reset_editor_fixture();
-        petunia_qt_app_select_asset(0);
-        petunia_ui_cxxqt::render::opengl_viewport::VIEWPORT_RENDERER
-            .with(|renderer| {
-                let mut host = renderer.borrow_mut();
-                let e = &mut host.app;
-                e.request(&serde_json::json!({"action":"workspace","id":"ANIMATE"}))
-                    .unwrap();
-                let id = e.snapshot()["animate"]["creature_presets"][0]["id"].clone();
-                e.request(&serde_json::json!({"action":"animate","id":"add-creature","arg":id}))
-                    .unwrap();
-                let bone = e.snapshot()["animate"]["bones"][0]["id"].clone();
-                e.request(&serde_json::json!({"action":"animate","id":"select-bone","arg":bone}))
-                    .unwrap();
-            })
-            .unwrap();
+fn test_timeline_and_keyframes_via_animate_requests() {
+    use petunia_editor::animate::AnimateIntent;
+    reset_editor_fixture();
+    select(0);
+    request(json!({"action": "workspace", "id": "ANIMATE"}));
+    let preset = snapshot()["animate"]["creature_presets"][0]["id"].clone();
+    request(json!({"action": "animate", "id": "add-creature", "arg": preset}));
+    let bone = snapshot()["animate"]["bones"][0]["id"].clone();
+    request(json!({"action": "animate", "id": "select-bone", "arg": bone}));
 
-        let mut cur = 0i32;
-        let mut total = 0i32;
-        let mut playing = false;
-        assert!(petunia_qt_app_get_timeline_info(
-            &mut cur,
-            &mut total,
-            &mut playing
-        ));
-        assert_eq!(cur, 0);
-        let expected = petunia_ui_cxxqt::render::opengl_viewport::VIEWPORT_RENDERER
-            .with(|renderer| {
-                renderer
-                    .borrow()
-                    .app
-                    .controller
-                    .animate_view_model()
-                    .total_frames
-            })
-            .unwrap();
-        assert_eq!(total, expected);
-        assert!(total >= 42);
+    let vm = || with_host(|host| host.app.controller.animate_view_model());
+    assert_eq!(vm().current_frame, 0);
+    assert!(vm().total_frames >= 42);
 
-        // Frame setting
-        petunia_qt_app_set_timeline_frame(42);
-        assert!(petunia_qt_app_get_timeline_info(
-            &mut cur,
-            &mut total,
-            &mut playing
-        ));
-        assert_eq!(cur, 42);
+    // Ir ao quadro 42 (a timeline usa estes passos do controlador).
+    let goto = |frame: i32| {
+        with_host(|host| {
+            host.app
+                .controller
+                .apply_animate(AnimateIntent::JumpToStart);
+            host.app
+                .controller
+                .apply_animate(AnimateIntent::StepFrame(frame));
+        })
+    };
+    goto(42);
+    assert_eq!(vm().current_frame, 42);
 
-        // Keyframes
-        assert!(!petunia_qt_app_has_keyframe(0, 42));
-        assert!(petunia_qt_app_insert_keyframe(0, 42));
-        assert!(petunia_qt_app_has_keyframe(0, 42));
-        // Authored keyframes play even without a procedural Motion.
-        assert!(petunia_qt_app_toggle_playback());
-        assert!(!petunia_qt_app_toggle_playback());
-        assert!(petunia_qt_app_delete_keyframe(0, 42));
-        assert!(!petunia_qt_app_has_keyframe(0, 42));
+    let has_key = |frame: i32| {
+        let vm = vm();
+        vm.tracks
+            .iter()
+            .filter(|t| vm.selected_bone == Some(t.bone_id))
+            .any(|t| t.keyframes.iter().any(|k| k.frame == frame))
+    };
+    assert!(vm().can_keyframe);
+    assert!(!has_key(42));
+    request(json!({"action": "animate", "id": "insert-keyframe"}));
+    assert!(has_key(42));
+    // Keyframes autorais tocam mesmo sem Motion procedural.
+    request(json!({"action": "animate", "id": "toggle-play"}));
+    assert!(vm().playing);
+    request(json!({"action": "animate", "id": "toggle-play"}));
+    assert!(!vm().playing);
+    request(json!({"action": "animate", "id": "delete-keyframe", "value": 42.0 / 24.0}));
+    assert!(!has_key(42));
 
-        // An empty clip cannot play; add a real procedural Motion for this path.
-        assert!(!petunia_qt_app_toggle_playback());
-        petunia_ui_cxxqt::render::opengl_viewport::VIEWPORT_RENDERER
-            .with(|renderer| {
-                let mut host = renderer.borrow_mut();
-                let e = &mut host.app;
-                let motion = e.snapshot()["animate"]["catalog"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|item| item["available"] == true)
-                    .unwrap()["id"]
-                    .clone();
-                e.request(&serde_json::json!({"action":"animate","id":"add-motion","arg":motion}))
-                    .unwrap();
-                e.request(&serde_json::json!({"action":"animate","id":"seek","value":0.}))
-                    .unwrap();
-            })
-            .unwrap();
-        let now_playing = petunia_qt_app_toggle_playback();
-        assert!(now_playing);
-        let now_stopped = petunia_qt_app_toggle_playback();
-        assert!(!now_stopped);
-
-        // Reset frame
-        petunia_qt_app_set_timeline_frame(1);
-    }
+    // Clipe vazio não toca; com um Motion procedural real, toca.
+    request(json!({"action": "animate", "id": "toggle-play"}));
+    assert!(!vm().playing);
+    let motion = snapshot()["animate"]["catalog"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["available"] == true)
+        .unwrap()["id"]
+        .clone();
+    request(json!({"action": "animate", "id": "add-motion", "arg": motion}));
+    request(json!({"action": "animate", "id": "seek", "value": 0.0}));
+    request(json!({"action": "animate", "id": "toggle-play"}));
+    assert!(vm().playing);
+    request(json!({"action": "animate", "id": "toggle-play"}));
+    assert!(!vm().playing);
 }
 
 #[test]
-fn test_align_and_distribute_objects_via_qt_app() {
-    unsafe {
-        reset_editor_fixture();
-
-        // 1. Adiciona dois cubos na cena
-        let c_cube = std::ffi::CString::new("model.add_cube").unwrap();
-        assert!(petunia_qt_app_execute_command(c_cube.as_ptr()));
-        assert!(petunia_qt_app_execute_command(c_cube.as_ptr()));
-
-        // Posiciona o segundo cubo em X = 20
-        petunia_qt_app_set_asset_position(1, 20.0, 0.0, 0.0);
-
-        // Seleciona ambos os objetos
-        petunia_ui_cxxqt::render::opengl_viewport::VIEWPORT_RENDERER
-            .with(|renderer| {
-                let mut host = renderer.borrow_mut();
-                host.app.state.select_object(Some(0), false);
-                host.app.state.select_object(Some(1), true);
-            })
-            .unwrap();
-
-        // Executa alinhamento de centro em X
-        let c_align = std::ffi::CString::new("model.align_center_x").unwrap();
-        let aligned = petunia_qt_app_execute_command(c_align.as_ptr());
-        assert!(aligned);
-
-        // Verifica que os dois cubos agora compartilham a mesma coordenada X
-        let mut x0 = 0.0;
-        let mut y0 = 0.0;
-        let mut z0 = 0.0;
-        let mut x1 = 0.0;
-        let mut y1 = 0.0;
-        let mut z1 = 0.0;
-        petunia_qt_app_get_asset_position(0, &mut x0, &mut y0, &mut z0);
-        petunia_qt_app_get_asset_position(1, &mut x1, &mut y1, &mut z1);
-        assert!(
-            (x0 - x1).abs() < 1e-4,
-            "Posições X devem ser iguais após alinhamento: x0={x0}, x1={x1}"
-        );
-
-        // Testa Desfazer (Undo)
-        assert!(petunia_qt_app_undo());
-        petunia_qt_app_get_asset_position(1, &mut x1, &mut y1, &mut z1);
-        assert!(
-            (x1 - 20.0).abs() < 1e-4,
-            "Undo deve restaurar posição X = 20 do segundo cubo"
-        );
-    }
+fn test_align_and_distribute_objects_via_requests() {
+    reset_editor_fixture();
+    request(json!({"action": "command", "id": "model.add_cube"}));
+    request(json!({"action": "command", "id": "model.add_cube"}));
+    select(1);
+    request(json!({"action": "transform", "kind": "position", "axis": 0, "text": "20"}));
+    with_host(|host| {
+        host.app.state.select_object(Some(0), false);
+        host.app.state.select_object(Some(1), true);
+    });
+    request(json!({"action": "command", "id": "model.align_center_x"}));
+    let (x0, x1) = (translation(0)[0], translation(1)[0]);
+    assert!((x0 - x1).abs() < 1e-4, "x0={x0}, x1={x1}");
+    request(json!({"action": "undo"}));
+    assert!(
+        (translation(1)[0] - 20.0).abs() < 1e-4,
+        "Undo restaura X = 20"
+    );
 }

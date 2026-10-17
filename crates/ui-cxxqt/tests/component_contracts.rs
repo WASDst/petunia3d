@@ -25,5 +25,9 @@ fn base_components_honor_their_contracts() {
         .filter(|c| c["pass"] != true)
         .map(|c| format!("{} {}", c["name"], c["detail"].as_str().unwrap_or("")))
         .collect();
-    assert!(failed.is_empty(), "verificações reprovadas:\n{}", failed.join("\n"));
+    assert!(
+        failed.is_empty(),
+        "verificações reprovadas:\n{}",
+        failed.join("\n")
+    );
 }

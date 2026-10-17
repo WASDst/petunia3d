@@ -3,10 +3,8 @@
 //! `OpGraphCmd` (validação, Undo e revisão pelo `CommandDispatcher`).
 
 use petunia_core::{GraphOp, OpGraphCmd};
-use petunia_project::op_graph::{
-    self, OpGraph, ParamKind, ParamSpec, ParamValue, TYPE_OBJECT,
-};
 use petunia_project::Project;
+use petunia_project::op_graph::{self, OpGraph, ParamKind, ParamSpec, ParamValue, TYPE_OBJECT};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -195,7 +193,10 @@ pub(crate) fn command_for(
             GraphOp::AddBoolean {
                 tool,
                 targets: selected.iter().copied().filter(|id| *id != tool).collect(),
-                operation: request["operation"].as_str().unwrap_or("difference").to_string(),
+                operation: request["operation"]
+                    .as_str()
+                    .unwrap_or("difference")
+                    .to_string(),
                 hide_tool: request["hide_tool"].as_bool().unwrap_or(true),
             }
         }
@@ -212,12 +213,17 @@ pub(crate) fn command_for(
         },
         "graph_set_param" => GraphOp::SetParam {
             node: uuid(request, "node")?,
-            key: request["key"].as_str().ok_or("Parâmetro inválido: key")?.to_string(),
+            key: request["key"]
+                .as_str()
+                .ok_or("Parâmetro inválido: key")?
+                .to_string(),
             value: param_value(request)?,
         },
         "graph_set_enabled" => GraphOp::SetEnabled {
             node: uuid(request, "node")?,
-            enabled: request["enabled"].as_bool().ok_or("Booleano inválido: enabled")?,
+            enabled: request["enabled"]
+                .as_bool()
+                .ok_or("Booleano inválido: enabled")?,
         },
         "graph_apply" => GraphOp::Apply {
             operation: uuid(request, "operation")?,
@@ -227,7 +233,9 @@ pub(crate) fn command_for(
             operation: uuid(request, "operation")?,
             target: uuid(request, "target")?,
         },
-        "graph_remove" => GraphOp::RemoveNode { node: uuid(request, "node")? },
+        "graph_remove" => GraphOp::RemoveNode {
+            node: uuid(request, "node")?,
+        },
         "graph_move_node" => GraphOp::MoveNode {
             node: uuid(request, "node")?,
             position: [
@@ -250,18 +258,28 @@ pub(crate) fn command_for(
 mod tests {
     use super::*;
     use petunia_mesh::Mesh;
-    use petunia_project::op_graph::TYPE_BOOLEAN;
     use petunia_project::Asset;
+    use petunia_project::op_graph::TYPE_BOOLEAN;
 
     #[test]
     fn requests_become_typed_commands() {
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
-        let cmd = command_for("graph_add_boolean", &json!({"operation": "union"}), Some(a), &[a, b])
-            .unwrap()
-            .unwrap();
+        let cmd = command_for(
+            "graph_add_boolean",
+            &json!({"operation": "union"}),
+            Some(a),
+            &[a, b],
+        )
+        .unwrap()
+        .unwrap();
         match cmd.op {
-            GraphOp::AddBoolean { tool, targets, operation, hide_tool } => {
+            GraphOp::AddBoolean {
+                tool,
+                targets,
+                operation,
+                hide_tool,
+            } => {
                 assert_eq!(tool, a);
                 assert_eq!(targets, vec![b], "a ferramenta nunca é alvo de si mesma");
                 assert_eq!(operation, "union");
@@ -270,9 +288,21 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert!(command_for("graph_add_boolean", &json!({}), None, &[]).is_err());
-        assert!(command_for("graph_add_operation", &json!({"kind": "twist"}), Some(a), &[a]).is_err());
+        assert!(
+            command_for(
+                "graph_add_operation",
+                &json!({"kind": "twist"}),
+                Some(a),
+                &[a]
+            )
+            .is_err()
+        );
         assert!(command_for("graph_set_param", &json!({"node": "no"}), Some(a), &[]).is_err());
-        assert!(command_for("something_else", &json!({}), Some(a), &[]).unwrap().is_none());
+        assert!(
+            command_for("something_else", &json!({}), Some(a), &[])
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -285,7 +315,10 @@ mod tests {
         project.assets.push(wall);
         project.assets.push(cutter);
         let object = project.op_graph.ensure_object_node(cutter_id).unwrap();
-        let boolean = project.op_graph.add_node(TYPE_BOOLEAN, &[], [0.0; 2]).unwrap();
+        let boolean = project
+            .op_graph
+            .add_node(TYPE_BOOLEAN, &[], [0.0; 2])
+            .unwrap();
         project.op_graph.connect(object, 0, boolean, 0).unwrap();
         let wall_node = project.op_graph.ensure_object_node(wall_id).unwrap();
         project.op_graph.connect(boolean, 0, wall_node, 0).unwrap();
@@ -301,6 +334,10 @@ mod tests {
         assert_eq!(on_cutter["edges"].as_array().unwrap().len(), 2);
         // a UI é gerada do descriptor: especificações dos parâmetros vêm publicadas
         let specs = on_cutter["as_tool"][0]["specs"].as_array().unwrap();
-        assert!(specs.iter().any(|s| s["key"] == "operation" && s["kind"] == "choice"));
+        assert!(
+            specs
+                .iter()
+                .any(|s| s["key"] == "operation" && s["kind"] == "choice")
+        );
     }
 }

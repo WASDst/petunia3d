@@ -22,8 +22,7 @@ fn isolated_dirs() -> PathBuf {
 #[test]
 fn shell_v2_regions_layout_focus_and_theme() {
     let root = isolated_dirs();
-    let captures = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/shell-captures");
+    let captures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/shell-captures");
     std::fs::create_dir_all(&captures).expect("diretório de capturas");
     let _app = PetuniaWidgetsApp::new();
     unsafe extern "C" {
@@ -36,12 +35,20 @@ fn shell_v2_regions_layout_focus_and_theme() {
         .to_owned();
     let report: Value = serde_json::from_str(&raw).expect("relatório JSON");
     let checks = report["checks"].as_array().expect("lista de verificações");
-    assert!(checks.len() >= 40, "cobertura mínima do harness: {} verificações", checks.len());
+    assert!(
+        checks.len() >= 40,
+        "cobertura mínima do harness: {} verificações",
+        checks.len()
+    );
     let failed: Vec<String> = checks
         .iter()
         .filter(|c| c["pass"] != true)
         .map(|c| format!("{} {}", c["name"], c["detail"].as_str().unwrap_or("")))
         .collect();
     let _ = std::fs::remove_dir_all(root);
-    assert!(failed.is_empty(), "verificações reprovadas:\n{}", failed.join("\n"));
+    assert!(
+        failed.is_empty(),
+        "verificações reprovadas:\n{}",
+        failed.join("\n")
+    );
 }

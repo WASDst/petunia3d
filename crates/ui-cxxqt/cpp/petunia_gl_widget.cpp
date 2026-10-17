@@ -1,6 +1,5 @@
 #include "petunia_gl_widget.h"
 #include "petunia_editor_panel.h"
-#include "petunia_overlay_cards.h"
 #include <QDebug>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -223,8 +222,6 @@ void PetuniaGlWidget::drawOverlays(QPainter &painter) {
 }
 
 void PetuniaGlWidget::drawViewportHud(QPainter &painter) {
-    if (parentWidget() && parentWidget()->findChild<PetuniaToolOptionsBar *>())
-        return;
     char buf[64] = {0};
     QString viewName = QStringLiteral("User Persp");
     if (petunia_qt_camera_get_view_name(buf, sizeof(buf))) {

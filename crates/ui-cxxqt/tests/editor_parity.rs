@@ -444,23 +444,32 @@ fn tablet_pressure_tilt_and_eraser_do_not_overwrite_the_brush_preset() {
     request(&mut e, json!({"action":"tablet_reset"}));
 }
 
+/// Pedido pelo mesmo canal C que a GUI usa (`petunia_qt_editor_request`).
+fn ffi_request(input: &str) -> Value {
+    use petunia_ui_cxxqt::editor::{petunia_qt_editor_free, petunia_qt_editor_request};
+    let input = std::ffi::CString::new(input).unwrap();
+    // O canal devolve uma string C própria, liberada pelo par `free`.
+    unsafe {
+        let raw = petunia_qt_editor_request(input.as_ptr());
+        assert!(!raw.is_null());
+        let value = serde_json::from_str(std::ffi::CStr::from_ptr(raw).to_str().unwrap()).unwrap();
+        petunia_qt_editor_free(raw);
+        value
+    }
+}
+
 #[test]
 fn headless_threads_cannot_mutate_another_threads_editor() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        use petunia_ui_cxxqt::render::opengl_viewport::{
-            petunia_qt_app_execute_command, petunia_qt_app_get_asset_count,
-        };
-        let before = petunia_qt_app_get_asset_count();
-        let child = std::thread::spawn(|| {
-            let before = petunia_qt_app_get_asset_count();
-            let command = std::ffi::CString::new("edit.duplicate").unwrap();
-            assert!(petunia_qt_app_execute_command(command.as_ptr()));
-            assert_eq!(petunia_qt_app_get_asset_count(), before + 1);
-        });
-        child.join().unwrap();
-        assert_eq!(petunia_qt_app_get_asset_count(), before);
-    }
+    let count = |snapshot: &Value| snapshot["scene_items"].as_array().map_or(0, Vec::len);
+    let before = count(&ffi_request(r#"{"action":"snapshot"}"#));
+    let child = std::thread::spawn(move || {
+        let before = count(&ffi_request(r#"{"action":"snapshot"}"#));
+        let after = ffi_request(r#"{"action":"command","id":"edit.duplicate"}"#);
+        assert_eq!(after["ok"], true);
+        assert_eq!(count(&after), before + 1);
+    });
+    child.join().unwrap();
+    assert_eq!(count(&ffi_request(r#"{"action":"snapshot"}"#)), before);
 }
 
 #[test]

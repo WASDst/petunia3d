@@ -1,4 +1,4 @@
-//! Safe Rust wrapper para o PetuniaMainWindow e QApplication (Qt Widgets com docas multijanela).
+//! Safe Rust wrapper para o QApplication e a janela principal (Shell v2, `PetuniaShellWindow`).
 
 pub struct PetuniaWidgetsApp {
     raw: *mut std::ffi::c_void,

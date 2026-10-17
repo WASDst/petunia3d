@@ -3810,5 +3810,101 @@
   "Concluir a edição da operação": {
     "pt-BR": "Concluir a edição da operação",
     "en": "Finish editing the operation"
+  },
+  "Cor %1": {
+    "pt-BR": "Cor %1",
+    "en": "Color %1"
+  },
+  "Seletor de cor": {
+    "pt-BR": "Seletor de cor",
+    "en": "Color picker"
+  },
+  "Padrão": {
+    "pt-BR": "Padrão",
+    "en": "Default"
+  },
+  "Adicionar criatura…": {
+    "pt-BR": "Adicionar criatura…",
+    "en": "Add creature…"
+  },
+  "Ajustar ao modelo": {
+    "pt-BR": "Ajustar ao modelo",
+    "en": "Fit to model"
+  },
+  "Alternar bloqueio\tL": {
+    "pt-BR": "Alternar bloqueio\tL",
+    "en": "Toggle lock\tL"
+  },
+  "Alternar visibilidade dos ossos\tH": {
+    "pt-BR": "Alternar visibilidade dos ossos\tH",
+    "en": "Toggle bone visibility\tH"
+  },
+  "Bloqueada — clique para liberar": {
+    "pt-BR": "Bloqueada — clique para liberar",
+    "en": "Locked — click to unlock"
+  },
+  "Buscar camadas": {
+    "pt-BR": "Buscar camadas",
+    "en": "Search layers"
+  },
+  "Buscar ossos": {
+    "pt-BR": "Buscar ossos",
+    "en": "Search bones"
+  },
+  "Camada ativa": {
+    "pt-BR": "Camada ativa",
+    "en": "Active layer"
+  },
+  "Camada de pintura": {
+    "pt-BR": "Camada de pintura",
+    "en": "Paint layer"
+  },
+  "Excluir camada\tDel": {
+    "pt-BR": "Excluir camada\tDel",
+    "en": "Delete layer\tDel"
+  },
+  "Nenhum osso ou criatura ativa. Adicione uma criatura para animar.": {
+    "pt-BR": "Nenhum osso ou criatura ativa. Adicione uma criatura para animar.",
+    "en": "No bone or active creature. Add a creature to animate."
+  },
+  "Nenhuma camada de pintura. Crie uma camada para começar a pintar.": {
+    "pt-BR": "Nenhuma camada de pintura. Crie uma camada para começar a pintar.",
+    "en": "No paint layers. Create a layer to start painting."
+  },
+  "Oculta — clique para exibir": {
+    "pt-BR": "Oculta — clique para exibir",
+    "en": "Hidden — click to show"
+  },
+  "Oculta": {
+    "pt-BR": "Oculta",
+    "en": "Hidden"
+  },
+  "Osso do rig": {
+    "pt-BR": "Osso do rig",
+    "en": "Rig bone"
+  },
+  "Osso selecionado": {
+    "pt-BR": "Osso selecionado",
+    "en": "Selected bone"
+  },
+  "Ossos ocultos": {
+    "pt-BR": "Ossos ocultos",
+    "en": "Bones hidden"
+  },
+  "Ossos visíveis": {
+    "pt-BR": "Ossos visíveis",
+    "en": "Bones visible"
+  },
+  "Rig ativo": {
+    "pt-BR": "Rig ativo",
+    "en": "Active rig"
+  },
+  "Sem camadas": {
+    "pt-BR": "Sem camadas",
+    "en": "No layers"
+  },
+  "Sem criatura": {
+    "pt-BR": "Sem criatura",
+    "en": "No creature"
   }
 }

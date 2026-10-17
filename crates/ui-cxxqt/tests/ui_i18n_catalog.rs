@@ -87,7 +87,11 @@ fn shell_sources() -> Vec<(String, String)> {
     for entry in fs::read_dir(&dir).expect("cpp/shell") {
         let path = entry.expect("entrada").path();
         if path.extension().and_then(|e| e.to_str()) == Some("cpp")
-            && !path.file_name().unwrap().to_string_lossy().contains("harness")
+            && !path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("harness")
         {
             files.push((
                 path.file_name().unwrap().to_string_lossy().into_owned(),
@@ -149,14 +153,21 @@ fn every_editor_published_label_is_translated() {
             }
         }
     }
-    let missing: Vec<_> = labels.iter().filter(|label| !has_both(&catalog, label)).collect();
-    assert!(missing.is_empty(), "rótulos do editor sem tradução: {missing:?}");
+    let missing: Vec<_> = labels
+        .iter()
+        .filter(|label| !has_both(&catalog, label))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "rótulos do editor sem tradução: {missing:?}"
+    );
 }
 
 #[test]
 fn tool_and_action_icons_exist_in_the_icon_pack() {
     // O qrc embute todos os SVGs de `petunia-outline` por id plano (nome do arquivo).
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/petunia-outline/svg");
+    let root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/petunia-outline/svg");
     let mut stems = BTreeSet::new();
     let mut stack = vec![root];
     while let Some(dir) = stack.pop() {
@@ -194,5 +205,8 @@ fn tool_and_action_icons_exist_in_the_icon_pack() {
             }
         }
     }
-    assert!(missing.is_empty(), "ícones ausentes do pacote petunia-outline: {missing:?}");
+    assert!(
+        missing.is_empty(),
+        "ícones ausentes do pacote petunia-outline: {missing:?}"
+    );
 }
