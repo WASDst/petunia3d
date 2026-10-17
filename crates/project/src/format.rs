@@ -294,6 +294,16 @@ fn finish_load(
     format_version: u32,
     mode: LoadMode,
 ) -> Result<(Project, LoadReport), ProjectError> {
+    if mode == LoadMode::Strict {
+        for a in &project.assets {
+            if let Err(e) = petunia_mesh::validate_invariants(&a.mesh) {
+                return Err(ProjectError::RepairRequired(format!(
+                    "malha '{}' com invariantes violados: {e}",
+                    a.name
+                )));
+            }
+        }
+    }
     let before = repair_census(&project);
     project.validate();
     let after = repair_census(&project);

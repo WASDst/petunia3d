@@ -335,6 +335,20 @@ pub fn import_scene_bytes(
                     repair.faces_dropped
                 ));
             }
+            if repair.vertices_sanitized > 0 {
+                warnings.push(format!(
+                    "malha '{}': {} vértice(s) não-finito(s) sanitizado(s)",
+                    mesh.name().unwrap_or("?"),
+                    repair.vertices_sanitized
+                ));
+            }
+            if repair.uv_defaults_generated > 0 {
+                warnings.push(format!(
+                    "malha '{}': {} UV(s) padrão gerada(s)",
+                    mesh.name().unwrap_or("?"),
+                    repair.uv_defaults_generated
+                ));
+            }
             if out.verts.is_empty() || out.faces.is_empty() {
                 continue;
             }

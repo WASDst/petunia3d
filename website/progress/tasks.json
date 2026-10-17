@@ -536,6 +536,12 @@
       "document": "03-geometry/normals-shading-sharp-edges.md",
       "summary": "Implementação e fechamento dos testes obrigatórios restantes de G18 (website/docs/03-geometry/normals-shading-sharp-edges.md). Mesh::radial_frustum passa a gravar arestas sharp nas bordas de tampas (cap boundaries) de cilindros e cones por padrão. Nova suíte dedicada crates/project/tests/normals_shading_g18_gates_tests.rs cobrindo: 1) test_g18_gate_cylinder_smooth_with_cap_boundaries_sharp (tampas planas +Y/-Y e laterais suaves em XZ sem vazamento de componente Y); 2) test_g18_gate_uneven_face_areas_zero_render_export_difference (ponderação por ângulo de corner imune à desproporção 1:100 de áreas e zero divergência entre to_triangles_shaded e shaded_corners); 3) test_g18_gate_gltf_vertex_split_on_hard_normal_boundary (divisão de vértices na aresta Sharp e fusão na aresta lisa); 4) test_g18_gate_obj_normal_indices_per_corner (índices vn separados por corner na aresta Sharp e vn compartilhado na aresta suave). Bateria executada com CARGO_BUILD_JOBS=1: 4/4 testes verdes, fmt e clippy limpos.",
       "origin_sha": "f60a6e69"
+    },
+    "g02-validation-repair-gates": {
+      "revision": "b293b77c",
+      "document": "03-geometry/validation-repair-cleanup.md",
+      "summary": "Implementação e fechamento dos testes obrigatórios restantes de G02 (website/docs/03-geometry/validation-repair-cleanup.md, decisões 12–14). Nova suíte dedicada crates/project/tests/validation_repair_g02_gates_tests.rs cobrindo: 1) test_g02_gate_obj_strict_posture (rejeição estrita de NaNs, índices fora dos limites e faces degeneradas no OBJ com ObjImportError::Validation/Parse, sem auto-repair); 2) test_g02_gate_gltf_tolerant_with_explicit_warnings (importação tolerante no glTF com registro explícito de warnings sobre primitivas e anomalias sanitizadas, entregando malhas válidas em validate_invariants); 3) test_g02_gate_petunia_strict_load_fails_on_corrupt_data (carregamento .petunia em LoadMode::Strict recusa malhas corrompidas com ProjectError::RepairRequired, enquanto LoadMode::LegacyRepair migra de forma controlada com LoadReport); 4) test_g02_gate_validation_never_modifies_data_and_repair_is_explicit (validate_invariants é estritamente de leitura, repair_external_mesh emite RepairReport). Bateria executada com CARGO_BUILD_JOBS=1: 4/4 testes verdes, fmt e clippy limpos.",
+      "origin_sha": "b293b77c"
     }
   },
   "tasks": [
@@ -576,9 +582,9 @@
       "title": "Validation/Repair",
       "description": "Separar validação estrita sem mutação, repair externo com relatório e cleanup explícito; remover auto-repair de comandos internos.",
       "document": "03-geometry/validation-repair-cleanup.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-13",
-      "baseline": "Implementado em crates/mesh/src/validation.rs: MeshValidationError (11 variantes), validate_invariants(&Mesh) sem mutação, RepairPolicy (StrictImport/TolerantImport/LegacyProjectMigration) e repair_external_mesh com RepairReport. Auto-repair removido de SeparateSelection/ClearLocation/ClearRotation/ClearScale em crates/core/src/command.rs e de primitive_session. 2026-10-13: decisão 5 fechada — Mesh::validate() mutante removido de crates/mesh/src/lib.rs (sem consumidor de produção); gates automatizados executados e verdes (evidência g02-validation-gates). Abertos: decisões 12–14 (OBJ strict, glTF tolerante com warning, .petunia inválido/migrações) sem teste dedicado identificado e integração dos reports à UI/MCP/plugins não verificada.",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "crates/mesh/src/validation.rs, crates/project/src/import_obj.rs, crates/project/src/import_gltf.rs, crates/project/src/format.rs, crates/project/tests/validation_repair_g02_gates_tests.rs. 2026-10-17: decisões 12–14 fechadas e validadas por suíte dedicada (evidência g02-validation-repair-gates). OBJ mantém postura strict; glTF tolera anomalias não-fatais emitindo warnings explícitos; .petunia com dados corrompidos falha em LoadMode::Strict e migra auditando reparos em LoadMode::LegacyRepair; comandos internos não possuem auto-repair e terminam em validate_invariants.",
       "checkpoints": [
         {
           "title": "Separar validação estrita sem mutação, repair externo com relatório e cleanup explícito",
@@ -592,8 +598,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g02-validation-repair-gates"
         }
       ],
       "documents": [

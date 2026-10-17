@@ -447,3 +447,12 @@ Nenhum sistema tenta transformar automaticamente qualquer malha ruim em malha pe
 13. glTF pode operar de forma tolerante quando necessário, mas toda sanitização relevante gera warning/report.
 14. Arquivos .petunia atuais inválidos falham explicitamente; versões antigas usam migrations conhecidas.
 15. Commands internos terminam em strict validation, nunca em auto-repair.
+
+### Status da bateria e evidências (2026-10-17)
+
+Todos os gates e decisões fechadas foram formalizados e validados:
+- **Decisão 1 & 2 (Validation sem mutação, Repair explícito)**: `petunia_mesh::validation::validate_invariants` nunca modifica dados (rejeita NaN/Inf e invariantes violados preservando o estado de leitura); `repair_external_mesh` opera exclusivamente na fronteira externa com relatório auditável (`RepairReport`). Testado em `crates/project/tests/validation_repair_g02_gates_tests.rs::test_g02_gate_validation_never_modifies_data_and_repair_is_explicit`.
+- **Decisão 12 (OBJ strict)**: `import_obj_bytes` mantém postura estritamente não permissiva, rejeitando NaNs, índices fora dos limites e faces degeneradas (`ObjImportError::Validation` / `ObjImportError::Parse`), sem reparo silencioso. Testado em `crates/project/tests/validation_repair_g02_gates_tests.rs::test_g02_gate_obj_strict_posture`.
+- **Decisão 13 (glTF tolerante com warning/report)**: `import_scene_bytes` sanitiza toleravelmente anomalias não-fatais (primitivas de pontos/linhas, índices incompletos, atributos ausentes) gerando warnings explícitos em `GltfImport::warnings` e entregando malhas válidas em `validate_invariants`. Testado em `crates/project/tests/validation_repair_g02_gates_tests.rs::test_g02_gate_gltf_tolerant_with_explicit_warnings`.
+- **Decisão 14 (.petunia inválido falha em Strict, migrações em LegacyRepair)**: `load_bytes_with_report` com `LoadMode::Strict` recusa malhas corrompidas com `ProjectError::RepairRequired`; `LoadMode::LegacyRepair` higieniza dados legados de forma controlada através de `LegacyProjectMigration` auditando as alterações no `LoadReport`. Testado em `crates/project/tests/validation_repair_g02_gates_tests.rs::test_g02_gate_petunia_strict_load_fails_on_corrupt_data`.
+- **Decisão 5 & 15 (Sem auto-repair em comandos internos)**: `Mesh::validate()` mutante legado removido; comandos internos terminam em `validate_invariants` sem mascaramento de bugs.

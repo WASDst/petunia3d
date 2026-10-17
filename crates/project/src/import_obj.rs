@@ -99,6 +99,8 @@ fn mesh_from_tobj(mesh: &tobj::Mesh) -> Result<Mesh, ObjImportError> {
             "OBJ contains no faces".to_string(),
         ));
     }
+    petunia_mesh::validate_invariants(&out)
+        .map_err(|e| ObjImportError::Validation(e.to_string()))?;
     Ok(out)
 }
 
