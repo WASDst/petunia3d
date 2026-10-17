@@ -911,6 +911,11 @@
       "revision": "9d144c7c+working tree",
       "document": "03-geometry/operation-graph.md",
       "summary": "2026-10-17, CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen: petunia_project (todas as suítes), petunia_core lib 201, petunia_editor (lib+integração), petunia_ui_cxxqt lib 5, shell_v2 1, bridge_test 12, editor_parity 21, ui_i18n_catalog 3, component_contracts 1, ui_contract_ids 3 — pass; clippy -D warnings (project, core, editor, ui-cxxqt) e fmt limpos. Limites: posição dos nós da receita não é persistida; nós PbrMaterial/AssignMaterial do O04 aparecem sem controles; GPU física, leitor de tela e Windows not run (Q08)."
+    },
+    "u06-automated-a11y-audit": {
+      "revision": "805657e4+working tree",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "summary": "Auditoria automática no harness shell_v2 (QAccessible, offscreen): em DRAW/POLY/PAINT/UV/ANIMATE e com a gaveta aberta (Assets, Nós Operações/Material, Linha do tempo) todo controle visível alcançável por teclado tem nome acessível, todo botão desabilitado explica o motivo (dica ou descrição) e controles de valor expõem o valor. Corrigidos: rolagem de Propriedades, abas hospedadas e suas áreas de rolagem (petuniaNameTabContainers), viewport do canvas de nós, setas de rolagem de abas do Qt. Não coberto: IME, rotas alternativas ao ponteiro além das já testadas, leitor de tela real (Q08)."
     }
   },
   "tasks": [
@@ -1259,7 +1264,7 @@
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Parte coberta no v2 (F6/Shift+F6 por RegionNavigator U14, nomes acessíveis U12, QAccessible do canvas de nós O03); leitor de tela Linux/Windows, IME e disabled reason completos seguem abertos (Q08).",
+      "baseline": "2026-10-17 (Shell v2): nomes, motivos de desabilitação e valores auditados automaticamente em todos os workspaces e páginas da gaveta; F6/Shift+F6 por RegionNavigator; IME e leitor de tela real pendentes (Q08).",
       "checkpoints": [
         {
           "title": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer",

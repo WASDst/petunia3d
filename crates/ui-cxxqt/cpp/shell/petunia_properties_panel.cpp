@@ -1,4 +1,5 @@
 #include "petunia_properties_panel.h"
+#include "../petunia_editor_api.h"
 #include "../petunia_icons.h"
 #include "../petunia_theme.h"
 #include "petunia_i18n.h"
@@ -116,20 +117,7 @@ void PetuniaPropertiesPanel::setHosted(const QString &workspaceId, QWidget *widg
         tabs->tabBar()->setUsesScrollButtons(true);
         tabs->setElideMode(Qt::ElideRight);
         // Contêineres focáveis também precisam de nome (leitor de tela anuncia a região).
-        tabs->setAccessibleName(tr("Propriedades de %1").arg(workspaceId));
-        auto nameScrollAreas = [tabs] {
-            for (int i = 0; i < tabs->count(); ++i) {
-                const auto areas = tabs->widget(i)->findChildren<QScrollArea *>();
-                QList<QScrollArea *> all = areas;
-                if (auto *self = qobject_cast<QScrollArea *>(tabs->widget(i)))
-                    all.prepend(self);
-                for (auto *area : all)
-                    if (area->accessibleName().isEmpty())
-                        area->setAccessibleName(tabs->tabText(i).remove(QLatin1Char('&')));
-            }
-        };
-        nameScrollAreas();
-        connect(tabs, &QTabWidget::currentChanged, tabs, nameScrollAreas);
+        petuniaNameTabContainers(tabs, tr("Propriedades de %1").arg(workspaceId));
     }
     m_stack->addWidget(widget);
 }

@@ -27,6 +27,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QToolButton>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QTabBar>
@@ -320,6 +321,34 @@ PetuniaEditorPanel::PetuniaEditorPanel(const QString &mode, QWidget *parent)
                                            {"value", picked == pinAsset}});
             });
     sync(petuniaRequest("snapshot"));
+    petuniaNameTabContainers(m_tabs, tr("Painel %1").arg(mode));
+}
+
+void petuniaNameTabContainers(QTabWidget *tabs, const QString &name) {
+    if (!tabs)
+        return;
+    tabs->setAccessibleName(name);
+    auto apply = [tabs] {
+        for (int i = 0; i < tabs->count(); ++i) {
+            QList<QScrollArea *> areas = tabs->widget(i)->findChildren<QScrollArea *>();
+            if (auto *self = qobject_cast<QScrollArea *>(tabs->widget(i)))
+                areas.prepend(self);
+            for (auto *area : areas)
+                if (area->accessibleName().isEmpty())
+                    area->setAccessibleName(tabs->tabText(i).remove(QLatin1Char('&')));
+        }
+        // Setas de rolagem da barra (Qt): nome e dica, inclusive desabilitadas.
+        const auto arrows = tabs->tabBar()->findChildren<QToolButton *>();
+        for (auto *arrow : arrows) {
+            const bool left = arrow->arrowType() == Qt::LeftArrow;
+            const QString text = left ? QCoreApplication::translate("PetuniaShell", "Rolar abas para a esquerda")
+                                      : QCoreApplication::translate("PetuniaShell", "Rolar abas para a direita");
+            arrow->setAccessibleName(text);
+            arrow->setToolTip(text);
+        }
+    };
+    apply();
+    QObject::connect(tabs, &QTabWidget::currentChanged, tabs, apply);
 }
 QFormLayout *PetuniaEditorPanel::page(const QString &title) {
     auto *scroll = new QScrollArea(m_tabs);

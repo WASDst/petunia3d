@@ -17,6 +17,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "assets" / "native-translations.json"
 
 PT_TO_EN = {
+    "Rolar abas para a esquerda": "Scroll tabs left",
+    "Rolar abas para a direita": "Scroll tabs right",
+    "Painel %1": "%1 panel",
     "Propriedades do objeto": "Object properties",
     "Propriedades de %1": "%1 properties",
     "Remover nó": "Remove node",

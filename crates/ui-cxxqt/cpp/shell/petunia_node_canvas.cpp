@@ -399,6 +399,8 @@ PetuniaNodeCanvas::PetuniaNodeCanvas(PetuniaShellController *controller, QWidget
     static const bool factoryInstalled = (QAccessible::installFactory(canvasAccessibleFactory), true);
     Q_UNUSED(factoryInstalled);
     setAccessibleName(tr("Editor de nós"));
+    // A área interna recebe o foco do QGraphicsView; ela também se anuncia.
+    viewport()->setAccessibleName(tr("Editor de nós"));
     setToolTip(tr("Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona"));
     m_scene->setSceneRect(-400, -300, 1600, 900);
 }

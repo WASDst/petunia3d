@@ -4150,5 +4150,17 @@
   "Propriedades de %1": {
     "pt-BR": "Propriedades de %1",
     "en": "%1 properties"
+  },
+  "Rolar abas para a esquerda": {
+    "pt-BR": "Rolar abas para a esquerda",
+    "en": "Scroll tabs left"
+  },
+  "Rolar abas para a direita": {
+    "pt-BR": "Rolar abas para a direita",
+    "en": "Scroll tabs right"
+  },
+  "Painel %1": {
+    "pt-BR": "Painel %1",
+    "en": "%1 panel"
   }
 }

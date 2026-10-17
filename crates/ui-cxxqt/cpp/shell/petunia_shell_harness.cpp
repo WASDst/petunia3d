@@ -25,6 +25,7 @@
 #include "petunia_tool_rail.h"
 #include "petunia_viewport_header.h"
 
+#include <QAbstractButton>
 #include <QAccessible>
 #include <QApplication>
 #include <cmath>
@@ -548,6 +549,44 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         };
         interrupted(window.workspaceCanvas("PAINT"), "canvas2d");
         interrupted(window.viewport(), "viewport3d");
+        // Páginas da gaveta abertas (Assets, Nós nos dois domínios, Linha do tempo).
+        auto auditOpenDrawer = [&](const QString &tag) {
+            settle(6);
+            window.syncNow();
+            settle(4);
+            QStringList unnamed;
+            const auto pageWidgets = window.drawerRegion()->findChildren<QWidget *>();
+            for (auto *w : pageWidgets) {
+                if (!w->isVisible() || !w->isEnabled() || !(w->focusPolicy() & Qt::TabFocus))
+                    continue;
+                auto *iface = QAccessible::queryAccessibleInterface(w);
+                if (!iface || iface->text(QAccessible::Name).trimmed().isEmpty())
+                    unnamed << QString::fromLatin1(w->metaObject()->className()) + QStringLiteral(" < ") +
+                                   QString::fromLatin1(w->parentWidget() ? w->parentWidget()->metaObject()->className() : "");
+            }
+            unnamed.removeDuplicates();
+            h.add("a11y:drawer-" + tag + ":controls-have-names", unnamed.isEmpty(),
+                  QStringLiteral("%1: %2").arg(unnamed.size()).arg(unnamed.mid(0, 12).join(QStringLiteral(" | "))));
+        };
+        c->request("workspace", {{"id", "POLY"}});
+        settle(6);
+        window.syncNow();
+        window.drawerRegion()->setCurrentPage("assets");
+        window.drawerRegion()->setOpen(true);
+        auditOpenDrawer("assets");
+        window.openNodeEditor(false);
+        auditOpenDrawer("nodes-operations");
+        window.openNodeEditor(true);
+        auditOpenDrawer("nodes-material");
+        window.nodePage()->setDomain(PetuniaNodeCanvas::Domain::Operations);
+        window.drawerRegion()->setOpen(false);
+        c->request("workspace", {{"id", "ANIMATE"}});
+        settle(6);
+        window.syncNow();
+        window.drawerRegion()->setCurrentPage("timeline");
+        window.drawerRegion()->setOpen(true);
+        auditOpenDrawer("timeline");
+        window.drawerRegion()->setOpen(false);
         c->request("workspace", {{"id", "POLY"}});
         settle(6);
         window.syncNow();
@@ -578,6 +617,31 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
                 }
             }
             offenders.removeDuplicates();
+            // Botão desabilitado diz por quê (dica ou descrição); controle de valor expõe o valor.
+            QStringList noReason, noValue;
+            for (auto *w : widgets) {
+                if (!w->isVisible())
+                    continue;
+                auto *iface = QAccessible::queryAccessibleInterface(w);
+                if (!iface)
+                    continue;
+                if (!w->isEnabled() && qobject_cast<QAbstractButton *>(w) && w->toolTip().trimmed().isEmpty() &&
+                    iface->text(QAccessible::Description).trimmed().isEmpty())
+                    noReason << iface->text(QAccessible::Name) + QStringLiteral(" (") +
+                                    QString::fromLatin1(w->metaObject()->className()) + QLatin1Char(')');
+                const auto role = iface->role();
+                if (w->isEnabled() && (role == QAccessible::SpinBox || role == QAccessible::Slider ||
+                                       role == QAccessible::ComboBox) &&
+                    iface->text(QAccessible::Value).trimmed().isEmpty() && !iface->valueInterface())
+                    noValue << iface->text(QAccessible::Name) + QStringLiteral(" (") +
+                                   QString::fromLatin1(w->metaObject()->className()) + QLatin1Char(')');
+            }
+            noReason.removeDuplicates();
+            noValue.removeDuplicates();
+            h.add("a11y:" + ws + ":disabled-buttons-explain-why", noReason.isEmpty(),
+                  QStringLiteral("%1: %2").arg(noReason.size()).arg(noReason.mid(0, 12).join(QStringLiteral(" | "))));
+            h.add("a11y:" + ws + ":value-controls-expose-value", noValue.isEmpty(),
+                  QStringLiteral("%1: %2").arg(noValue.size()).arg(noValue.mid(0, 12).join(QStringLiteral(" | "))));
             h.add("a11y:" + ws + ":focusable-controls-have-names", offenders.isEmpty(),
                   QStringLiteral("%1 sem nome de %2: %3").arg(offenders.size()).arg(audited)
                       .arg(offenders.mid(0, 12).join(QStringLiteral(" | "))));
