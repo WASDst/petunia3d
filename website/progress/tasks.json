@@ -866,6 +866,11 @@
       "revision": "8fb9c5d5+working tree",
       "document": "09-ui/shell-v2-proposal.md",
       "summary": "CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen, --test-threads=1: bridge_test 12, ui_thread_guard 1, editor_parity 21, shell_v2 1, gallery_test 1, component_contracts 1, ui_contract_ids 3, ui_i18n_catalog 3 (21 textos de petunia_structure_panel adicionados ao catálogo), lib 2 — pass; clippy -p petunia_ui_cxxqt --all-targets -D warnings limpo; fmt limpo. Achado e corrigido: escala/rotação digitadas na seção Transform em objeto já girado eram compostas como gesto no espaço do mundo (escala [1.5, 2, 0.5] para 2/3/0.5; rotação X=30 virava Y). Para um único objeto no modo objeto, o valor digitado agora define o TRS local via SetAssetTransformCmd (um Undo); regressões petunia_editor typed_transform_tests (2) pass; multisseleção e componentes seguem pelo gesto. Manuais (GPU física, Windows, leitor de tela) seguem em Q08: not run."
+    },
+    "o01-hostile-graph-fuzz": {
+      "revision": "923450ee+working tree",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "crates/project/tests/op_graph_hostile.rs: 400 documentos com mutações estruturais determinísticas do op_graph (tipos desconhecidos, nós duplicados, arestas órfãs/autolaço/ciclo, portas fora da faixa, parâmetros de tipo errado e extremos, 600 nós/2100 arestas acima dos limites, chaves ausentes, schema/version/revision máximos) passam por validate + migração + refresh + avaliação: sem pânico, grafo válido após validate e malhas finitas; pilha legada com weld/axis extremos idem. 2/2 pass, clippy -D warnings limpo. Limite: um parâmetro inválido descarta o grafo inteiro (política atual de validate), não só o nó."
     }
   },
   "tasks": [
@@ -4703,7 +4708,7 @@
         {
           "title": "Testes de ciclo, tipos, dados hostis e sem panics.",
           "completed": true,
-          "evidence": "o01-core-commands"
+          "evidence": "o01-hostile-graph-fuzz"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
