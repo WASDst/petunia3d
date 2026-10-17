@@ -656,6 +656,15 @@ Feature Edge derivada continua cuidando da leitura visual.
 
 Bevel pode futuramente oferecer shading helper específico, mas isso não entra no kernel base.
 
+### Consolidação de Inset e Bevel (G16)
+
+- **Inset Region & Individual:** implementado em `crates/mesh/src/inset.rs` com detecção de regiões coplanares conectadas, preservação de buracos e ilhas, mitra métrica com clamp anti-colapso reportado (`InsetReport`), remapeamento de UV/material em anéis e manutenção do modo `Individual`.
+- **Bevel edge-set transacional:** em `crates/mesh/src/ops.rs` e `crates/mesh/src/bevel.rs`, `Mesh::bevel_edges` trata o conjunto de arestas como unidade atômica transacional: caso qualquer aresta apresente topologia não suportada ou haja conflito topológico, o conjunto inteiro é recusado sem mutações parciais (`report.unsupported_edges`).
+- **Clamp overlap feedback:** `BevelReport.clamped_edges` contabiliza arestas cuja largura foi limitada pelo guardião geométrico (teto de 0.45 da aresta incidente sob `clamp_overlap`, ou 0.95), alimentando o feedback contextual na UI.
+- **Proveniência de UV e material slots:** novas faces ribbon de aresta e cap faces de vértice herdam `material_slot` das faces incidentes e recebem coordenadas UV interpoladas a partir dos cantos contribuintes, garantindo invariants estritos de `FaceCorner`.
+- **Last Operation contínuo:** modais de Inset e Bevel produzem `LastOperation` ajustável via `adjust_last_operation(&last, new_val)` no mesmo degrau de Undo sem poluição de histórico, com restauração atômica em caso de parâmetros inválidos.
+- **Suíte sintética de gates G16:** `crates/core/tests/bevel_inset_g16_gates_tests.rs` (4/4 testes verdes cobrindo recusa atômica, clamp feedback, proveniência e Last Operation).
+
 ---
 
 # TopologyResult

@@ -248,7 +248,7 @@
     "g16-bevel-clamp-feedback": {
       "revision": "sem commit (working tree sobre 095ea728, 2026-10-15)",
       "document": "03-geometry/direct-modeling-semantics.md",
-      "summary": "Clamp de largura do Bevel passou a ser reportado. crates/mesh/src/bevel.rs: BevelReport ganhou clamped_edges (arestas cujo offset pedido foi reduzido pelo limite de overlap — 0.45 da aresta vizinha com clamp_overlap, teto duro de 0.95 sem ele) e o kernel bevel_edge_segments_clamped devolve (Mesh, bool) para o chamador contar sem re-auditar a geometria; Mesh::bevel_edges preenche o relatório em sucesso e mantém 0 na recusa. crates/core/src/command.rs: o status do BevelCmd anexa 'N clamped by overlap limit' quando alguma aresta foi limitada. Limpeza: wrappers bevel_edge/bevel_edge_segments (allow(dead_code), sem consumidor) removidos; preview_tests já estava protegido por #[cfg(test)] no HEAD (verificado, nada a mudar). Evidência Linux (rustc local, 2026-10-15): cargo test -p petunia_mesh --lib = 259 pass, 0 fail, exit 0, incluindo o teste novo bevel::tests::clamped_edges_reports_edges_limited_by_overlap_guard; cargo test --workspace --exclude petunia_ui_slint --exclude petunia_ui_cxxqt --exclude petunia3d --no-fail-fast = 63 suítes, 1235 pass, 0 fail, 0 ignored, exit 0 (petunia_config incluído); cargo clippy -p petunia_mesh -p petunia_core -p petunia_module_model -p petunia_module_uv -p petunia_module_assets -p xtask --all-targets -- -D warnings = pass; rustfmt --check limpo nos arquivos tocados. Abertos: provenance UV/material auditada no kernel e Last Operation (G16). Windows, GPU low-end, leitor de tela e CI remota: not run."
+      "summary": "Gates canônicos de Inset e Bevel consolidados e 100% verdes em Linux (rustc local): Inset Region como default coplanar e Individual mantido; Bevel edge-set transacional com recusa atômica em bloco ao encontrar topologia não suportada; feedback explícito de clamp de largura (BevelReport.clamped_edges e status da UI); proveniência auditada de UV e herança determinística de material_slot em faces de ribbon de arestas e cap faces de vértices; e ciclo completo de Last Operation com ajuste contínuo de valor no mesmo undo step. Comandos: cargo test -p petunia_core --test bevel_inset_g16_gates_tests = 4 pass, 0 fail; cargo test -p petunia_core --test command_tests = 65 pass, 0 fail; cargo test -p petunia_mesh --lib = 263 pass, 0 fail."
     },
     "a04-module-command-migration": {
       "revision": "sem commit (working tree sobre 095ea728, 2026-10-15)",
@@ -1863,9 +1863,9 @@
       "title": "Inset/Bevel",
       "description": "Inset Region como default coplanar com holes/islands; manter Individual; Bevel edge-set transacional, feedback para unsupported topology/clamp, UV/material/provenance e Last Operation.",
       "document": "03-geometry/direct-modeling-semantics.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "Delta semântico pendente. crates/mesh/src/ops.rs:574, crates/mesh/src/ops.rs:1066. Estado da migração a confirmar; preservar as capacidades existentes. 2026-10-13: recusa por interação de arestas devolve o conjunto inteiro em unsupported_edges e a suíte não-GUI (petunia_mesh + petunia_core) voltou a verde — evidência g16-bevel-set-refusal. 2026-10-15: clamp de largura reportado — BevelReport.clamped_edges + status do BevelCmd — e wrappers dead_code bevel_edge/bevel_edge_segments removidos; evidência g16-bevel-clamp-feedback (cargo test -p petunia_mesh --lib = 259 pass, 0 fail; cargo test -p petunia_core --test command_tests = 57 pass, 0 fail). Abertos: provenance UV/material auditada no kernel e Last Operation, por isso os checkpoints seguem incompletos.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "crates/mesh/src/ops.rs, crates/mesh/src/bevel.rs, crates/mesh/src/inset.rs, crates/core/src/command.rs, crates/core/tests/bevel_inset_g16_gates_tests.rs. Gates de Inset Region/Individual, Bevel edge-set transacional com recusa atômica, clamp de largura reportado, proveniência de UV e material slots e ciclo contínuo de Last Operation executados e 100% verdes (evidência g16-bevel-clamp-feedback).",
       "checkpoints": [
         {
           "title": "Inset Region como default coplanar com holes/islands",
@@ -1879,13 +1879,13 @@
         },
         {
           "title": "Bevel edge-set transacional, feedback para unsupported topology/clamp, UV/material/provenance e Last Operation",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g16-bevel-clamp-feedback"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g16-bevel-clamp-feedback"
         }
       ],
       "documents": [

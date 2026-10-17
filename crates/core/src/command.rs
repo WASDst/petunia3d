@@ -401,8 +401,12 @@ impl CommandDispatcher {
             ctx.document.undo.push_sized(cmd.label(), original, bytes);
         }
         ctx.document.sync_reference_mirror();
-        ctx.sync_selection();
-        ctx.emit_project_changed(changes);
+        let sel_changed = ctx.sync_selection();
+        let mut final_changes = changes;
+        if sel_changed {
+            final_changes = final_changes.difference(ProjectChanges::SELECTION);
+        }
+        ctx.emit_project_changed(final_changes);
         ctx.mark_dirty();
         Ok(())
     }

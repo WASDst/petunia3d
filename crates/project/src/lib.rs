@@ -48,6 +48,10 @@ impl ProjectChanges {
     pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
+
+    pub const fn difference(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
 }
 
 impl std::ops::BitOr for ProjectChanges {
