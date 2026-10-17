@@ -947,8 +947,8 @@
       "description": "Concluir a extração dos inspetores e overlays/HUD do shell, preservando controles, bindings e gestos.",
       "document": "09-ui/slint-rescue-plan.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-09",
-      "baseline": "Extrações estruturais verificadas no commit 1edfb24 (547 testes default pass). Nova regressão F6: 1 pass / 1 fail no fechamento. Bateria animation-workspace e aceitação visual/nativa adiadas por instrução do usuário; corrigir foco na próxima wave UI.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Escopo coberto no Shell v2 por U14 (regiões, F6, layout) e U15 (HUD/ações contextuais). O checkpoint aberto (gates de equivalência visual/foco/teclado) não se aplica ao código atual; gates equivalentes: shell_v2 offscreen. Fechar ou arquivar: decisão do mantenedor.",
       "checkpoints": [
         {
           "title": "Extrair AnimateInspector e preservar a regressão ANIMATE no backend headless.",
@@ -993,8 +993,8 @@
       "description": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário.",
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Split Structure/Properties, scrolls, resize/collapse e memória por workspace verificados: inspector_split 2, model_shell 4, paint_shell 3, uv_shell 3, animate_shell 11 pass (2026-10-11), após corrigir pai léxico de @children, structure-pane centralizado (y: 0px) e linhas com alignment: center. Aceite visual nativo e leitor de tela pendentes.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Structure/Properties do v2: U14 (seções por workspace, layout por workspace) e U16–U18. Gate aberto não se aplica ao código Slint removido. Decisão de arquivamento pendente.",
       "checkpoints": [
         {
           "title": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário",
@@ -1020,8 +1020,8 @@
       "description": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack; preservar Assets/Prefabs, filtros e teclado.",
       "document": "09-ui/slint-rescue-plan.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-09",
-      "baseline": "Código escrito sobre 1edfb24: drawer com abas PAINT presets/paleta, UV diagnostics e ANIMATE transporte procedural/Motion Stack; Assets/Prefabs e filtros preservados. Compilação/testes e aceite nativo adiados pelo usuário; timeline completa de keyframes continua pendente. §20 Slint Rescue. Correção da propriedade reservada em WorkspaceDrawer; compilação Slint e cargo check default --lib pass no conjunto U04. Testes/runtime/feature/aceite nativo pendentes.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Gaveta do v2 (U14) com Assets, Nós (O03) e Linha do tempo (U18); presets/paleta PAINT em U16 e diagnóstico UV em U17. Verificar no v2 os itens 'filtros e teclado' de Assets antes de arquivar.",
       "checkpoints": [
         {
           "title": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack",
@@ -1054,8 +1054,8 @@
       "description": "Decompor lib.rs/callbacks.rs por responsabilidade; tornar select/hover/box/lasso/tool pointer DTOs explícitos; manter picking/Geometry em Rust.",
       "document": "09-ui/viewport-input-boundary.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Regressões de DTOs de viewport executadas: viewport_gestures 15 e lib 513 pass (2026-10-11). Decomposição completa ainda pendente. Anterior: Slice escrito e cargo check default --lib pass sobre fbe5aa7: shell_layout extraído; DTOs select/hover/box/lasso/tool pointer e execução no bridge, API antiga e picking/keymap/ToolSession preservados. Quatro regressões escritas, not run por adiamento do usuário. Decomposição completa/gates pendentes (§22 Viewport Input Boundary). Retomada Codex 2026-10-11: bridge possui uma Application única; comandos, Undo/Redo e autosave encaminhados pelo adapter de migração. Acesso mutável legado ao AppState ainda transitório; não conclui todos os intents/DTOs. Evidência gui-codex-visual-application; §28 Slint Rescue.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Ponte tipada e intents no v2: U13 e A08; FFI legado removido em U19 (bridge_test sobre pedidos JSON). DTOs explícitos de select/hover/box/lasso seguem como no core; reavaliar o checkpoint contra o código atual.",
       "checkpoints": [
         {
           "title": "Decompor lib.rs/callbacks.rs por responsabilidade",
@@ -1091,8 +1091,8 @@
       "description": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas; fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split.",
       "document": "09-ui/viewport-input-boundary.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Parcial. crates/ui-slint/src/bridge/paint.rs:25. Estado da migração a confirmar; preservar as capacidades existentes. Retomada Codex 2026-10-11 preservou o delta local de PAINT semântico/commands e coordenadas de mundo da sessão Claude. Nova bateria comportamental não executada; não usar testes históricos como prova do conjunto atual. §28 Slint Rescue.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). AINDA RELEVANTE no v2: o canvas PAINT reutiliza PetuniaEditorCanvas; ações semânticas para clone/decal/linha reta e o ciclo Press/Move/Release/Cancel em DPI/split não foram reverificados. Migrar para U16 ou manter aqui.",
       "checkpoints": [
         {
           "title": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas",
@@ -1223,8 +1223,8 @@
       "description": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer; auditar screen reader Linux/Windows.",
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Regressões F6/Tab/modais executadas: shell_focus 17 pass (2026-10-11), incluindo restauração de foco ao fechar o drawer focado. Leitor de tela Linux/Windows, IME e rolagem do painel até a região focada pendentes. Anterior: §23: F6 regional escrito/compilado. §24 sobre cba9f38: Tab nativo de controles e contenção nos modais Settings/Palette, captura de binding antes do TextInput/Enter, entradas nomeadas e ring; Tab de ferramenta na viewport preservado até migração regional completa. cargo check default --lib pass (2m15s). Seis regressões shell e quatro bridge escritas, not run por adiamento do usuário. Navegação regional completa, Home/Recovery, roles globais/IME/reader Windows-Linux e aceite nativo pendentes.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Parte coberta no v2 (F6/Shift+F6 por RegionNavigator U14, nomes acessíveis U12, QAccessible do canvas de nós O03); leitor de tela Linux/Windows, IME e disabled reason completos seguem abertos (Q08).",
       "checkpoints": [
         {
           "title": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer",
@@ -1257,8 +1257,8 @@
       "description": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro; validar menus, diálogos e painéis pinados.",
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Regressões de foco/overlays executadas: shell_focus 17 pass (2026-10-11) — popover de criação, flyout por highlight, menu de contexto da linha do Outliner, Escape topo-primeiro, click-away. Validação manual de menus/diálogos/painéis pinados pendente. Anterior: §24 sobre cba9f38: Settings/Palette recebem foco na busca e trap Tab/Shift+Tab; retornam aos seus dois invocadores Header, com fallback regional para outras entradas. OverlayStack projeta o topo; Escape modal precede cancelamento de ferramenta; click-away não atravessa pin/non-dismissible nem fecha duas camadas; Add popover integrado à pilha. Home e Recovery usam ModalFocusBoundary: foco inicial seguro (Home: Novo; Recovery: Manter), Tab contido, Esc fecha Home e não decide Recovery, botões de Recovery via DialogActionButton focável por teclado, linhas recentes e checkbox de início acessíveis por Enter/Espaço, scrim de Recovery bloqueia clique. cargo check default --lib pass (exit 0, 3m36s, /tmp/petunia-u07-home-recovery.log). Testes e gates nativos not run por adiamento do usuário. Regressões Home/Recovery (recovery_initial_focus_is_keep_and_escape_never_decides, home_escape_closes_once_through_its_modal_boundary em shell_focus.rs): cargo check --test shell_focus exit 0; not run. Restauração: a transição de regional-focus-blocked reentra na região ativa (ou Surface) quando Home/Recovery fecham; overlays_block_regional_navigation_and_restore_the_invoking_region agora também cobre Home e Recovery (cargo check --test shell_focus exit 0; not run). Referências confirmado como OverlayKind::FloatingPanel e pinado (dismiss_on_click_away false, dismiss_on_escape true), com regressão em tests.rs cobrindo tipo, pin, Esc e click-away; não é modal e não prende foco. Reparado tests/workspace_drawer.rs, que usava match_accessible_label inexistente na API 1.18 (agora match_predicate sobre accessible_label); cargo check --lib --tests exit 0, 2m35s, /tmp/petunia-u07-refs-check2.log. Memória de invocador por controle, memória de caret e gates nativos pendentes. §25: ContextMenuItem passa a ter FocusScope com Enter/Espaço, anel de foco e accessible-action-default; o popover de criação lembra o botão do Tool Rail como invocador (add-menu-invoker) e devolve o foco a ele ao fechar via add-focus-token; atalho global (Shift+A) segue sem invocador. cargo check --lib --tests pass (exit 0, 4m19s, /tmp/petunia-u07-menus-check.log). Duas regressões novas em shell_focus.rs (creation_popover_returns_focus_to_its_rail_invoker, context_menu_items_are_actionable_by_keyboard_and_semantic_action); not run. Popover segue não modal (F6/atalhos ativos); entrada de foco, setas e contenção pendentes. Caret não restaurável: cursor-position-byte-offset é out/test-only no Slint 1.18. §26: decisão registrada em §16 regra 8 — popover não modal não rouba foco; opera por highlight do shell (padrão da barra de menus): setas movem, Enter invoca o destacado; Escape do topo segue na pilha do bridge (a UI não intercepta Esc de camadas da pilha) e o foco fica no invocador. Implementado no popover de criação (add-menu-highlight) e no flyout de grupo (rail-flyout-highlight), com abertura do flyout por Shift+F10/tecla Menu; linhas do Outliner (Inspector e drawer compacto) ganham foco por teclado, Enter/Espaço seleciona e Shift+F10/Menu abrem o menu de contexto ancorado na linha. cargo check -p petunia_ui_slint --lib --tests pass (exit 0, 5m36s, /tmp/petunia-u07-popovers-check.log; reparo do Esc exit 0, 4m02s, /tmp/petunia-u07-popovers-repair.log; revisão exit 0, 1m29s, /tmp/petunia-u07-popovers-review.log); cargo fmt --check pass. Três regressões novas em shell_focus.rs (creation_popover_highlight_navigates_keeps_focus_and_escape_dismisses, tool_group_flyout_opens_by_keyboard_and_invokes_the_highlighted_variation, outliner_row_opens_its_context_menu_from_the_keyboard); not run — fase de testes adiada. Setas dentro do menu de contexto e entre linhas da lista continuam pendentes.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Parte coberta no v2 (foco por regiões e restauração U14, diálogos fora do sync U10); validação de focus trap/menus/painéis com tecnologia assistiva real segue aberta (Q08).",
       "checkpoints": [
         {
           "title": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro",
@@ -1289,8 +1289,8 @@
       "description": "Substituir controles ad-hoc gradualmente; fechar todos os estados, texto operacional >=12 logical px, alvos >=28px, escala 100–200%, temas/contraste/motion, overflow, listas virtualizadas e NumericField sem wheel incidental.",
       "document": "09-ui/slint-reassessment.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Correções limitadas U02/U03 escritas: alças/chips/swatches com alvo 28px e teclado/ações acessíveis; hosts/drawer/chips usam texto operacional 12px. Auditoria global de estados/escala/contraste/input numérico e testes adiados, ainda pendentes. §20 Slint Rescue. Correções recuperadas de alignment e alvos/foco; pílulas, tipografia >=12, temas neutros, relevo passivo (desligado em High Contrast), picker HSV/HEX e alternativas numéricas escritos. Regressões geométricas, foco e recuperação HEX preparadas; comportamento e aceite nativo not run. Evidência gui-codex-visual-application; §28 Slint Rescue.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Design system do v2: U11 (tokens/densidade/QSS) e U12 (componentes, i18n); estados, escala 100–200% e contraste com auditoria manual seguem em Q08.",
       "checkpoints": [
         {
           "title": "Substituir controles ad-hoc gradualmente",
@@ -1322,8 +1322,8 @@
       "description": "Comprovar fluxo create/select/transform/DRAW/Push-Pull/Undo/save/material/reference/project-photo; Split2 ativo/passivo, low-end, a11y e Windows/Linux. Não retirar fallback antes da aceitação.",
       "document": "09-ui/slint-reassessment.md",
       "status": "TODO",
-      "updated": "2026-10-09",
-      "baseline": "Gates pendentes. website/docs/09-ui/slint-rescue-plan.md:344. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "updated": "2026-10-17",
+      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Decidido No-Go para Slint (decision register 2026-10-15: migração para petunia_editor + Qt Widgets); não há fallback Slint a retirar. Fluxos de aceitação equivalentes: editor_parity e shell_v2.",
       "checkpoints": [
         {
           "title": "Comprovar fluxo create/select/transform/DRAW/Push-Pull/Undo/save/material/reference/project-photo",
