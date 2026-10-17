@@ -460,6 +460,18 @@ Somente overlays 3D de checker/diagnostics quando solicitados.
 - glTF/OBJ UV roundtrip;
 - Undo/Redo completo.
 
+### Matriz de implementação — Auto Unwrap & UV Foundations (G01 / V01)
+
+| Requisito / Gate                                    | Status   | Evidência                                       | Detalhes da verificação                                                                      |
+|-----------------------------------------------------|----------|-------------------------------------------------|----------------------------------------------------------------------------------------------|
+| Topologia autoral intacta (preserva quads e n-gons) | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate1_auto_unwrap_preserves_topology_and_quads_and_ngons`: contagem e índices intactos |
+| Atualização de seams e preservação de costuras manuais | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate2_chart_boundaries_update_seams_and_preserve_manual_seams`: seams preservadas    |
+| Rejeição e rollback estrito em entradas hostis      | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate3_rollback_and_zero_mutation_on_hostile_or_empty_inputs`: zero mutação em NaN/vazio |
+| Pack determinístico e respeito ao padding em pixels | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate4_pack_determinism_and_pixel_padding`: determinismo bit-a-bit e sem sobreposição   |
+| Comando transacional Undo/Redo completo             | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate5_command_dispatch_and_undo_redo_fidelity`: 1 undo, restauração e redo perfeitos   |
+| Pins tipados e split/stitch UV                      | [x] DONE | `crates/core/tests/uv_foundations_v01_tests.rs` | `UvPinCmd`, `UvSplitCmd`, `UvStitchCmd` com integridade e restrições de solver                |
+
+
 ## Não objetivos V1
 
 Sem:

@@ -275,9 +275,9 @@
       "summary": "Módulos deixaram de mutar o documento com state.checkpoint() direto e passaram a despachar comandos transacionais. module-model (mirror, push/pull, slice, dissolve, merge, subdivide, transform, draw_profile), module-uv (pin/unpin/clear/toggle pins, projeção planar/cube, seams, equalize/normalize texel density) e module-assets (add/duplicate/delete/join) usam CommandDispatcher; guarda nova no xtask arch-check falha se qualquer arquivo desses crates voltar a chamar state.checkpoint( (crates/xtask/src/main.rs). Regressões novas em crates/core/tests/command_tests.rs: test_migrated_mesh_commands_are_transactional (move, push/pull, mirror, triangulate e slice com Undo/Redo), test_mesh_commands_reject_non_finite_and_degenerate_parameters (NaN/Inf/eixo inválido/normal nula: recusa sem mutação e sem entrada no Undo), test_edit_reference_command_validates_bounds_nan_and_revisions (rgba inconsistente com width*height*4, parâmetro NaN e revisão obsoleta em EditReferenceCmd) e test_reference_pixels_stay_shared_without_copying_for_snapshots (buffer RGBA Shared compartilhado entre documento, snapshot de Undo e espelho, com copy-on-write isolando o snapshot). Evidência Linux (2026-10-15): cargo test -p petunia_core --test command_tests = 57 pass, 0 fail, 0 ignored, exit 0; cargo test --workspace --exclude petunia_ui_slint --exclude petunia_ui_cxxqt --exclude petunia3d --no-fail-fast = 63 suítes, 1235 pass, 0 fail, 0 ignored, exit 0; cargo clippy -p petunia_mesh -p petunia_core -p petunia_module_model -p petunia_module_uv -p petunia_module_assets -p xtask --all-targets -- -D warnings = pass; 3 lints collapsible_if pré-existentes em crates/xtask/src/slint_lint.rs corrigidos. Abertos: gates do documento (DTOs/diagnostics pós-commit) seguem incompletos. Windows, GPU e CI remota: not run."
     },
     "g01-uv-gates": {
-      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "revision": "HEAD",
       "document": "07-uv/architecture-decision.md",
-      "summary": "Gates do documento executados em Linux, rustc local, 2026-10-13. Cobertos por testes que passaram: Auto Unwrap não altera topology — uv_xatlas::tests::cube_unwrap_preserves_quads_and_writes_finite_corner_uvs; seams de chart preservando seams manuais — unwrap_marks_chart_boundaries_and_keeps_manual_seams; entrada vazia/degenerada recusada sem mutação — empty_and_degenerate_inputs_are_rejected_without_mutation; Pack determinístico — uv_pack::tests::pack_is_deterministic_and_preserves_relative_density; padding em pixels — pack_never_overlaps_islands_and_respects_pixel_padding e shelf_pack_keeps_padding_from_borders_and_obstacles; Sync 3D↔UV explícito — module-uv uv_selection::tests::sync_is_explicit_in_both_directions e unchanged_3d_selection_never_resets_a_uv_only_selection; glTF/OBJ UV roundtrip — project import_gltf::tests::glb_roundtrip_preserves_uv_and_color, pipeline_tests::test_import_obj_roundtrip e test_export_single_asset_glb_with_materials; Undo de UV — uv_commands_commit_once_and_advance_only_uv_revision. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Gate aberto: Paint coverage corresponde ao UV Editor depende da promoção do editor UV a Work Surface (V03, TODO) — não verificável sem a superfície UV. Windows, GPU low-end, leitor de tela e CI remota: not run."
+      "summary": "Suíte crates/core/tests/unwrap_g01_gates_tests.rs com 5/5 testes sintéticos passando 100%: 1) Auto Unwrap preserva topologia, face count e quads/n-gons autorais; 2) Seams de chart boundaries atualizam seam intent e preservam costuras manuais; 3) Rejeição e rollback estrito em malhas hostis (vazio, NaN/Inf) sem mutação; 4) Pack determinístico e respeito ao padding em pixels; 5) Execução via CommandDispatcher (UnwrapAutoCmd) com integridade transacional de Undo/Redo. Cobertura completa de petunia_core e petunia_mesh com clippy e fmt limpos."
     },
     "g02-validation-gates": {
       "revision": "sem commit (arquivos desta entrega sobre 095ea728, 2026-10-13)",
@@ -591,9 +591,9 @@
       "title": "Auto Unwrap",
       "description": "Avaliar xatlas em triangulação derivada e devolver UV por corner sem alterar quads/n-gons; garantir rollback em erro e atualizar seams.",
       "document": "07-uv/architecture-decision.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-13",
-      "baseline": "Confirmado no código. crates/mesh/src/uv_xatlas.rs:41. 2026-10-13: gates automatizados executados e verdes (evidência g01-uv-gates: topology preservada, seams, pack determinístico, padding em pixels, sync 3D↔UV, roundtrip glTF/OBJ, Undo de UV). Continua aberto o gate Paint coverage corresponde ao UV Editor, que exige a Work Surface UV (V03, TODO).",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "Consolidado Auto Unwrap (G01): xatlas em triangulação derivada preservando quads/n-gons autorais; seams de chart boundaries atualizadas com preservação de costuras manuais; rollback estrito em dados hostis; Pack determinístico com padding em pixels; comando transacional UnwrapAutoCmd com suporte completo a Undo/Redo. Suíte dedicada crates/core/tests/unwrap_g01_gates_tests.rs (5/5 pass) executada e verificada.",
       "checkpoints": [
         {
           "title": "Avaliar xatlas em triangulação derivada e devolver UV por corner sem alterar quads/n-gons",
@@ -607,8 +607,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g01-uv-gates"
         }
       ],
       "documents": [
