@@ -1,6 +1,7 @@
 use cxx_qt_build::CxxQtBuilder;
 
 fn main() {
+    println!("cargo:rerun-if-changed=cpp");
     println!("cargo:rerun-if-changed=cpp/petunia_editor_api.h");
     println!("cargo:rerun-if-changed=cpp/petunia_icons.h");
     println!("cargo:rerun-if-changed=assets/icons.qrc");

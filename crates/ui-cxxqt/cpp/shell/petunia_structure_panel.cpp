@@ -20,7 +20,7 @@ class SelectedOnlyProxy : public QSortFilterProxyModel {
     void setSelectedOnly(bool enabled) {
         if (m_selectedOnly != enabled) {
             m_selectedOnly = enabled;
-            invalidateFilter();
+            invalidate();
         }
     }
 
@@ -119,8 +119,15 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
         else
             m_proxy->sort(-1);
     });
-    connect(separate, &QPushButton::clicked, this,
-            [this] { m_controller->command(QStringLiteral("model.separate_selection")); });
+    connect(separate, &QPushButton::clicked, this, [this] {
+        const QString ws = m_controller->workspaceId();
+        if (ws == QLatin1String("PAINT"))
+            m_controller->request(QStringLiteral("add_paint_layer"));
+        else if (ws == QLatin1String("ANIMATE"))
+            m_controller->request(QStringLiteral("animate"), {{"id", "fit-to-model"}});
+        else
+            m_controller->command(QStringLiteral("model.separate_selection"));
+    });
     connect(m_tree, &QTreeView::clicked, this, &PetuniaStructurePanel::onClicked);
     connect(m_tree, &QTreeView::customContextMenuRequested, this, &PetuniaStructurePanel::onContextMenu);
     connect(m_tree->selectionModel(), &QItemSelectionModel::selectionChanged, this,
@@ -128,8 +135,11 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
     connect(m_model, &QStandardItemModel::itemChanged, this, [this](QStandardItem *item) {
         if (m_syncing || item->column() != Name)
             return;
-        m_controller->request(QStringLiteral("rename"),
-                              {{"id", item->data(IdRole).toString()}, {"name", item->text()}});
+        const QString ws = m_controller->workspaceId();
+        if (ws != QLatin1String("PAINT") && ws != QLatin1String("ANIMATE")) {
+            m_controller->request(QStringLiteral("rename"),
+                                  {{"id", item->data(IdRole).toString()}, {"name", item->text()}});
+        }
     });
     connect(&PetuniaTheme::instance(), &PetuniaTheme::changed, this, &PetuniaStructurePanel::refreshIcons);
     buildShortcuts();
@@ -184,6 +194,22 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
     const auto source = m_proxy->mapToSource(proxyIndex);
     if (source.column() != Visible && source.column() != Locked)
         return;
+
+    const QString ws = m_controller->workspaceId();
+    if (ws == QLatin1String("PAINT")) {
+        const QString id = idAt(proxyIndex);
+        if (source.column() == Visible)
+            m_controller->request(QStringLiteral("toggle_paint_layer_visibility"), {{"id", id}});
+        else
+            m_controller->request(QStringLiteral("toggle_paint_layer_lock"), {{"id", id}});
+        return;
+    }
+    if (ws == QLatin1String("ANIMATE")) {
+        if (source.column() == Visible)
+            m_controller->request(QStringLiteral("animate"), {{"id", "toggle-bones"}});
+        return;
+    }
+
     const QString action = source.column() == Visible ? QStringLiteral("visibility") : QStringLiteral("lock");
     const auto rows = m_tree->selectionModel()->selectedRows(Name);
     // Clicar o ícone de uma linha dentro da seleção aplica a toda a seleção.
@@ -198,6 +224,20 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
 void PetuniaStructurePanel::onSelectionChanged() {
     if (m_syncing)
         return;
+    const QString ws = m_controller->workspaceId();
+    if (ws == QLatin1String("PAINT")) {
+        const QString active = idAt(m_tree->currentIndex());
+        if (!active.isEmpty())
+            m_controller->request(QStringLiteral("set_paint_layer_active"), {{"id", active}});
+        return;
+    }
+    if (ws == QLatin1String("ANIMATE")) {
+        const QString active = idAt(m_tree->currentIndex());
+        if (!active.isEmpty())
+            m_controller->request(QStringLiteral("animate"), {{"id", "select-bone"}, {"arg", active}});
+        return;
+    }
+
     QJsonArray ids;
     for (const auto &id : selectedIds())
         ids.append(id);
@@ -211,10 +251,180 @@ void PetuniaStructurePanel::refreshIcons() {
 }
 
 void PetuniaStructurePanel::sync(const QJsonObject &state) {
-    const auto items = state["scene_items"].toArray();
-    const bool isEmpty = items.isEmpty();
+    const QString ws = m_controller->workspaceId();
+    if (ws == QLatin1String("PAINT"))
+        syncPaint(state);
+    else if (ws == QLatin1String("ANIMATE"))
+        syncAnimate(state);
+    else
+        syncScene(state);
+}
+
+void PetuniaStructurePanel::syncPaint(const QJsonObject &state) {
+    const auto layers = state["paint_layers"].toArray();
+    const bool isEmpty = layers.isEmpty();
+    m_empty->setTitle(tr("Sem camadas"));
+    m_empty->setExplanation(tr("Nenhuma camada de pintura. Crie uma camada para começar a pintar."));
+    m_empty->setActionText(tr("Nova camada"));
     m_empty->setVisible(isEmpty);
     m_tree->setVisible(!isEmpty);
+    m_search->setPlaceholderText(tr("Buscar camadas"));
+    const auto &theme = PetuniaTheme::instance();
+
+    m_syncing = true;
+    bool rebuild = m_model->rowCount() != layers.size();
+    for (int i = 0; !rebuild && i < layers.size(); ++i) {
+        const auto o = layers[i].toObject();
+        rebuild = m_model->item(i, Name)->data(IdRole).toString() != o["id"].toString();
+    }
+    if (rebuild) {
+        m_model->removeRows(0, m_model->rowCount());
+        for (const auto &value : layers) {
+            const auto o = value.toObject();
+            auto *name = new QStandardItem(o["name"].toString());
+            name->setData(o["id"].toString(), IdRole);
+            name->setEditable(false);
+            auto *eye = new QStandardItem;
+            eye->setEditable(false);
+            auto *lock = new QStandardItem;
+            lock->setEditable(false);
+            m_model->appendRow({name, eye, lock});
+        }
+    }
+    const QSignalBlocker block(m_tree->selectionModel());
+    m_tree->selectionModel()->clearSelection();
+    for (int i = 0; i < layers.size(); ++i) {
+        const auto o = layers[i].toObject();
+        auto *name = m_model->item(i, Name);
+        if (name->text() != o["name"].toString())
+            name->setText(o["name"].toString());
+        const bool active = o["active"].toBool();
+        name->setData(active, SelectedRole);
+        name->setToolTip(active ? tr("Camada ativa") : tr("Camada de pintura"));
+
+        QColor tint = theme.accentPrimary();
+        const QString kind = o["kind"].toString();
+        const bool isGroup = o["is_group"].toBool();
+        QString iconName = QStringLiteral("layers");
+        if (isGroup)
+            iconName = QStringLiteral("folder");
+        else if (kind == QLatin1String("decal"))
+            iconName = QStringLiteral("decal");
+        else if (kind == QLatin1String("effect"))
+            iconName = QStringLiteral("wand");
+        name->setIcon(PetuniaIcons::get(iconName, tint.name()));
+
+        auto *eye = m_model->item(i, Visible);
+        const bool visible = o["visible"].toBool(true);
+        eye->setIcon(PetuniaIcons::get(visible ? QStringLiteral("eye") : QStringLiteral("eye_hidden"),
+                                       (visible ? theme.textSecondary() : theme.textMuted()).name()));
+        eye->setTextAlignment(Qt::AlignCenter);
+        eye->setToolTip(visible ? tr("Visível — clique para ocultar") : tr("Oculta — clique para exibir"));
+        eye->setData(visible ? tr("Visível") : tr("Oculta"), Qt::AccessibleTextRole);
+
+        auto *lock = m_model->item(i, Locked);
+        const bool locked = o["locked"].toBool(false);
+        lock->setIcon(PetuniaIcons::get(locked ? QStringLiteral("lock") : QStringLiteral("unlock"),
+                                        (locked ? theme.textSecondary() : theme.textMuted()).name()));
+        lock->setTextAlignment(Qt::AlignCenter);
+        lock->setToolTip(locked ? tr("Bloqueada — clique para liberar") : tr("Livre — clique para bloquear"));
+        lock->setData(locked ? tr("Bloqueada") : tr("Livre"), Qt::AccessibleTextRole);
+
+        const auto proxy = m_proxy->mapFromSource(m_model->index(i, Name));
+        if (active) {
+            m_tree->selectionModel()->select(proxy, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+            m_tree->selectionModel()->setCurrentIndex(proxy, QItemSelectionModel::NoUpdate);
+        }
+    }
+    m_syncing = false;
+}
+
+void PetuniaStructurePanel::syncAnimate(const QJsonObject &state) {
+    const auto anim = state["animate"].toObject();
+    auto tracks = anim["tracks"].toArray();
+    if (tracks.isEmpty()) {
+        const auto bones = anim["bones"].toArray();
+        for (const auto &b : bones) {
+            const auto bo = b.toObject();
+            QJsonObject tr;
+            tr["bone_id"] = bo["id"];
+            tr["bone_name"] = bo["name"];
+            tr["selected"] = bo["selected"];
+            tracks.append(tr);
+        }
+    }
+    const bool isEmpty = tracks.isEmpty();
+    m_empty->setTitle(tr("Sem criatura"));
+    m_empty->setExplanation(tr("Nenhum osso ou criatura ativa. Adicione uma criatura para animar."));
+    m_empty->setActionText(tr("Adicionar criatura"));
+    m_empty->setVisible(isEmpty);
+    m_tree->setVisible(!isEmpty);
+    m_search->setPlaceholderText(tr("Buscar ossos"));
+    const auto &theme = PetuniaTheme::instance();
+
+    m_syncing = true;
+    bool rebuild = m_model->rowCount() != tracks.size();
+    for (int i = 0; !rebuild && i < tracks.size(); ++i) {
+        const auto o = tracks[i].toObject();
+        rebuild = m_model->item(i, Name)->data(IdRole).toString() != o["bone_id"].toString();
+    }
+    if (rebuild) {
+        m_model->removeRows(0, m_model->rowCount());
+        for (const auto &value : tracks) {
+            const auto o = value.toObject();
+            auto *name = new QStandardItem(o["bone_name"].toString());
+            name->setData(o["bone_id"].toString(), IdRole);
+            name->setEditable(false);
+            auto *eye = new QStandardItem;
+            eye->setEditable(false);
+            auto *lock = new QStandardItem;
+            lock->setEditable(false);
+            m_model->appendRow({name, eye, lock});
+        }
+    }
+    const QSignalBlocker block(m_tree->selectionModel());
+    m_tree->selectionModel()->clearSelection();
+    const bool showBones = anim["show_bones"].toBool(true);
+    for (int i = 0; i < tracks.size(); ++i) {
+        const auto o = tracks[i].toObject();
+        auto *name = m_model->item(i, Name);
+        if (name->text() != o["bone_name"].toString())
+            name->setText(o["bone_name"].toString());
+        const bool selected = o["selected"].toBool();
+        name->setData(selected, SelectedRole);
+        name->setToolTip(selected ? tr("Osso selecionado") : tr("Osso do rig"));
+        name->setIcon(PetuniaIcons::get(QStringLiteral("bone"), theme.accentPrimary().name()));
+
+        auto *eye = m_model->item(i, Visible);
+        eye->setIcon(PetuniaIcons::get(showBones ? QStringLiteral("eye") : QStringLiteral("eye_hidden"),
+                                       (showBones ? theme.textSecondary() : theme.textMuted()).name()));
+        eye->setTextAlignment(Qt::AlignCenter);
+        eye->setToolTip(showBones ? tr("Ossos visíveis") : tr("Ossos ocultos"));
+        eye->setData(showBones ? tr("Visível") : tr("Oculto"), Qt::AccessibleTextRole);
+
+        auto *lock = m_model->item(i, Locked);
+        lock->setIcon(PetuniaIcons::get(QStringLiteral("bone"), theme.textMuted().name()));
+        lock->setTextAlignment(Qt::AlignCenter);
+        lock->setToolTip(tr("Rig ativo"));
+
+        const auto proxy = m_proxy->mapFromSource(m_model->index(i, Name));
+        if (selected) {
+            m_tree->selectionModel()->select(proxy, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+            m_tree->selectionModel()->setCurrentIndex(proxy, QItemSelectionModel::NoUpdate);
+        }
+    }
+    m_syncing = false;
+}
+
+void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
+    const auto items = state["scene_items"].toArray();
+    const bool isEmpty = items.isEmpty();
+    m_empty->setTitle(tr("Cena vazia"));
+    m_empty->setExplanation(tr("Nenhum objeto na cena. Crie uma primitiva para começar a modelar."));
+    m_empty->setActionText(tr("Criar primitiva"));
+    m_empty->setVisible(isEmpty);
+    m_tree->setVisible(!isEmpty);
+    m_search->setPlaceholderText(tr("Buscar partes"));
     const auto &theme = PetuniaTheme::instance();
 
     m_syncing = true;
@@ -276,6 +486,70 @@ void PetuniaStructurePanel::sync(const QJsonObject &state) {
 
 void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
     const auto proxy = m_tree->indexAt(pos);
+    const QString ws = m_controller->workspaceId();
+    if (ws == QLatin1String("PAINT")) {
+        QMenu menu(this);
+        auto *addLayer = menu.addAction(PetuniaIcons::get(QStringLiteral("plus")), tr("Nova camada"));
+        auto *addGroup = menu.addAction(PetuniaIcons::get(QStringLiteral("folder")), tr("Novo grupo"));
+        auto *addDecal = menu.addAction(PetuniaIcons::get(QStringLiteral("decal")), tr("Novo decalque"));
+        menu.addSeparator();
+        QAction *up = nullptr;
+        QAction *down = nullptr;
+        QAction *merge = nullptr;
+        QAction *remove = nullptr;
+        QAction *toggleVis = nullptr;
+        QAction *toggleLock = nullptr;
+        QString layerId;
+        if (proxy.isValid()) {
+            layerId = idAt(proxy);
+            up = menu.addAction(tr("Mover para cima"));
+            down = menu.addAction(tr("Mover para baixo"));
+            merge = menu.addAction(tr("Mesclar abaixo"));
+            toggleVis = menu.addAction(tr("Alternar visibilidade\tH"));
+            toggleLock = menu.addAction(tr("Alternar bloqueio\tL"));
+            menu.addSeparator();
+            remove = menu.addAction(tr("Excluir camada\tDel"));
+        }
+        auto *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (!picked)
+            return;
+        if (picked == addLayer)
+            m_controller->request(QStringLiteral("add_paint_layer"));
+        else if (picked == addGroup)
+            m_controller->request(QStringLiteral("add_paint_group"));
+        else if (picked == addDecal)
+            m_controller->request(QStringLiteral("add_decal_layer"));
+        else if (picked == up)
+            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", layerId}, {"delta", -1}});
+        else if (picked == down)
+            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", layerId}, {"delta", 1}});
+        else if (picked == merge)
+            m_controller->request(QStringLiteral("merge_down_paint_layer"), {{"id", layerId}});
+        else if (picked == toggleVis)
+            m_controller->request(QStringLiteral("toggle_paint_layer_visibility"), {{"id", layerId}});
+        else if (picked == toggleLock)
+            m_controller->request(QStringLiteral("toggle_paint_layer_lock"), {{"id", layerId}});
+        else if (picked == remove)
+            m_controller->request(QStringLiteral("remove_paint_layer"), {{"id", layerId}});
+        return;
+    }
+    if (ws == QLatin1String("ANIMATE")) {
+        QMenu menu(this);
+        auto *addCreature = menu.addAction(PetuniaIcons::get(QStringLiteral("plus")), tr("Adicionar criatura…"));
+        auto *fitModel = menu.addAction(tr("Ajustar ao modelo"));
+        auto *toggleBones = menu.addAction(tr("Alternar visibilidade dos ossos\tH"));
+        auto *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (!picked)
+            return;
+        if (picked == addCreature)
+            m_controller->request(QStringLiteral("animate"), {{"id", "add-creature"}, {"arg", "Humanoid"}});
+        else if (picked == fitModel)
+            m_controller->request(QStringLiteral("animate"), {{"id", "fit-to-model"}});
+        else if (picked == toggleBones)
+            m_controller->request(QStringLiteral("animate"), {{"id", "toggle-bones"}});
+        return;
+    }
+
     if (!proxy.isValid())
         return;
     const QString id = idAt(proxy);

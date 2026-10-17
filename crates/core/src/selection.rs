@@ -814,10 +814,10 @@ mod tests {
 
         // Simula remap onde 0 -> 0, 1 -> fundido com 0 (0), 3 -> 1
         // Face 0 sobrevive como 0, face 2 colapsa (None)
-        let remap = petunia_mesh::ElementRemap {
-            vertices: vec![(0, Some(0)), (1, Some(0)), (3, Some(1))],
-            faces: vec![(0, Some(0)), (2, None)],
-        };
+        let remap = petunia_mesh::ElementRemap::new(
+            vec![(0, Some(0)), (1, Some(0)), (3, Some(1))],
+            vec![(0, Some(0)), (2, None)],
+        );
 
         sel.remap(&remap);
 

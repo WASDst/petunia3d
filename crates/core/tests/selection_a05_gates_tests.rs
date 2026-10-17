@@ -124,17 +124,17 @@ fn test_gate3_topological_remapping_updates_selection_consistently() {
     sel.select_face(FaceIndex(1));
 
     // Simula fusão (weld/collapse) de 1 em 0 e remoção de face 1
-    let remap = ElementRemap {
-        vertices: vec![
+    let remap = ElementRemap::new(
+        vec![
             (0, Some(0)),
             (1, Some(0)), // Vértice 1 fundido no vértice 0
             (2, Some(1)), // Vértice 2 reindexado para 1
         ],
-        faces: vec![
+        vec![
             (0, Some(0)),
             (1, None), // Face 1 foi colapsada/removida
         ],
-    };
+    );
 
     sel.remap(&remap);
 

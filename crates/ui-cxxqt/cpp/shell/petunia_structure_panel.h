@@ -40,6 +40,10 @@ class PetuniaStructurePanel : public QWidget {
     QString idAt(const QModelIndex &proxyIndex) const;
     void refreshIcons();
 
+    void syncScene(const QJsonObject &state);
+    void syncPaint(const QJsonObject &state);
+    void syncAnimate(const QJsonObject &state);
+
     PetuniaShellController *m_controller;
     QLineEdit *m_search{nullptr};
     QPushButton *m_filterSelected{nullptr};

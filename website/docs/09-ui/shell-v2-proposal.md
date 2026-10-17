@@ -85,9 +85,9 @@
 | F2   | Ponte tipada: `ShellViewModel` seccionado, eventos, via única, `ToolCatalog`, `PropertySectionRegistry`, capacidades                           | U13, A08       | [x] DONE     |
 | F3   | Shell v2 esqueleto atrás de flag: AppBar, Rail, Viewport Header, regiões, F6, layout versionado, Outliner por UUID, fatia **Transform**          | U14            | [x] DONE     |
 | F4   | HUD e ações contextuais: `OperationHud` único, resolvedor de capacidades, anti-colisão, rail por catálogo                                       | U15            | [x] DONE     |
-| F5   | Núcleo de operações (só Rust, paralelo desde F1): ver [Operation Graph](../03-geometry/operation-graph.md)                                      | O01, O02       | [ ] TODO     |
-| F6   | UI de nós: Pilha no Inspector → Gaveta "Nós" → materiais/texturas → descriptors                                                                 | O03, O04       | [ ] TODO     |
-| F7   | Workspaces PAINT, UV e ANIMATE no v2                                                                                                            | U16–U18        | [ ] TODO     |
+| F5   | Núcleo de operações (só Rust, paralelo desde F1): ver [Operation Graph](../03-geometry/operation-graph.md)                                      | O01, O02       | [x] DONE     |
+| F6   | UI de nós: Pilha no Inspector → Gaveta "Nós" → materiais/texturas → descriptors                                                                 | O03, O04       | [x] DONE     |
+| F7   | Workspaces PAINT, UV e ANIMATE no v2                                                                                                            | U16–U18        | [x] DONE     |
 | F8   | Swap: v2 vira padrão, remoção do shell legado, do FFI legado e dos testes legados; fechar U01–U09 antigos                                       | U19            | [ ] TODO     |
 | F9   | Gates finais: QTestLib offscreen, golden frames FBO, a11y (AT-SPI), matriz manual Linux/Windows/GPU baixa                                       | Q08            | [ ] TODO     |
 

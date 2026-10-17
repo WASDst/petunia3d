@@ -796,6 +796,46 @@
       "revision": "6341ddf4",
       "document": "03-geometry/operation-graph.md",
       "summary": "Suíte de testes de surface_recipe aprovada cobrindo nós PBR, avaliação de canais, invalidação de cache e bake isolado; clippy e fmt verificados."
+    },
+    "u16-shell-v2-paint": {
+      "revision": "refactor/architecture-foundation continuation",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Estrutura (PetuniaStructurePanel::syncPaint) projeta camadas da pilha com ícones por tipo, toggles de visibilidade/bloqueio e menus de contexto; propriedades hospedam páginas especializadas de Target/Brush/Layer/Surface; superfície de trabalho hospeda viewport 3D e canvas 2D lado a lado."
+    },
+    "u16-gates": {
+      "revision": "refactor/architecture-foundation continuation",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Teste offscreen shell_v2.rs passando (paint:structure-shows-layers e paint:add-layer-updates-structure), 21 testes em editor_parity.rs passando, e captura offscreen shell_PAINT_v2.png gerada em target/shell-captures/."
+    },
+    "u17-shell-v2-uv": {
+      "revision": "refactor/architecture-foundation continuation",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Workspace UV no Shell v2 com UvCanvas dominante na superfície de trabalho (proporção de 62% para UV e 38% para viewport 3D, superando a meta de >= 55%), painel de propriedades com páginas de Selection, Unwrap, Projection, Pack e Health."
+    },
+    "u17-gates": {
+      "revision": "refactor/architecture-foundation continuation",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Teste offscreen shell_v2.rs passando (uv:canvas-is-dominant >= 0.55), 21 testes em editor_parity.rs passando, e captura offscreen shell_UV_v2.png gerada em target/shell-captures/."
+    },
+    "u18-shell-v2-animate": {
+      "revision": "refactor/architecture-foundation continuation",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Workspace ANIMATE no Shell v2: gaveta inferior hospeda a aba Linha do tempo (PetuniaDrawer::timeline com DopesheetCanvas), Estrutura projeta trilhas e ossos do rig ativo (PetuniaStructurePanel::syncAnimate) com seleção de ossos e visibilidade, e Propriedades hospedam Motion, Rig e Advanced."
+    },
+    "u18-gates": {
+      "revision": "refactor/architecture-foundation continuation",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Teste offscreen shell_v2.rs passando (animate:drawer-has-timeline-tab e animate:structure-shows-rig-bones com criação de criatura bird), 21 testes em editor_parity.rs passando, e captura offscreen shell_ANIMATE_v2.png gerada em target/shell-captures/."
+    },
+    "o03-hud-descriptor-verified": {
+      "revision": "fb431953+working tree",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Correção de rastreabilidade (2026-10-17): a evidência o03-stack-and-hud afirmava HUD gerado do descriptor antes de existir. Agora PetuniaOperationHud tem a seção graph_operation, que reutiliza PetuniaOperationCard (gerado do NodeDescriptor) para o nó recém-adicionado (sinal operationAdded do controller) com 'Concluir'. Harness shell_v2 offscreen (checagens hud:graph-operation-section-after-add, generated-card-has-choice-control, done-dismisses-operation) 1/1 pass; captura target/shell-captures/shell_POLY_hud_boolean.png revisada."
+    },
+    "o03-a11y-node-interfaces": {
+      "revision": "fb431953+working tree",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Correção de rastreabilidade (2026-10-17): QAccessible por nó não existia quando o3-nodes-drawer-a11y foi escrita. Agora PetuniaNodeAccessible (ListItem com nome, descrição com ligações, estados selectable/selected/focused/disabled e retângulo global) é filho de PetuniaCanvasAccessible; testado no harness via QAccessible::queryAccessibleInterface (filhos == nós, nome/papel/descrição, estado, pai). Limitação: leitor de tela real e AT-SPI/pywinauto não executados (not run); undo de MoveNode não reflete no canvas."
     }
   },
   "tasks": [
@@ -4440,19 +4480,19 @@
       "title": "Shell v2 F7 — PAINT no v2",
       "description": "Layers em Estrutura; Target/Brush/Layer/Projection/Effects em Propriedades; canvas 2D de primeira classe.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Migrar PAINT para as regiões do v2.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u16-shell-v2-paint"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u16-gates"
         }
       ],
       "documents": [
@@ -4466,19 +4506,19 @@
       "title": "Shell v2 F7 — UV no v2",
       "description": "Canvas UV dominante (alvo ≥ 55%), Propriedades Selection/Unwrap/Projection/Pack/Health.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Migrar UV para o v2.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u17-shell-v2-uv"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u17-gates"
         }
       ],
       "documents": [
@@ -4492,19 +4532,19 @@
       "title": "Shell v2 F7 — ANIMATE no v2",
       "description": "Estrutura Creature/Motions/Rig e Gaveta Timeline sem hit-test no widget.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Migrar ANIMATE para o v2.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u18-shell-v2-animate"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u18-gates"
         }
       ],
       "documents": [
@@ -4690,17 +4730,17 @@
       "document": "03-geometry/operation-graph.md",
       "status": "DONE",
       "updated": "2026-10-17",
-      "baseline": "2026-10-17: Pilha no Inspector e canvas de nós na gaveta funcionando offscreen; QAccessible completo, HUD gerado e leitor de tela pendentes.",
+      "baseline": "2026-10-17: Pilha, HUD gerado do descriptor e canvas de nós com interfaces QAccessible por nó verificados offscreen; leitor de tela/AT-SPI real e matriz manual (Linux/Windows/GPU) not run.",
       "checkpoints": [
         {
           "title": "Pilha no Inspector e HUD gerados do descriptor.",
           "completed": true,
-          "evidence": "o03-stack-and-hud"
+          "evidence": "o03-hud-descriptor-verified"
         },
         {
           "title": "Gaveta Nós com QAccessible e operação por teclado.",
           "completed": true,
-          "evidence": "o03-nodes-drawer-a11y"
+          "evidence": "o03-a11y-node-interfaces"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
