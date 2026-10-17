@@ -5,6 +5,8 @@
 #include "petunia_i18n.h"
 
 #include <QAccessible>
+#include <QAccessibleWidget>
+#include <QPointer>
 #include <QContextMenuEvent>
 #include <QFocusEvent>
 #include <QGraphicsObject>
@@ -215,6 +217,129 @@ class PetuniaWireItem : public QGraphicsPathItem {
     QPointF m_mid;
 };
 
+// ── Acessibilidade ──────────────────────────────────────────────────────────
+
+/// Cada nó é um item acessível (ListItem) filho do canvas: nome, descrição com as
+/// ligações, estado (selecionável/selecionado/desativado) e retângulo na tela.
+class PetuniaNodeAccessible : public QAccessibleInterface {
+  public:
+    PetuniaNodeAccessible(PetuniaNodeCanvas *canvas, const QString &id) : m_canvas(canvas), m_id(id) {}
+
+    bool isValid() const override { return !m_canvas.isNull() && m_canvas->nodeIds().contains(m_id); }
+    QObject *object() const override { return nullptr; }
+    QAccessibleInterface *parent() const override { return QAccessible::queryAccessibleInterface(m_canvas); }
+    QAccessibleInterface *child(int) const override { return nullptr; }
+    int childCount() const override { return 0; }
+    int indexOfChild(const QAccessibleInterface *) const override { return -1; }
+    QAccessibleInterface *childAt(int, int) const override { return nullptr; }
+    QAccessibleInterface *focusChild() const override { return nullptr; }
+    QList<QPair<QAccessibleInterface *, QAccessible::Relation>> relations(QAccessible::Relation) const override { return {}; }
+    QRect rect() const override { return m_canvas ? m_canvas->nodeGlobalRect(m_id) : QRect(); }
+    QAccessible::Role role() const override { return QAccessible::ListItem; }
+    QString text(QAccessible::Text t) const override {
+        if (!m_canvas)
+            return {};
+        switch (t) {
+        case QAccessible::Name: return m_canvas->nodeTitle(m_id);
+        case QAccessible::Description: return m_canvas->describeNode(m_id);
+        default: return {};
+        }
+    }
+    void setText(QAccessible::Text, const QString &) override {}
+    QAccessible::State state() const override {
+        QAccessible::State s;
+        if (!m_canvas)
+            return s;
+        s.focusable = true;
+        s.selectable = true;
+        const bool selected = m_canvas->selectedNodeId() == m_id;
+        s.selected = selected;
+        s.focused = selected && m_canvas->hasFocus();
+        s.disabled = !m_canvas->nodeEnabled(m_id);
+        return s;
+    }
+
+  private:
+    QPointer<PetuniaNodeCanvas> m_canvas;
+    QString m_id;
+};
+
+/// O canvas expõe só os nós como filhos (barras de rolagem não são conteúdo).
+class PetuniaCanvasAccessible : public QAccessibleWidget {
+  public:
+    explicit PetuniaCanvasAccessible(PetuniaNodeCanvas *canvas) : QAccessibleWidget(canvas, QAccessible::List), m_canvas(canvas) {}
+    int childCount() const override { return m_canvas->nodeIds().size(); }
+    QAccessibleInterface *child(int index) const override {
+        const auto ids = m_canvas->nodeIds();
+        return index >= 0 && index < ids.size() ? m_canvas->accessibleNode(ids.at(index)) : nullptr;
+    }
+    int indexOfChild(const QAccessibleInterface *child) const override {
+        const auto ids = m_canvas->nodeIds();
+        for (int i = 0; i < ids.size(); ++i)
+            if (m_canvas->accessibleNode(ids.at(i)) == child)
+                return i;
+        return -1;
+    }
+    QAccessibleInterface *focusChild() const override {
+        return m_canvas->selectedNodeId().isEmpty() ? nullptr : m_canvas->accessibleNode(m_canvas->selectedNodeId());
+    }
+    QAccessibleInterface *childAt(int, int) const override { return nullptr; }
+    QString text(QAccessible::Text t) const override {
+        if (t == QAccessible::Description)
+            return m_canvas->describeSelection();
+        return QAccessibleWidget::text(t);
+    }
+
+  private:
+    PetuniaNodeCanvas *m_canvas;
+};
+
+namespace {
+QAccessibleInterface *canvasAccessibleFactory(const QString &className, QObject *object) {
+    if (className == QLatin1String("PetuniaNodeCanvas"))
+        if (auto *canvas = qobject_cast<PetuniaNodeCanvas *>(object))
+            return new PetuniaCanvasAccessible(canvas);
+    return nullptr;
+}
+} // namespace
+
+QAccessibleInterface *PetuniaNodeCanvas::accessibleNode(const QString &id) {
+    if (!m_nodes.contains(id))
+        return nullptr;
+    auto it = m_accessible.find(id);
+    if (it == m_accessible.end())
+        it = m_accessible.insert(id, QAccessible::registerAccessibleInterface(new PetuniaNodeAccessible(this, id)));
+    return QAccessible::accessibleInterface(it.value());
+}
+
+void PetuniaNodeCanvas::releaseStaleAccessibles() {
+    for (auto it = m_accessible.begin(); it != m_accessible.end();) {
+        if (m_nodes.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        QAccessible::deleteAccessibleInterface(it.value());
+        it = m_accessible.erase(it);
+    }
+}
+
+QString PetuniaNodeCanvas::nodeTitle(const QString &id) const {
+    const auto row = nodeRow(id);
+    return row.isEmpty() ? QString() : petuniaTr(row["label"].toString()) + QStringLiteral(" · ") + row["title"].toString();
+}
+
+bool PetuniaNodeCanvas::nodeEnabled(const QString &id) const {
+    return nodeRow(id)["enabled"].toBool(true);
+}
+
+QRect PetuniaNodeCanvas::nodeGlobalRect(const QString &id) const {
+    const QRectF scene = nodeSceneRect(id);
+    if (scene.isEmpty())
+        return {};
+    const QRect local = mapFromScene(scene).boundingRect();
+    return QRect(viewport()->mapToGlobal(local.topLeft()), local.size());
+}
+
 // ── Canvas ──────────────────────────────────────────────────────────────────
 
 PetuniaNodeCanvas::PetuniaNodeCanvas(PetuniaShellController *controller, QWidget *parent)
@@ -225,9 +350,16 @@ PetuniaNodeCanvas::PetuniaNodeCanvas(PetuniaShellController *controller, QWidget
     setFrameShape(QFrame::NoFrame);
     setDragMode(QGraphicsView::NoDrag);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+    static const bool factoryInstalled = (QAccessible::installFactory(canvasAccessibleFactory), true);
+    Q_UNUSED(factoryInstalled);
     setAccessibleName(tr("Editor de nós"));
     setToolTip(tr("Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona"));
     m_scene->setSceneRect(-400, -300, 1600, 900);
+}
+
+PetuniaNodeCanvas::~PetuniaNodeCanvas() {
+    for (auto id : std::as_const(m_accessible))
+        QAccessible::deleteAccessibleInterface(id);
 }
 
 QStringList PetuniaNodeCanvas::nodeIds() const {
@@ -359,6 +491,7 @@ void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges
     for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
         it.value()->setSelectedNode(it.key() == m_selected);
     m_rebuilding = false;
+    releaseStaleAccessibles();
     if (m_scene->items().size() > 0)
         m_scene->setSceneRect(m_scene->itemsBoundingRect().adjusted(-200, -160, 200, 160));
 }
@@ -386,8 +519,8 @@ void PetuniaNodeCanvas::selectNode(const QString &id) {
     refreshAccessibility();
 }
 
-QString PetuniaNodeCanvas::describeSelection() const {
-    const auto row = nodeRow(m_selected);
+QString PetuniaNodeCanvas::describeNode(const QString &id) const {
+    const auto row = nodeRow(id);
     if (row.isEmpty())
         return tr("Nenhum nó. Shift+A adiciona uma operação ao objeto ativo.");
     QString text = petuniaTr(row["label"].toString()) + QStringLiteral(": ") + row["title"].toString();
@@ -395,14 +528,14 @@ QString PetuniaNodeCanvas::describeSelection() const {
         QStringList ops;
         for (const auto &edge : m_edgeRows) {
             const auto e = edge.toObject();
-            if (e["to"].toString() == m_selected && e["to_port_name"].toString() == QLatin1String("operations"))
+            if (e["to"].toString() == id && e["to_port_name"].toString() == QLatin1String("operations"))
                 ops << nodeRow(e["from"].toString())["title"].toString();
         }
         text += ops.isEmpty() ? tr(". Sem operações aplicadas.") : tr(". Operações: %1.").arg(ops.join(QStringLiteral(", ")));
     } else {
         QStringList targets;
-        for (const auto &id : targetsOf(m_selected))
-            targets << nodeRow(id)["title"].toString();
+        for (const auto &target : targetsOf(id))
+            targets << nodeRow(target)["title"].toString();
         text += targets.isEmpty() ? tr(". Saída sem destino.") : tr(". Aplicada em: %1.").arg(targets.join(QStringLiteral(", ")));
         if (!row["enabled"].toBool(true))
             text += tr(" Desativada.");
@@ -421,6 +554,12 @@ void PetuniaNodeCanvas::refreshAccessibility() {
     if (QAccessible::isActive()) {
         QAccessibleEvent event(this, QAccessible::DescriptionChanged);
         QAccessible::updateAccessibility(&event);
+        const int index = nodeIds().indexOf(m_selected);
+        if (index >= 0 && hasFocus()) {
+            QAccessibleEvent focus(this, QAccessible::Focus);
+            focus.setChild(index);
+            QAccessible::updateAccessibility(&focus);
+        }
     }
 }
 

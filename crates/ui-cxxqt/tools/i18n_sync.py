@@ -17,6 +17,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "assets" / "native-translations.json"
 
 PT_TO_EN = {
+    "Operação": "Operation",
+    "Concluir": "Done",
+    "Concluir a edição da operação": "Finish editing the operation",
     " Desativada.": " Disabled.",
     " Erro: %1": " Error: %1",
     ". Aplicada em: %1.": ". Applied to: %1.",

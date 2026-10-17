@@ -3798,5 +3798,17 @@
   "Nós": {
     "pt-BR": "Nós",
     "en": "Nodes"
+  },
+  "Operação": {
+    "pt-BR": "Operação",
+    "en": "Operation"
+  },
+  "Concluir": {
+    "pt-BR": "Concluir",
+    "en": "Done"
+  },
+  "Concluir a edição da operação": {
+    "pt-BR": "Concluir a edição da operação",
+    "en": "Finish editing the operation"
   }
 }

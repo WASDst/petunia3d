@@ -1,5 +1,7 @@
 #include "petunia_shell_controller.h"
 
+#include <QSet>
+
 PetuniaShellController::PetuniaShellController(QObject *parent) : QObject(parent) {
     m_timer.setInterval(33);
     connect(&m_timer, &QTimer::timeout, this, &PetuniaShellController::tick);
@@ -37,7 +39,18 @@ void PetuniaShellController::adopt(const QJsonObject &state) {
     emit stateChanged(m_state);
 }
 
+namespace {
+QSet<QString> graphNodeIds(const QJsonObject &state) {
+    QSet<QString> ids;
+    for (const auto &node : state["op_graph"].toObject()["nodes"].toArray())
+        ids.insert(node.toObject()["id"].toString());
+    return ids;
+}
+} // namespace
+
 QJsonObject PetuniaShellController::request(const QString &action, QJsonObject args) {
+    const bool addsOperation = action == QLatin1String("graph_add_boolean") || action == QLatin1String("graph_add_operation");
+    const auto before = addsOperation ? graphNodeIds(m_state) : QSet<QString>();
     const auto result = petuniaRequest(action, std::move(args));
     if (!result.value(QStringLiteral("ok")).toBool(true)) {
         const auto message = result.value(QStringLiteral("error")).toString();
@@ -45,6 +58,13 @@ QJsonObject PetuniaShellController::request(const QString &action, QJsonObject a
             emit errorReported(message);
     }
     adopt(result);
+    if (addsOperation) {
+        for (const auto &node : m_state["op_graph"].toObject()["nodes"].toArray()) {
+            const auto row = node.toObject();
+            if (!before.contains(row["id"].toString()) && row["type_id"].toString() != QLatin1String("petunia.object"))
+                emit operationAdded(row["id"].toString());
+        }
+    }
     return result;
 }
 

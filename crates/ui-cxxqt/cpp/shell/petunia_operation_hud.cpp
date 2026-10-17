@@ -1,4 +1,5 @@
 #include "petunia_operation_hud.h"
+#include "petunia_operation_card.h"
 #include "../petunia_number_field.h"
 #include "../petunia_theme.h"
 #include "petunia_i18n.h"
@@ -53,8 +54,10 @@ PetuniaOperationHud::PetuniaOperationHud(PetuniaShellController *controller, QWi
     buildModal();
     buildLoopCut();
     buildSlice();
+    buildGraphOperation();
+    connect(m_controller, &PetuniaShellController::operationAdded, this, &PetuniaOperationHud::focusOperation);
     setMinimumWidth(theme.scaled(260));
-    setMaximumWidth(theme.scaled(340));
+    setMaximumWidth(theme.scaled(400));
     hide();
 }
 
@@ -174,6 +177,67 @@ void PetuniaOperationHud::buildSlice() {
     static_cast<QVBoxLayout *>(section->layout())->addLayout(buttons);
 }
 
+void PetuniaOperationHud::buildGraphOperation() {
+    auto *section = makeSection(QStringLiteral("graph_operation"), tr("Operação"));
+    m_graphDone = new QPushButton(tr("Concluir"), section);
+    m_graphDone->setProperty("role", QStringLiteral("primary"));
+    m_graphDone->setAccessibleName(tr("Concluir a edição da operação"));
+    connect(m_graphDone, &QPushButton::clicked, this, &PetuniaOperationHud::dismissOperation);
+    section->layout()->addWidget(m_graphDone);
+}
+
+void PetuniaOperationHud::focusOperation(const QString &nodeId) {
+    m_graphFocus = nodeId;
+    m_graphSignature.clear();
+    syncGraphOperation(m_controller->state());
+    const bool visible = !m_active.isEmpty();
+    if (isVisible() != visible)
+        setVisible(visible);
+}
+
+void PetuniaOperationHud::dismissOperation() {
+    m_graphFocus.clear();
+    syncGraphOperation(m_controller->state());
+    if (m_active.isEmpty())
+        hide();
+}
+
+/// O cartão do HUD é o mesmo gerado da Pilha: um nó novo aparece aqui sem código Qt novo.
+void PetuniaOperationHud::syncGraphOperation(const QJsonObject &state) {
+    auto *section = m_sections.value(QStringLiteral("graph_operation"));
+    QJsonObject row;
+    const auto graph = state["op_graph"].toObject();
+    if (!m_graphFocus.isEmpty()) {
+        for (const auto &node : graph["nodes"].toArray())
+            if (node.toObject()["id"].toString() == m_graphFocus)
+                row = node.toObject();
+    }
+    const bool on = !row.isEmpty() && row["type_id"].toString() != QLatin1String("petunia.object");
+    if (!on) {
+        m_graphFocus.clear();
+        if (m_graphCard) {
+            delete m_graphCard;
+            m_graphCard = nullptr;
+        }
+        m_graphSignature.clear();
+        section->setVisible(false);
+        m_active.removeAll(QStringLiteral("graph_operation"));
+        return;
+    }
+    const bool asTool = row["tool"].toObject()["id"].toString() == state["active_asset_id"].toString();
+    const QString signature = PetuniaOperationCard::signatureOf(row, asTool);
+    if (!m_graphCard || signature != m_graphSignature) {
+        delete m_graphCard;
+        m_graphCard = new PetuniaOperationCard(m_controller, row, asTool, section);
+        static_cast<QVBoxLayout *>(section->layout())->insertWidget(0, m_graphCard);
+        m_graphSignature = signature;
+    }
+    m_graphCard->update(row, graph["candidates"].toArray());
+    section->setVisible(true);
+    if (!m_active.contains(QStringLiteral("graph_operation")))
+        m_active << QStringLiteral("graph_operation");
+}
+
 void PetuniaOperationHud::sync(const QJsonObject &state) {
     m_active.clear();
     auto show = [&](const char *id, bool on) {
@@ -193,6 +257,7 @@ void PetuniaOperationHud::sync(const QJsonObject &state) {
     show("modal", modal);
     show("loop_cut", loopCut);
     show("slice", slice);
+    syncGraphOperation(state);
 
     QString title;
     if (primitive)
@@ -203,6 +268,8 @@ void PetuniaOperationHud::sync(const QJsonObject &state) {
         title = tr("Loop cut");
     else if (slice)
         title = tr("Corte");
+    else if (m_active.contains(QStringLiteral("graph_operation")))
+        title = tr("Operação");
     m_title->setText(petuniaTr(title));
     m_title->setVisible(!m_active.isEmpty());
 

@@ -10,6 +10,7 @@
 
 class QCheckBox;
 class PetuniaNumberField;
+class PetuniaOperationCard;
 class QVBoxLayout;
 
 /// HUD de operação: parâmetros VIVOS da operação em curso, sobre a vista
@@ -28,6 +29,12 @@ class PetuniaOperationHud : public QFrame {
     /// Seções ativas no último estado (ids estáveis, para testes e a11y).
     QStringList activeSections() const { return m_active; }
     PetuniaNumberField *modalField() const { return m_modalValue; }
+    /// Mostra no HUD os parâmetros (gerados do descriptor) de uma operação do grafo.
+    void focusOperation(const QString &nodeId);
+    void dismissOperation();
+    const QString &focusedOperation() const { return m_graphFocus; }
+    PetuniaOperationCard *operationCard() const { return m_graphCard; }
+    QPushButton *operationDoneButton() const { return m_graphDone; }
 
   private:
     class Form;
@@ -36,6 +43,8 @@ class PetuniaOperationHud : public QFrame {
     void buildModal();
     void buildLoopCut();
     void buildSlice();
+    void buildGraphOperation();
+    void syncGraphOperation(const QJsonObject &state);
     QPushButton *actionButton(QWidget *parent, const QString &text, const QString &request, bool primary);
     void relayout();
 
@@ -50,5 +59,9 @@ class PetuniaOperationHud : public QFrame {
     QWidget *m_bevelOptions{nullptr};
     QPushButton *m_loopCutConfirm{nullptr};
     QStringList m_active;
+    QString m_graphFocus;
+    QString m_graphSignature;
+    PetuniaOperationCard *m_graphCard{nullptr};
+    QPushButton *m_graphDone{nullptr};
     QString m_primitiveKind;
 };

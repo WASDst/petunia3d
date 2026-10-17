@@ -47,6 +47,8 @@ class PetuniaShellController : public QObject {
   signals:
     void stateChanged(const QJsonObject &state);
     void errorReported(const QString &message);
+    /// Uma operação do Operation Graph acabou de ser adicionada (o HUD mostra seus parâmetros).
+    void operationAdded(const QString &nodeId);
 
   private:
     void adopt(const QJsonObject &state);

@@ -21,6 +21,7 @@
 #include "petunia_tool_rail.h"
 #include "petunia_viewport_header.h"
 
+#include <QAccessible>
 #include <QApplication>
 #include <QDir>
 #include <QJsonArray>
@@ -162,6 +163,18 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(6);
         window.syncNow();
         settle(4);
+        // HUD gerado do descriptor: o nó recém-criado mostra seus parâmetros sobre a vista.
+        auto *hud = window.hud();
+        h.add("hud:graph-operation-section-after-add",
+              hud->activeSections().contains("graph_operation") && hud->operationCard() != nullptr,
+              hud->activeSections().join(","));
+        h.add("hud:generated-card-has-choice-control",
+              hud->operationCard() && !hud->operationCard()->findChildren<PetuniaSegmented *>().isEmpty());
+        h.add("hud:visible-over-viewport-for-operation", hud->isVisible());
+        h.shot(&window, "shell_POLY_hud_boolean");
+        hud->operationDoneButton()->click();
+        settle(4);
+        h.add("hud:done-dismisses-operation", !hud->activeSections().contains("graph_operation") && hud->focusedOperation().isEmpty());
         h.add("graph:boolean-appears-as-tool-card", ops->toolCards().size() == 1,
               QString::number(ops->toolCards().size()));
         h.add("graph:bake-hidden-until-applied", !ops->bakeButton()->isVisibleTo(ops));
@@ -256,6 +269,24 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         h.add("nodes:accessible-description-set", !canvas->accessibleDescription().isEmpty());
         canvas->fitAll();
         h.shot(&window, "shell_POLY_nodes");
+        // Acessibilidade: cada nó é um item acessível com nome, descrição e estado.
+        {
+            auto *iface = QAccessible::queryAccessibleInterface(canvas);
+            h.add("nodes:a11y-canvas-exposes-nodes", iface && iface->childCount() == canvas->nodeCount(),
+                  iface ? QString::number(iface->childCount()) : QStringLiteral("sem interface"));
+            QAccessibleInterface *node = nullptr;
+            if (iface)
+                for (int i = 0; i < iface->childCount(); ++i)
+                    if (iface->child(i) && iface->child(i)->text(QAccessible::Name).contains("Boolean"))
+                        node = iface->child(i);
+            h.add("nodes:a11y-node-has-name-role-description",
+                  node && node->role() == QAccessible::ListItem && !node->text(QAccessible::Description).isEmpty() &&
+                      node->text(QAccessible::Description).contains("Cube"),
+                  node ? node->text(QAccessible::Description) : QStringLiteral("nó não encontrado"));
+            h.add("nodes:a11y-selected-state-follows-selection",
+                  node && node->state().selected && node->state().selectable && !node->rect().isEmpty());
+            h.add("nodes:a11y-parent-link", node && node->parent() == iface);
+        }
         // Teclado: Ctrl+→ move o nó e persiste a posição no documento.
         const QPointF before = canvas->nodeScenePosition(opId);
         canvas->setFocus();
@@ -278,9 +309,63 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         h.add("nodes:delete-removes-operation", !canvas->nodeIds().contains(opId),
               canvas->selectedNodeId() + " ops=" + QString::number(canvas->nodeCount()));
         Q_UNUSED(cutter);
+        window.hud()->dismissOperation();
         window.drawerRegion()->setOpen(false);
         window.resize(1360, 860);
         settle(6);
+    }
+
+    // ── F7: Workspaces PAINT, UV e ANIMATE (U16–U18) ─────────────────────────
+    {
+        // PAINT (U16): Estrutura mostra camadas (base >= 1), e adicionar camada reflete na árvore.
+        c->request("workspace", {{"id", "PAINT"}});
+        settle(8);
+        window.syncNow();
+        settle(4);
+        const int baseLayers = window.structure()->rowCount();
+        h.add("paint:structure-shows-layers", baseLayers >= 1, QString::number(baseLayers));
+        c->request("add_paint_layer");
+        settle(6);
+        window.syncNow();
+        settle(4);
+        h.add("paint:add-layer-updates-structure", window.structure()->rowCount() > baseLayers,
+              QStringLiteral("%1 -> %2").arg(baseLayers).arg(window.structure()->rowCount()));
+        h.shot(&window, "shell_PAINT_v2");
+
+        // UV (U17): Canvas UV dominante (alvo >= 55% da superfície).
+        c->request("workspace", {{"id", "UV"}});
+        settle(8);
+        window.syncNow();
+        settle(4);
+        auto *surf = window.surfaceSplitter();
+        const auto sizes = surf->sizes();
+        const double uvRatio = (sizes.size() >= 2 && (sizes[0] + sizes[1]) > 0)
+                                   ? (double(sizes[0]) / double(sizes[0] + sizes[1]))
+                                   : 0.0;
+        h.add("uv:canvas-is-dominant", uvRatio >= 0.55, QString::number(uvRatio, 'f', 2));
+        h.shot(&window, "shell_UV_v2");
+
+        // ANIMATE (U18): Gaveta tem aba Linha do tempo e Estrutura lista rig / ossos ao adicionar criatura.
+        c->request("workspace", {{"id", "ANIMATE"}});
+        settle(8);
+        window.syncNow();
+        settle(4);
+        h.add("animate:drawer-has-timeline-tab", window.drawerRegion()->currentPageId() == "timeline" ||
+                                                   window.drawerRegion()->tabBar()->count() >= 1,
+              window.drawerRegion()->currentPageId());
+        c->request("animate", {{"id", "add-creature"}, {"arg", "bird"}});
+        settle(8);
+        window.syncNow();
+        settle(4);
+        const int bonesCount = window.structure()->rowCount();
+        h.add("animate:structure-shows-rig-bones", bonesCount >= 1, QString::number(bonesCount));
+        h.shot(&window, "shell_ANIMATE_v2");
+
+        // Retorna a POLY para manter a baseline das verificações subsequentes
+        c->request("workspace", {{"id", "POLY"}});
+        settle(8);
+        window.syncNow();
+        settle(4);
     }
 
     // Foco por regiões (F6): percorre regiões distintas e volta ao ponto de partida.

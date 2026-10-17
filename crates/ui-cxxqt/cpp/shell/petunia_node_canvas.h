@@ -2,10 +2,12 @@
 
 #include "petunia_shell_controller.h"
 
+#include <QAccessible>
 #include <QGraphicsView>
 #include <QHash>
 #include <QJsonObject>
 
+class QAccessibleInterface;
 class QGraphicsScene;
 class PetuniaNodeItem;
 class PetuniaWireItem;
@@ -23,6 +25,7 @@ class PetuniaNodeCanvas : public QGraphicsView {
 
   public:
     explicit PetuniaNodeCanvas(PetuniaShellController *controller, QWidget *parent = nullptr);
+    ~PetuniaNodeCanvas() override;
 
     void sync(const QJsonObject &state);
     int nodeCount() const { return m_nodes.size(); }
@@ -31,7 +34,14 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QString selectedNodeId() const { return m_selected; }
     void selectNode(const QString &id);
     /// Texto lido por tecnologias assistivas: tipo, estado e ligações do nó.
-    QString describeSelection() const;
+    QString describeSelection() const { return describeNode(m_selected); }
+    QString describeNode(const QString &id) const;
+    QString nodeTitle(const QString &id) const;
+    bool nodeEnabled(const QString &id) const;
+    /// Retângulo do nó em coordenadas globais (tecnologias assistivas).
+    QRect nodeGlobalRect(const QString &id) const;
+    /// Interface acessível persistente do nó (um por id; liberada ao sair do grafo).
+    QAccessibleInterface *accessibleNode(const QString &id);
     /// Mesmos caminhos do arrasto, acessíveis ao teclado e a testes.
     bool connectOperation(const QString &operationId, const QString &objectNodeId);
     bool disconnectOperation(const QString &operationId, const QString &objectNodeId);
@@ -58,6 +68,7 @@ class PetuniaNodeCanvas : public QGraphicsView {
     void layoutNodes();
     void updateWires();
     void refreshAccessibility();
+    void releaseStaleAccessibles();
     void moveSelection(int dx, int dy);
     void nudgeSelected(int dx, int dy);
     void showConnectMenu(const QPoint &globalPos);
@@ -72,6 +83,7 @@ class PetuniaNodeCanvas : public QGraphicsView {
     PetuniaShellController *m_controller;
     QGraphicsScene *m_scene;
     QHash<QString, PetuniaNodeItem *> m_nodes;
+    QHash<QString, QAccessible::Id> m_accessible;
     QList<PetuniaWireItem *> m_wires;
     QJsonArray m_nodeRows;
     QJsonArray m_edgeRows;
