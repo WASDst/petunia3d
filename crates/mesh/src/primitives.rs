@@ -441,6 +441,7 @@ impl Mesh {
             for i in 0..seg {
                 let j = (i + 1) % seg;
                 m.push_face(Face::new(vec![cb, lower[i], lower[j]]));
+                m.sharp_edges.insert(crate::edge_key(lower[i], lower[j]));
             }
         }
         if cap_top && !top_apex {
@@ -449,6 +450,7 @@ impl Mesh {
             for i in 0..seg {
                 let j = (i + 1) % seg;
                 m.push_face(Face::new(vec![ct, upper[j], upper[i]]));
+                m.sharp_edges.insert(crate::edge_key(upper[i], upper[j]));
             }
         }
         m.layout_uv_charts(DEFAULT_UV_PADDING);

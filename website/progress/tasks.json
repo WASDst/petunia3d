@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-16",
+  "updated": "2026-10-17",
   "phases": [
     {
       "id": "integrity",
@@ -530,6 +530,12 @@
       "revision": "refactor/architecture-foundation continuation; crates/mesh/src/uv_stitch.rs, crates/core/src/edit_api.rs, crates/core/src/command.rs, crates/core/src/uv_transform.rs, crates/core/tests/uv_foundations_v01_tests.rs",
       "document": "07-uv/architecture-decision.md",
       "summary": "V01: UV selection/transform concluído. Pins tipados gerenciados via UvPinCmd com FaceCornerIndex e operações de Pin, Unpin, Toggle e ClearAll. Split UV implementado via UvSplitCmd e Mesh::split_uv criando descontinuidades de seam sem duplicar vértices 3D (mesh.verts inalterado). Stitch UV implementado via UvStitchCmd e Mesh::stitch_uv_to com alinhamento estacionário/móvel, fusão de cantos compartilhados, remoção de seams e respeito estrito a solver constraints (recusa de ilhas com pin). Transformação interativa de UV integrada ao ciclo modal (begin_uv_transform, update_uv_transform, commit_uv_transform, cancel_uv_transform) com preview isolado do documento, cancelamento limpo sem poluir Undo (0 entradas) e commit atômico gerando exatamente 1 entrada de histórico. Rejeição de parâmetros não-finitos (NaN/Inf). Testes: 4 testes em core/tests/uv_foundations_v01_tests.rs pass (0.03s), 4 testes em core/tests/uv_transform_session.rs pass, 190 testes em core lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "g18-dedicated-gates": {
+      "revision": "f60a6e69",
+      "document": "03-geometry/normals-shading-sharp-edges.md",
+      "summary": "Implementação e fechamento dos testes obrigatórios restantes de G18 (website/docs/03-geometry/normals-shading-sharp-edges.md). Mesh::radial_frustum passa a gravar arestas sharp nas bordas de tampas (cap boundaries) de cilindros e cones por padrão. Nova suíte dedicada crates/project/tests/normals_shading_g18_gates_tests.rs cobrindo: 1) test_g18_gate_cylinder_smooth_with_cap_boundaries_sharp (tampas planas +Y/-Y e laterais suaves em XZ sem vazamento de componente Y); 2) test_g18_gate_uneven_face_areas_zero_render_export_difference (ponderação por ângulo de corner imune à desproporção 1:100 de áreas e zero divergência entre to_triangles_shaded e shaded_corners); 3) test_g18_gate_gltf_vertex_split_on_hard_normal_boundary (divisão de vértices na aresta Sharp e fusão na aresta lisa); 4) test_g18_gate_obj_normal_indices_per_corner (índices vn separados por corner na aresta Sharp e vn compartilhado na aresta suave). Bateria executada com CARGO_BUILD_JOBS=1: 4/4 testes verdes, fmt e clippy limpos.",
+      "origin_sha": "f60a6e69"
     }
   },
   "tasks": [
@@ -1928,9 +1934,9 @@
       "title": "Normals/Sharp",
       "description": "SurfaceShading por objeto e Sharp Edge autoral; corner normals canônicas compartilhadas render/export; Mark/Clear Sharp, Smooth by Angle, Flip/Orient, remap e eliminar cálculos duplicados.",
       "document": "03-geometry/normals-shading-sharp-edges.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-13",
-      "baseline": "crates/mesh/src/shading.rs, crates/mesh/src/ops.rs, crates/project/src/export.rs, crates/project/src/pipeline.rs, crates/render/src. 2026-10-13: testes obrigatórios executados e verdes em Linux, incluindo GL headless Mesa (evidência g18-shading-gates); propagação de dados autorais por topologia implementada em Mesh::join, subdivide_selected_cuts, Mesh::loop_cut e remove_isolated_vertices, com regressões novas (evidência g18-sharp-propagation). Abertos: cylinder Smooth com cap boundaries Sharp, uneven face areas sem diferença Render/Export, glTF vertex split em hard-normal boundary e OBJ normal indices por corner — itens de Testes obrigatórios sem teste dedicado; Array/Thickness propagam Sharp só quando existirem como modifiers (roadmap).",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "crates/mesh/src/shading.rs, crates/mesh/src/primitives.rs, crates/mesh/src/ops.rs, crates/project/src/export.rs, crates/project/src/pipeline.rs, crates/project/tests/normals_shading_g18_gates_tests.rs. 2026-10-17: todos os testes obrigatórios executados e verdes (evidências g18-shading-gates, g18-sharp-propagation e g18-dedicated-gates). Mesh::radial_frustum grava cap boundaries como Sharp; testes dedicados cobrem cylinder Smooth com cap Sharp, paridade Render/Export sob áreas desiguais, glTF vertex split em hard-normal boundary e índices vn por corner no OBJ. Array/Thickness propagam Sharp quando existirem como modifiers (roadmap).",
       "checkpoints": [
         {
           "title": "SurfaceShading por objeto e Sharp Edge autoral",
@@ -1949,8 +1955,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g18-dedicated-gates"
         }
       ],
       "documents": [
