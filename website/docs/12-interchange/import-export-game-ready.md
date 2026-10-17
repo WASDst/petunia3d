@@ -95,3 +95,35 @@ Export dialog com:
 ## Decisões fechadas
 
 GLB/glTF principal; OBJ secundário; FBX não baseline; Import/Export são adapters; ExportModel snapshot intermediário; validação explicável; sem baking/conversão silenciosa; Batch usa pipeline único; integridade e portabilidade antes de conveniência.
+
+## Matriz de implementação e conformidade (I01 / I02)
+
+| Tarefa | Escopo                                                      | Status    | Evidência                                                                             |
+|--------|-------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------|
+| I01    | ExportModel intermediário avaliado e cópia estrita          | [x] DONE  | `crates/project/src/export_model.rs`, `test_gate1_snapshot_evaluated_authoring_intact`|
+| I01    | Tangentes ortonormais determinísticas (MikkTSpace 4D)       | [x] DONE  | `crates/project/src/export_model.rs`, `test_gate2_orthonormal_tangents_and_vertex_splitting`|
+| I01    | Vertex splitting em FaceCorner UV seams e sharp edges       | [x] DONE  | `crates/project/src/export_model.rs`, `test_gate2_orthonormal_tangents_and_vertex_splitting`|
+| I01    | Pipeline único (Single, Multiple, Batch e Snapshot)         | [x] DONE  | `crates/project/src/pipeline.rs`, `export_snapshot`, `test_gate1_snapshot_evaluated_authoring_intact`|
+| I02    | Game-Ready Validator com severidade acionável               | [x] DONE  | `crates/project/src/game_ready.rs`, `validate_asset`, `i02-game-ready-validator`     |
+| I02    | Confinamento seguro contra path traversal e rede            | [x] DONE  | `crates/project/src/import_gltf.rs`, `resolve_safe_path`, `test_gate4_safe_io_path_traversal_and_malicious_input`|
+| I02    | Khronos glTF 2.0 / GLB conformance com PBR e TANGENT        | [x] DONE  | `crates/project/src/export_model.rs`, `test_gate3_khronos_glb_conformance_and_materials`|
+| I02    | Política estrita de sobrescrita (AlreadyExists) e atômica   | [x] DONE  | `crates/project/src/pipeline.rs`, `test_gate5_atomic_integrity_and_overwrite_policy` |
+| I02    | Round-trip OBJ e GLB preservando topologia e UVs            | [x] DONE  | `crates/project/tests/interchange_i01_i02_gates_tests.rs::test_gate6_roundtrip_obj_and_glb_preserves_topology_and_uvs`|
+
+### Status da bateria e evidências de Import/Export (I01, 2026-10-17)
+
+Todos os gates de `I01` foram formalizados e validados:
+- **Snapshot Avaliado e Imutabilidade do Authoring**: `ExportModel` compila uma cópia avaliada do projeto a partir de `DocumentSnapshot` sem alterar o documento original (`test_gate1_snapshot_evaluated_authoring_intact`).
+- **Tangentes Ortonormais Game-Ready 4D**: Geração determinística de tangentes estilo MikkTSpace com componentes XYZ unitários e ortogonais às normais do corner (`dot(n, t) < 1e-3`) e handedness W estritamente em `{-1.0, 1.0}` (`test_gate2_orthonormal_tangents_and_vertex_splitting`).
+- **Preservação de Seams e Sharp Edges por Vertex Splitting**: Vértices duplicados apenas onde posições, UVs ou normais divergem, garantindo sombreamento nítido e continuidade de textura nos motores de jogo.
+- **Pipeline Unificado de Exportação**: `DeliveryPipeline::export_snapshot`, `export_single_asset`, `export_multiple_assets` e `batch_export` utilizam o mesmo modelo avaliado com escrita atômica via `io_atomic`.
+
+### Status da bateria e evidências de Game-Ready e IO Seguro (I02, 2026-10-17)
+
+Todos os gates de `I02` foram formalizados e validados:
+- **Game-Ready Validator Acionável**: `validate_asset` classifica inconsistências em `Error` (bloqueante), `Warning` (reportado no manifesto) e `Info`.
+- **Confinamento Seguro contra Path Traversal**: `resolve_safe_path` rejeita tentativas de escape com `..` (ex: `../../etc/passwd`), caminhos absolutos e URIs de rede sem pânico (`Never crash`), protegendo buffers e texturas externas (`test_gate4_safe_io_path_traversal_and_malicious_input`).
+- **Conformidade Khronos glTF 2.0 / GLB**: Header binário de 12 bytes, chunks JSON e BIN alinhados a 4 bytes, accessors tipados (`POSITION`, `NORMAL`, `TEXCOORD_0`, `TANGENT`, `JOINTS_0`, `WEIGHTS_0`), canais PBR e metadados (`test_gate3_khronos_glb_conformance_and_materials`).
+- **Política Estrita de Sobrescrita e Integridade Atômica**: Rejeição determinística com `PipelineError::AlreadyExists` quando `overwrite == false`, sem truncar arquivos pré-existentes (`test_gate5_atomic_integrity_and_overwrite_policy`).
+- **Round-trip Fiel**: Leitura e escrita de OBJ com coordenadas de textura (`face.uv`) e GLB com materiais PBR validados em round-trip (`test_gate6_roundtrip_obj_and_glb_preserves_topology_and_uvs`).
+

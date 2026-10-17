@@ -13,7 +13,6 @@ use std::path::{Path, PathBuf};
 
 use petunia_mesh::Mesh;
 
-use crate::export::{self, ExportError};
 use crate::import_gltf;
 use crate::import_obj::{self, ObjImportError};
 use crate::package;
@@ -267,26 +266,13 @@ impl FormatExporter for ObjExporter {
     fn export_asset(
         &self,
         asset: &Asset,
-        _project: &Project,
+        project: &Project,
         options: &ExportOptions,
     ) -> Result<Vec<u8>, PipelineError> {
-        let mut mesh = asset.world_mesh().into_owned();
-        if options.triangulate {
-            mesh.triangulate();
-        }
-        if (options.scale - 1.0).abs() > 1e-5 && options.scale.is_finite() && options.scale > 0.0 {
-            for v in &mut mesh.verts {
-                v.pos = [
-                    v.pos[0] * options.scale,
-                    v.pos[1] * options.scale,
-                    v.pos[2] * options.scale,
-                ];
-            }
-        }
-        // Mesma saída de `export::export_obj`: normais por FaceCorner do
-        // sombreamento autoral (Smooth/Flat + Sharp), não só posições.
-        let text = mesh.to_obj_with_normals(asset.surface_shading);
-        Ok(text.into_bytes())
+        let pos = project.assets.iter().position(|a| a.id == asset.id);
+        let idx = pos.unwrap_or(0);
+        let model = crate::export_model::ExportModel::from_project(project, &[idx], options)?;
+        Ok(model.to_obj()?.into_bytes())
     }
 
     fn export_project(
@@ -295,27 +281,8 @@ impl FormatExporter for ObjExporter {
         indices: &[usize],
         options: &ExportOptions,
     ) -> Result<Vec<u8>, PipelineError> {
-        let mut merged = Mesh::default();
-        for &idx in indices {
-            if let Some(asset) = project.assets.get(idx) {
-                let mut m = asset.world_mesh().into_owned();
-                if options.triangulate {
-                    m.triangulate();
-                }
-                merged.join(&m);
-            }
-        }
-        if (options.scale - 1.0).abs() > 1e-5 && options.scale.is_finite() && options.scale > 0.0 {
-            for v in &mut merged.verts {
-                v.pos = [
-                    v.pos[0] * options.scale,
-                    v.pos[1] * options.scale,
-                    v.pos[2] * options.scale,
-                ];
-            }
-        }
-        let text = merged.to_obj();
-        Ok(text.into_bytes())
+        let model = crate::export_model::ExportModel::from_project(project, indices, options)?;
+        Ok(model.to_obj()?.into_bytes())
     }
 }
 
@@ -397,28 +364,26 @@ impl FormatExporter for GlbExporter {
         &self,
         asset: &Asset,
         project: &Project,
-        _options: &ExportOptions,
+        options: &ExportOptions,
     ) -> Result<Vec<u8>, PipelineError> {
         let pos = project.assets.iter().position(|a| a.id == asset.id);
         let idx = pos.unwrap_or(0);
-        export::export_gltf(project, &[idx]).map_err(|e| match e {
-            ExportError::Empty => PipelineError::Export("Nada para exportar".into()),
-            ExportError::Other(s) => PipelineError::Export(s),
-            ExportError::Io(s) => PipelineError::Export(s),
-        })
+        let mut opts = options.clone();
+        opts.scale = 1.0; // GLB units stay in meters
+        let model = crate::export_model::ExportModel::from_project(project, &[idx], &opts)?;
+        model.to_glb(project)
     }
 
     fn export_project(
         &self,
         project: &Project,
         indices: &[usize],
-        _options: &ExportOptions,
+        options: &ExportOptions,
     ) -> Result<Vec<u8>, PipelineError> {
-        export::export_gltf(project, indices).map_err(|e| match e {
-            ExportError::Empty => PipelineError::Export("Nada para exportar".into()),
-            ExportError::Other(s) => PipelineError::Export(s),
-            ExportError::Io(s) => PipelineError::Export(s),
-        })
+        let mut opts = options.clone();
+        opts.scale = 1.0; // GLB units stay in meters
+        let model = crate::export_model::ExportModel::from_project(project, indices, &opts)?;
+        model.to_glb(project)
     }
 
     fn warnings(&self, options: &ExportOptions) -> Vec<String> {
@@ -761,6 +726,72 @@ impl DeliveryPipeline {
 
         Ok(ExportReport {
             asset_name: asset.name.clone(),
+            output_path: path.to_path_buf(),
+            format,
+            bytes_written: bytes.len(),
+            warnings,
+        })
+    }
+
+    /// Exporta a partir de um DocumentSnapshot com isolamento e integridade atômica (I01 / I02).
+    pub fn export_snapshot(
+        &self,
+        snapshot: &crate::snapshot::DocumentSnapshot,
+        indices: &[usize],
+        path: &Path,
+        options: &ExportOptions,
+    ) -> Result<ExportReport, PipelineError> {
+        if path.exists() && !options.overwrite {
+            return Err(PipelineError::AlreadyExists(path.to_path_buf()));
+        }
+
+        let format = FileFormat::from_path(path).ok_or_else(|| {
+            PipelineError::UnsupportedFormat(
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+            )
+        })?;
+
+        let exporter = self
+            .exporter(format)
+            .ok_or_else(|| PipelineError::UnsupportedFormat(format.label().to_string()))?;
+
+        let export_model =
+            crate::export_model::ExportModel::from_snapshot(snapshot, indices, options)?;
+        let mut warnings = exporter.warnings(options);
+        warnings.extend(export_model.warnings.clone());
+
+        let bytes = match format {
+            FileFormat::Glb => export_model.to_glb(snapshot.document())?,
+            FileFormat::Obj => export_model.to_obj()?.into_bytes(),
+            FileFormat::Pkg => {
+                let isolated = snapshot.document().clone();
+                exporter.export_project(&isolated, indices, options)?
+            }
+            FileFormat::Gltf => {
+                return Err(PipelineError::UnsupportedFormat(
+                    "glTF JSON direto não suportado para snapshot; use GLB".into(),
+                ));
+            }
+        };
+
+        crate::io_atomic::atomic_write(path, &bytes)
+            .map_err(|e| PipelineError::Io(std::io::Error::other(e.to_string())))?;
+
+        let asset_name = if indices.len() == 1 {
+            indices
+                .first()
+                .and_then(|&i| snapshot.assets().get(i))
+                .map(|a| a.name.clone())
+                .unwrap_or_else(|| "asset".into())
+        } else {
+            snapshot.name().to_string()
+        };
+
+        Ok(ExportReport {
+            asset_name,
             output_path: path.to_path_buf(),
             format,
             bytes_written: bytes.len(),

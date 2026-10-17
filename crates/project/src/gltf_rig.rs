@@ -76,7 +76,8 @@ impl BinBuilder {
 }
 
 /// Pesos por vértice já resolvidos para índices de joint (`skin.joints`).
-pub(crate) struct SkinBinding {
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkinBinding {
     pub skeleton_id: Uuid,
     pub joints: Vec<[u16; 4]>,
     pub weights: Vec<[f32; 4]>,

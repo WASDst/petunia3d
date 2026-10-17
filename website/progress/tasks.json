@@ -228,6 +228,16 @@
       "summary": "Game-Ready Validator (Error/Warning/Info com código, alvo ObjectId, mensagem e ação) compondo invariantes G02, topologia half-edge e UV Health; Errors bloqueiam o export do alvo, Warnings e perdas declaradas por formato vão ao relatório. Export com escrita atômica, nomes únicos case-insensitive no batch, limite de 256 MiB no import, OBJ do pipeline com normais autorais. Pendente: ExportModel agnóstico, resolver de referências externas com consentimento, jobs canceláveis. Não compilado; testes escritos, not run.",
       "origin_sha": "7701838"
     },
+    "i01-export-model-pipeline": {
+      "revision": "HEAD",
+      "document": "12-interchange/import-export-game-ready.md",
+      "summary": "ExportModel intermediário canônico implementado em crates/project/src/export_model.rs com avaliação estrita em cópia (authoring imutável), tangentes ortonormais determinísticas estilo MikkTSpace (VEC4 com handedness +/-1.0), vertex splitting em FaceCorner UV seams e sharp normals, e serialização para glTF 2.0 Binary (GLB com canais PBR e TANGENT) e Wavefront OBJ; pipeline unificado (single, multiple, batch e export_snapshot com escrita atômica). 6 gates em interchange_i01_i02_gates_tests.rs e 16 testes em pipeline_tests.rs passam 100%."
+    },
+    "i02-game-ready-safe-io": {
+      "revision": "HEAD",
+      "document": "12-interchange/import-export-game-ready.md",
+      "summary": "IO seguro e game-ready consolidado: resolve_safe_path em crates/project/src/import_gltf.rs com confinamento estrito contra path traversal (../../etc/passwd rejeitado), bloqueio de URIs remotas e caminhos absolutos; leitura robusta de texcoords e validação de normais/UVs não-finitos no importador OBJ; recusa de sobrescrita com AlreadyExists e escrita atômica via io_atomic; conformidade estrutural glTF 2.0 / GLB com Khronos e round-trip completo OBJ/GLB. 6 gates em interchange_i01_i02_gates_tests.rs passam 100%."
+    },
     "g16-inset-region": {
       "revision": "9c79f99",
       "document": "03-geometry/direct-modeling-semantics.md",
@@ -2399,24 +2409,24 @@
       "title": "Import/export",
       "description": "Consolidar snapshot avaliado/ExportModel e pipeline único single/multiple/batch GLB/OBJ; regras de bake/loss, authoring intacto, axis/units/tangents, corners/materials/rig/references e atomic output.",
       "document": "12-interchange/import-export-game-ready.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Parcial. crates/project/src/pipeline.rs:91, crates/project/src/pipeline.rs:760, crates/project/src/export.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "Consolidado via ExportModel com avaliação em cópia, tangentes ortonormais 4D (MikkTSpace com handedness +/-1.0), vertex splitting em seams/sharp e pipeline unificado single/multiple/batch/snapshot.",
       "checkpoints": [
         {
           "title": "Consolidar snapshot avaliado/ExportModel e pipeline único single/multiple/batch GLB/OBJ",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "i01-export-model-pipeline"
         },
         {
           "title": "regras de bake/loss, authoring intacto, axis/units/tangents, corners/materials/rig/references e atomic output",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "i01-export-model-pipeline"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "i01-export-model-pipeline"
         }
       ],
       "documents": [
@@ -2432,9 +2442,9 @@
       "title": "Game-ready e IO seguro",
       "description": "Validator Error/Warning/Info acionável; staging/limites/paths/refs externos, malicious input, cancelled/stale jobs; GLB Khronos + engines, fixtures OBJ/GLB e sem overwrite inesperado.",
       "document": "12-interchange/import-export-game-ready.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Conformidade a auditar. crates/project/src/import_obj.rs, crates/project/src/import_gltf.rs, crates/project/tests/pipeline_tests.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "Confinamento seguro contra path traversal e rede em import_gltf::resolve_safe_path, parse robusto de texcoords e validação em import_obj, Khronos glTF 2.0 GLB conformance e política AlreadyExists.",
       "checkpoints": [
         {
           "title": "Validator Error/Warning/Info acionável",
@@ -2443,18 +2453,18 @@
         },
         {
           "title": "staging/limites/paths/refs externos, malicious input, cancelled/stale jobs",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "i02-game-ready-safe-io"
         },
         {
           "title": "GLB Khronos + engines, fixtures OBJ/GLB e sem overwrite inesperado",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "i02-game-ready-safe-io"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "i02-game-ready-safe-io"
         }
       ],
       "documents": [

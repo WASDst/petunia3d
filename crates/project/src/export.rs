@@ -534,7 +534,7 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
 
 /// Codifica um canvas RGBA8 em PNG (textura pintada no GLB).
 /// `None` em canvas vazio ou falha de encoder (export segue sem textura).
-fn encode_png(canvas: &super::Canvas) -> Option<Vec<u8>> {
+pub(crate) fn encode_png(canvas: &super::Canvas) -> Option<Vec<u8>> {
     use image::ImageEncoder;
     if canvas.w == 0 || canvas.h == 0 || canvas.pixels.is_empty() {
         return None;
@@ -551,7 +551,7 @@ fn encode_png(canvas: &super::Canvas) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn json_str(s: &str) -> String {
+pub(crate) fn json_str(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);
     o.push('"');
     for c in s.chars() {

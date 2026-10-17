@@ -516,26 +516,75 @@ fn resolve_buffer_uri(
             GltfImportError::Validation(format!("buffer {} com data URI inválido", buffer.index()))
         });
     }
-    if uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with("file://") {
-        return Err(GltfImportError::Validation(format!(
-            "buffer {} com URI remota (sem rede no import)",
-            buffer.index()
-        )));
-    }
     let Some(base) = base_dir else {
         return Err(GltfImportError::Validation(format!(
             "buffer {} externo ('{uri}') exige diretório base",
             buffer.index()
         )));
     };
-    let rel = percent_decode(uri);
-    let path = base.join(&rel);
+    let path = resolve_safe_path(base, uri)?;
     let bytes =
         std::fs::read(&path).map_err(|e| GltfImportError::Parse(format!("buffer '{uri}': {e}")))?;
     if bytes.len() > MAX_BUFFER_BYTES {
         return Err(GltfImportError::TooLarge);
     }
     Ok(bytes)
+}
+
+/// Resolve caminhos de URIs externas garantindo confinamento estrito no diretório base (I02).
+///
+/// Rejeita path traversal (`..`), caminhos absolutos (`/`, `C:\`, `\\`) e esquemas de rede.
+fn resolve_safe_path(base_dir: &Path, uri: &str) -> Result<std::path::PathBuf, GltfImportError> {
+    if uri.starts_with("http://")
+        || uri.starts_with("https://")
+        || uri.starts_with("file://")
+        || uri.contains("://")
+    {
+        return Err(GltfImportError::Validation(
+            "URI remota ou esquema não suportado (sem rede no import)".to_string(),
+        ));
+    }
+    let rel_str = percent_decode(uri);
+    let rel_path = Path::new(&rel_str);
+
+    // Rejeitar caminhos absolutos no estilo POSIX ou Windows
+    if rel_path.is_absolute()
+        || rel_str.starts_with('/')
+        || rel_str.starts_with('\\')
+        || (rel_str.len() >= 2 && rel_str.as_bytes()[1] == b':')
+    {
+        return Err(GltfImportError::Validation(format!(
+            "caminho absoluto não permitido em URI externa: '{uri}'"
+        )));
+    }
+
+    // Rejeitar path traversal
+    for comp in rel_path.components() {
+        match comp {
+            std::path::Component::ParentDir => {
+                return Err(GltfImportError::Validation(format!(
+                    "path traversal ('..') detectado em URI externa: '{uri}'"
+                )));
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return Err(GltfImportError::Validation(format!(
+                    "caminho com raiz/prefixo detectado em URI externa: '{uri}'"
+                )));
+            }
+            _ => {}
+        }
+    }
+
+    let resolved = base_dir.join(rel_path);
+    if let (Ok(canon_base), Ok(canon_target)) = (base_dir.canonicalize(), resolved.canonicalize())
+        && !canon_target.starts_with(&canon_base)
+    {
+        return Err(GltfImportError::Validation(format!(
+            "caminho escapa do diretório base: '{uri}'"
+        )));
+    }
+
+    Ok(resolved)
 }
 
 fn import_materials_list(
@@ -684,17 +733,10 @@ fn image_bytes(
             if let Some(b64) = strip_data_uri(uri, None) {
                 return decode_b64(&b64).ok_or_else(|| "data URI de imagem inválido".to_string());
             }
-            if uri.starts_with("http://")
-                || uri.starts_with("https://")
-                || uri.starts_with("file://")
-            {
-                return Err("imagem remota (sem rede no import)".to_string());
-            }
             let Some(base) = base_dir else {
                 return Err(format!("imagem externa ('{uri}') exige diretório base"));
             };
-            let rel = percent_decode(uri);
-            let path = base.join(&rel);
+            let path = resolve_safe_path(base, uri).map_err(|e| e.to_string())?;
             std::fs::read(&path).map_err(|e| format!("imagem '{uri}': {e}"))
         }
     }

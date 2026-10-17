@@ -73,6 +73,7 @@ pub mod shared;
 pub use shared::Shared;
 pub mod autosave;
 pub mod export;
+pub mod export_model;
 pub mod format;
 pub mod game_ready;
 pub mod gltf_rig;
@@ -115,6 +116,8 @@ pub use autosave::{
     RecoveryInfo, SessionLockInfo,
 };
 pub use export::{ExportError, export_gltf, export_obj};
+pub use export_model::{ExportMaterial, ExportMesh, ExportMetadata, ExportModel};
+pub use gltf_rig::SkinBinding;
 pub use ik::{
     IkChain, IkError, IkOutcome, IkSolver, chain_end_position, solve_chain, solve_fabrik,
     solve_two_bone,

@@ -81,6 +81,34 @@ fn mesh_from_tobj(mesh: &tobj::Mesh) -> Result<Mesh, ObjImportError> {
             "OBJ contains no vertices".to_string(),
         ));
     }
+
+    for uv in &mesh.texcoords {
+        if !uv.is_finite() {
+            return Err(ObjImportError::Validation(
+                "non-finite texture coordinate in OBJ".to_string(),
+            ));
+        }
+    }
+    for n in &mesh.normals {
+        if !n.is_finite() {
+            return Err(ObjImportError::Validation(
+                "non-finite normal in OBJ".to_string(),
+            ));
+        }
+    }
+
+    let uv_of = |idx: u32| -> [f32; 2] {
+        let i = idx as usize;
+        if i * 2 + 1 < mesh.texcoords.len() {
+            let u = mesh.texcoords[i * 2];
+            let v = mesh.texcoords[i * 2 + 1];
+            if u.is_finite() && v.is_finite() {
+                return [u, v];
+            }
+        }
+        [0.0, 0.0]
+    };
+
     let count = out.verts.len() as u32;
     let (tri_chunks, _) = mesh.indices.as_chunks::<3>();
     for tri in tri_chunks {
@@ -91,7 +119,7 @@ fn mesh_from_tobj(mesh: &tobj::Mesh) -> Result<Mesh, ObjImportError> {
             ));
         }
         let mut face = Face::new(vec![a, b, c]);
-        face.uv = vec![[0.0, 0.0]; 3];
+        face.uv = vec![uv_of(a), uv_of(b), uv_of(c)];
         out.faces.push(face);
     }
     if out.faces.is_empty() {
