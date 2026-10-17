@@ -175,8 +175,8 @@ pub use inference::{
     SnapKind, SnapMask, SnapSource, clamp_snap_radius, snap_screen, snap_screen_with,
 };
 pub use material_commands::{
-    CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, MaterialEdit, RemoveMaterialCmd,
-    SetMaterialPropertiesCmd,
+    CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, MaterialEdit, MaterialRecipeCmd,
+    RecipeOp, RemoveMaterialCmd, SetMaterialPropertiesCmd,
 };
 pub use modal_feedback::ToolFeedback;
 pub use modeling_feedback::{

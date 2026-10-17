@@ -14,6 +14,7 @@ class PetuniaEditorCanvas;
 class PetuniaEditorPanel;
 class PetuniaGlWidget;
 class PetuniaNodeCanvas;
+class PetuniaNodePage;
 class PetuniaOperationHud;
 class PetuniaPropertiesPanel;
 class PetuniaRegionNavigator;
@@ -60,7 +61,10 @@ class PetuniaShellWindow : public QMainWindow {
     void triggerLocalAction(const QString &id);
     /// Força a leitura e a aplicação do estado (usado por testes e capturas).
     void syncNow();
-    PetuniaNodeCanvas *nodeCanvas() const { return m_nodeCanvas; }
+    PetuniaNodeCanvas *nodeCanvas() const;
+    PetuniaNodePage *nodePage() const { return m_nodePage; }
+    /// Abre a gaveta "Nós" no grafo de operações ou no do material ativo.
+    void openNodeEditor(bool material);
     PetuniaDrawer *drawerRegion() const { return m_drawer; }
 
   protected:
@@ -128,7 +132,7 @@ class PetuniaShellWindow : public QMainWindow {
     QHash<QString, PetuniaEditorPanel *> m_specialized;
     QHash<QString, QWidget *> m_canvases;
     QWidget *m_assetsHost{nullptr};
-    PetuniaNodeCanvas *m_nodeCanvas{nullptr};
+    PetuniaNodePage *m_nodePage{nullptr};
     PetuniaEditorPanel *m_assetsPanel{nullptr};
     QString m_projectPath;
     QString m_language;

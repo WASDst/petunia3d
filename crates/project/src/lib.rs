@@ -83,6 +83,7 @@ pub mod import_gltf;
 pub mod import_obj;
 pub mod io_atomic;
 pub mod material;
+pub mod material_recipe;
 pub mod model_library;
 pub mod motion;
 mod motion_gen;

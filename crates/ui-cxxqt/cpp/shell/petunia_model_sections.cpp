@@ -132,6 +132,11 @@ PetuniaMaterialForm::PetuniaMaterialForm(QWidget *parent) : PetuniaBoundForm(par
            {tr("PBR"), tr("Sem luz"), tr("Toon"), tr("Vidro"), tr("Emissivo")});
     choice(form, tr("Transparência"), "material_alpha_mode", "material_alpha", "index",
            {"opaque", "mask", "blend"}, {tr("Opaco"), tr("Recorte"), tr("Mistura")});
+    auto *nodes = new QPushButton(tr("Editar nós do material…"), this);
+    nodes->setToolTip(tr("Abre o editor de nós com a receita de texturas deste material"));
+    nodes->setAccessibleName(tr("Editar nós do material"));
+    form->addRow(nodes);
+    connect(nodes, &QPushButton::clicked, this, &PetuniaMaterialForm::nodeEditorRequested);
     button(form, tr("Criar textura albedo"), "create_albedo_texture");
     button(form, tr("Remover textura albedo"), "clear_albedo_texture");
 }

@@ -37,6 +37,8 @@ class PetuniaPropertiesPanel : public QWidget {
 
   signals:
     void sectionToggled(const QString &id, bool open);
+    /// "Editar nós do material" na seção Material.
+    void materialNodesRequested();
 
   private:
     PetuniaPropertySection *addSection(const QString &id, const QString &title, QWidget *content, bool open);

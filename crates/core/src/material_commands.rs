@@ -383,3 +383,319 @@ impl Command for SetMaterialPropertiesCmd {
         Ok(())
     }
 }
+
+/// Operação sobre a receita de nós de um material (O05).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RecipeOp {
+    /// Cria a receita inicial (Imagem → Saída de cor base).
+    Create,
+    AddNode {
+        kind: String,
+    },
+    Connect {
+        from: Uuid,
+        from_socket: u16,
+        to: Uuid,
+        to_socket: u16,
+    },
+    Disconnect {
+        to: Uuid,
+        to_socket: u16,
+    },
+    SetParam {
+        node: Uuid,
+        key: String,
+        value: petunia_project::material_recipe::RecipeParamValue,
+    },
+    RemoveNode {
+        node: Uuid,
+    },
+    /// Mantém os mapas gerados e descarta a receita (Bake / tornar estático).
+    Detach,
+}
+
+/// Edita a receita de nós do material `material`. Cada operação é um passo de
+/// Undo; a receita é reavaliada e os mapas do material atualizados na mesma
+/// transação. Recusas (tipo de soquete, ciclo, parâmetro inválido) não mudam nada.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MaterialRecipeCmd {
+    pub material: Uuid,
+    pub op: RecipeOp,
+}
+
+impl MaterialRecipeCmd {
+    pub fn new(material: Uuid, op: RecipeOp) -> Self {
+        Self { material, op }
+    }
+}
+
+impl Command for MaterialRecipeCmd {
+    fn label(&self) -> &'static str {
+        match self.op {
+            RecipeOp::Create => "create material recipe",
+            RecipeOp::AddNode { .. } => "add recipe node",
+            RecipeOp::Connect { .. } => "connect recipe nodes",
+            RecipeOp::Disconnect { .. } => "disconnect recipe nodes",
+            RecipeOp::SetParam { .. } => "edit recipe node",
+            RecipeOp::RemoveNode { .. } => "remove recipe node",
+            RecipeOp::Detach => "bake material recipe",
+        }
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::MATERIALS | ProjectChanges::TEXTURES
+    }
+
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let index = material_index(state.document, self.material).ok_or("material not found")?;
+        let has_recipe = state.document.materials[index].recipe.is_some();
+        match self.op {
+            RecipeOp::Create if has_recipe => Err("material already has a recipe"),
+            RecipeOp::Create => Ok(()),
+            _ if !has_recipe => Err("material has no recipe"),
+            _ => Ok(()),
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let index = material_index(state.document, self.material)
+            .ok_or_else(|| CommandError::StaleReference(self.material.to_string()))?;
+        let material = &mut state.document.materials[index];
+        let refuse =
+            |error: petunia_project::RecipeError| CommandError::Execution(error.to_string());
+        if self.op == RecipeOp::Create {
+            let mut recipe = petunia_project::material_recipe::MaterialRecipe::new_for(material);
+            recipe.evaluate_into(material);
+            material.recipe = Some(recipe);
+            return Ok(());
+        }
+        let mut recipe = material
+            .recipe
+            .take()
+            .ok_or_else(|| CommandError::Execution("material has no recipe".into()))?;
+        let result = match &self.op {
+            RecipeOp::Create => Ok(()),
+            RecipeOp::AddNode { kind } => recipe.add_node(kind).map(|_| ()).map_err(refuse),
+            RecipeOp::Connect {
+                from,
+                from_socket,
+                to,
+                to_socket,
+            } => recipe
+                .connect(*from, *from_socket, *to, *to_socket)
+                .map_err(refuse),
+            RecipeOp::Disconnect { to, to_socket } => {
+                if recipe.disconnect(*to, *to_socket) {
+                    Ok(())
+                } else {
+                    Err(CommandError::Execution("socket is not connected".into()))
+                }
+            }
+            RecipeOp::SetParam { node, key, value } => {
+                recipe.set_param(*node, key, value).map_err(refuse)
+            }
+            RecipeOp::RemoveNode { node } => {
+                if recipe.remove_node(*node) {
+                    Ok(())
+                } else {
+                    Err(CommandError::StaleReference(node.to_string()))
+                }
+            }
+            RecipeOp::Detach => {
+                // Os mapas já avaliados ficam no material; só a receita sai.
+                return Ok(());
+            }
+        };
+        if let Err(error) = result {
+            material.recipe = Some(recipe);
+            return Err(error);
+        }
+        recipe.evaluate_into(material);
+        material.recipe = Some(recipe);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod recipe_tests {
+    use super::*;
+    use crate::state::AppState;
+    use petunia_project::material_recipe::RecipeParamValue;
+
+    fn state_with_material() -> (AppState, Uuid) {
+        let mut state = AppState::default();
+        let material = Material::new("Wood");
+        let id = material.id;
+        state.project.project.materials.push(material);
+        (state, id)
+    }
+
+    fn material(state: &AppState, id: Uuid) -> &Material {
+        state
+            .project
+            .project
+            .materials
+            .iter()
+            .find(|m| m.id == id)
+            .unwrap()
+    }
+
+    fn recipe_node(state: &AppState, id: Uuid, last: bool) -> Uuid {
+        let nodes = &material(state, id).recipe.as_ref().unwrap().graph.nodes;
+        if last { nodes.last() } else { nodes.first() }.unwrap().id
+    }
+
+    #[test]
+    fn recipe_ops_are_undoable_and_regenerate_material_maps() {
+        let (mut state, id) = state_with_material();
+        state
+            .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Create))
+            .unwrap();
+        assert!(
+            material(&state, id).albedo_texture.is_some(),
+            "Imagem → cor base"
+        );
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Create))
+                .is_err(),
+            "uma receita por material"
+        );
+
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::AddNode {
+                    kind: "checker".into(),
+                },
+            ))
+            .unwrap();
+        let checker = recipe_node(&state, id, true);
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::AddNode {
+                    kind: "output".into(),
+                },
+            ))
+            .unwrap();
+        let output = recipe_node(&state, id, true);
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::SetParam {
+                    node: output,
+                    key: "channel".into(),
+                    value: RecipeParamValue::Choice("roughness".into()),
+                },
+            ))
+            .unwrap();
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::Connect {
+                    from: checker,
+                    from_socket: 0,
+                    to: output,
+                    to_socket: 0,
+                },
+            ))
+            .unwrap();
+        assert!(material(&state, id).roughness_texture.is_some());
+
+        // Recusa (soquete inexistente) não grava Undo nem altera o material.
+        let depth = state.project.undo.depth().0;
+        let before = material(&state, id).clone();
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(
+                    id,
+                    RecipeOp::Connect {
+                        from: checker,
+                        from_socket: 5,
+                        to: output,
+                        to_socket: 0,
+                    },
+                ))
+                .is_err()
+        );
+        assert_eq!(state.project.undo.depth().0, depth);
+        assert_eq!(material(&state, id), &before);
+
+        state.undo();
+        assert!(
+            material(&state, id).roughness_texture.is_none(),
+            "Undo desfaz a ligação e o mapa"
+        );
+        state.redo();
+        assert!(material(&state, id).roughness_texture.is_some());
+    }
+
+    #[test]
+    fn detach_keeps_generated_maps_and_removes_the_recipe() {
+        let (mut state, id) = state_with_material();
+        state
+            .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Create))
+            .unwrap();
+        state
+            .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Detach))
+            .unwrap();
+        assert!(material(&state, id).recipe.is_none());
+        assert!(material(&state, id).albedo_texture.is_some());
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(
+                    id,
+                    RecipeOp::AddNode {
+                        kind: "tint".into()
+                    }
+                ))
+                .is_err(),
+            "sem receita, nada a editar"
+        );
+    }
+
+    #[test]
+    fn unknown_kind_and_stale_material_are_refused() {
+        let (mut state, id) = state_with_material();
+        state
+            .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Create))
+            .unwrap();
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(
+                    id,
+                    RecipeOp::AddNode {
+                        kind: "shader".into()
+                    }
+                ))
+                .is_err()
+        );
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(Uuid::new_v4(), RecipeOp::Create))
+                .is_err()
+        );
+        let first = recipe_node(&state, id, false);
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(
+                    id,
+                    RecipeOp::RemoveNode {
+                        node: Uuid::new_v4()
+                    }
+                ))
+                .is_err()
+        );
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::RemoveNode { node: first },
+            ))
+            .unwrap();
+    }
+}

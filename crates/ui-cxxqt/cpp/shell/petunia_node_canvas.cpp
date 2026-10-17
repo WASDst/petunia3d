@@ -36,8 +36,15 @@ constexpr qreal kRow = 22;
 constexpr qreal kPort = 7;
 
 QString typeLabel(const QString &type) {
-    return type == QLatin1String("operation") ? petuniaTr(QStringLiteral("Operation"))
-                                              : petuniaTr(QStringLiteral("Geometry"));
+    if (type == QLatin1String("operation"))
+        return petuniaTr(QStringLiteral("Operation"));
+    if (type == QLatin1String("texture"))
+        return petuniaTr(QStringLiteral("Texture"));
+    if (type == QLatin1String("color"))
+        return petuniaTr(QStringLiteral("Color"));
+    if (type == QLatin1String("value"))
+        return petuniaTr(QStringLiteral("Value"));
+    return petuniaTr(QStringLiteral("Geometry"));
 }
 } // namespace
 
@@ -71,6 +78,22 @@ class PetuniaNodeItem : public QGraphicsObject {
     QPointF outputPos(int index) const { return QPointF(kNodeWidth, kHeader + 12 + index * kRow); }
     QPointF firstInputScene() const { return mapToScene(inputPos(0)); }
     QPointF firstOutputScene() const { return mapToScene(outputPos(0)); }
+    QPointF inputScene(int index) const { return mapToScene(inputPos(index)); }
+    QPointF outputScene(int index) const { return mapToScene(outputPos(index)); }
+    int inputCount() const { return int(m_inputs.size()); }
+    int outputCount() const { return int(m_outputs.size()); }
+    QString inputType(int index) const { return m_inputs.at(index).toObject()["type"].toString(); }
+    QString outputType(int index) const { return m_outputs.at(index).toObject()["type"].toString(); }
+    QString inputLabel(int index) const { return petuniaTr(m_inputs.at(index).toObject()["label"].toString()); }
+
+    /// Índice da entrada sob o ponto (coordenadas da cena), ou -1.
+    int inputAt(const QPointF &scenePos) const {
+        const QPointF local = mapFromScene(scenePos);
+        for (int i = 0; i < m_inputs.size(); ++i)
+            if (QLineF(local, inputPos(i)).length() <= kPort + 6)
+                return i;
+        return -1;
+    }
 
     /// Índice da saída sob o ponto (coordenadas da cena), ou -1.
     int outputAt(const QPointF &scenePos) const {
@@ -137,13 +160,26 @@ class PetuniaNodeItem : public QGraphicsObject {
   private:
     void drawPort(QPainter *p, const QPointF &pos, const QJsonObject &port, bool input) const {
         const auto &t = PetuniaTheme::instance();
-        const bool geometry = port["type"].toString() == QLatin1String("geometry");
-        p->setBrush(geometry ? t.bgSurface() : t.accentPrimary());
-        p->setPen(QPen(geometry ? t.accentPrimary() : t.borderStrong(), 2));
-        // Forma distingue o tipo (círculo = geometria, losango = operação).
-        if (geometry) {
+        const QString type = port["type"].toString();
+        // A forma distingue o tipo (nunca só a cor): círculo vazado = geometria,
+        // losango = operação, quadrado arredondado = textura, círculo cheio = cor,
+        // quadrado pequeno = valor.
+        p->setPen(QPen(t.borderStrong(), 2));
+        if (type == QLatin1String("geometry")) {
+            p->setBrush(t.bgSurface());
+            p->setPen(QPen(t.accentPrimary(), 2));
             p->drawEllipse(pos, kPort, kPort);
+        } else if (type == QLatin1String("texture")) {
+            p->setBrush(t.accentPrimary());
+            p->drawRoundedRect(QRectF(pos.x() - kPort, pos.y() - kPort, 2 * kPort, 2 * kPort), 3, 3);
+        } else if (type == QLatin1String("color")) {
+            p->setBrush(t.statusWarning());
+            p->drawEllipse(pos, kPort, kPort);
+        } else if (type == QLatin1String("value")) {
+            p->setBrush(t.textSecondary());
+            p->drawRect(QRectF(pos.x() - kPort + 2, pos.y() - kPort + 2, 2 * kPort - 4, 2 * kPort - 4));
         } else {
+            p->setBrush(t.accentPrimary());
             QPolygonF diamond;
             diamond << pos + QPointF(0, -kPort - 1) << pos + QPointF(kPort + 1, 0) << pos + QPointF(0, kPort + 1)
                     << pos + QPointF(-kPort - 1, 0);
@@ -160,9 +196,11 @@ class PetuniaNodeItem : public QGraphicsObject {
         const auto params = m_row["params"].toObject();
         QStringList parts;
         if (params.contains(QStringLiteral("operation")))
-            parts << petuniaTr(params["operation"].toString().left(1).toUpper() + params["operation"].toString().mid(1));
+            parts << petuniaChoiceLabel(params["operation"].toString());
         if (params.contains(QStringLiteral("axis")))
             parts << params["axis"].toString().toUpper();
+        if (params.contains(QStringLiteral("channel")))
+            parts << petuniaChoiceLabel(params["channel"].toString());
         return parts.join(QStringLiteral(" · "));
     }
 
@@ -179,12 +217,14 @@ class PetuniaNodeItem : public QGraphicsObject {
 
 class PetuniaWireItem : public QGraphicsPathItem {
   public:
-    PetuniaWireItem(const QString &from, const QString &to, const QString &type)
-        : m_from(from), m_to(to), m_type(type) {
+    PetuniaWireItem(const QString &from, int fromPort, const QString &to, int toPort, const QString &type)
+        : m_from(from), m_to(to), m_type(type), m_fromPort(fromPort), m_toPort(toPort) {
         setZValue(-1);
     }
     const QString &from() const { return m_from; }
     const QString &to() const { return m_to; }
+    int fromPort() const { return m_fromPort; }
+    int toPort() const { return m_toPort; }
     const QString &portType() const { return m_type; }
 
     void connectPorts(const QPointF &a, const QPointF &b) {
@@ -219,6 +259,7 @@ class PetuniaWireItem : public QGraphicsPathItem {
 
   private:
     QString m_from, m_to, m_type;
+    int m_fromPort{0}, m_toPort{0};
     QPointF m_mid;
 };
 
@@ -403,12 +444,69 @@ QStringList PetuniaNodeCanvas::targetsOf(const QString &operationId) const {
     return out;
 }
 
+void PetuniaNodeCanvas::normalizeRecipe(const QJsonObject &recipe, QJsonArray &nodes, QJsonArray &edges) const {
+    // A receita usa soquetes indexados e tipos (textura/cor/valor): vira o mesmo
+    // formato de linhas do Operation Graph para reaproveitar layout, a11y e teclado.
+    auto ports = [](const QJsonArray &types, const QString &prefix) {
+        QJsonArray out;
+        for (int i = 0; i < types.size(); ++i) {
+            const QString type = types[i].toString();
+            QString label = type.left(1).toUpper() + type.mid(1);
+            if (types.size() > 1)
+                label += QLatin1Char(' ') + QChar(QLatin1Char('A').unicode() + i);
+            out.append(QJsonObject{{"name", prefix + QString::number(i)}, {"label", label}, {"type", type}});
+        }
+        return out;
+    };
+    for (const auto &value : recipe["nodes"].toArray()) {
+        auto row = value.toObject();
+        row["title"] = petuniaTr(row["label"].toString());
+        row["type_id"] = QStringLiteral("recipe.") + row["kind"].toString();
+        row["inputs"] = ports(row["inputs"].toArray(), QStringLiteral("in"));
+        row["outputs"] = ports(row["outputs"].toArray(), QStringLiteral("out"));
+        nodes.append(row);
+    }
+    for (const auto &value : recipe["edges"].toArray()) {
+        const auto e = value.toObject();
+        edges.append(QJsonObject{{"from", e["from"]},
+                                 {"to", e["to"]},
+                                 {"from_port", e["from_socket"]},
+                                 {"to_port", e["to_socket"]},
+                                 {"from_port_name", QStringLiteral("out") + QString::number(e["from_socket"].toInt())},
+                                 {"to_port_name", QStringLiteral("in") + QString::number(e["to_socket"].toInt())},
+                                 {"type", e["type"]}});
+    }
+}
+
+void PetuniaNodeCanvas::setDomain(Domain domain) {
+    if (domain == m_domain)
+        return;
+    m_domain = domain;
+    m_selected.clear();
+    m_signature.clear();
+    setToolTip(domain == Domain::Material
+                   ? tr("Nós do material: setas navegam, Enter liga a…, Delete remove, Shift+A adiciona")
+                   : tr("Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona"));
+    if (!m_state.isEmpty())
+        sync(m_state);
+}
+
 void PetuniaNodeCanvas::sync(const QJsonObject &state) {
-    const auto graph = state["op_graph"].toObject();
-    const auto nodes = graph["nodes"].toArray();
-    const auto edges = graph["edges"].toArray();
+    m_state = state;
+    QJsonArray nodes;
+    QJsonArray edges;
+    if (m_domain == Domain::Material) {
+        const auto recipe = state["material_recipe"].toObject();
+        m_hasRecipe = recipe["has_recipe"].toBool();
+        m_catalog = recipe["catalog"].toArray();
+        normalizeRecipe(recipe, nodes, edges);
+    } else {
+        const auto graph = state["op_graph"].toObject();
+        nodes = graph["nodes"].toArray();
+        edges = graph["edges"].toArray();
+    }
     m_activeAsset = state["active_asset_id"].toString();
-    QString signature;
+    QString signature = m_domain == Domain::Material ? QStringLiteral("M|") : QStringLiteral("O|");
     for (const auto &n : nodes) {
         const auto o = n.toObject();
         signature += o["id"].toString() + QLatin1Char(':') + o["title"].toString() + QLatin1Char(':') +
@@ -441,7 +539,8 @@ void PetuniaNodeCanvas::sync(const QJsonObject &state) {
         }
     }
     for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
-        it.value()->setActive(!m_activeAsset.isEmpty() && assetOf(it.key()) == m_activeAsset);
+        it.value()->setActive(m_domain == Domain::Operations && !m_activeAsset.isEmpty() &&
+                              assetOf(it.key()) == m_activeAsset);
     updateWires();
     refreshAccessibility();
 }
@@ -475,8 +574,16 @@ void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges
         auto *item = new PetuniaNodeItem(row);
         m_scene->addItem(item);
         const QString id = row["id"].toString();
-        const bool op = row["type_id"].toString() != QLatin1String("petunia.object");
-        const int column = op ? 1 : (toolObjects.contains(id) ? 0 : 2);
+        int column = 1;
+        if (m_domain == Domain::Material) {
+            const QString category = row["category"].toString();
+            column = category == QLatin1String("output") ? 2
+                     : (category == QLatin1String("input") || category == QLatin1String("pattern")) ? 0
+                                                                                                     : 1;
+        } else {
+            const bool op = row["type_id"].toString() != QLatin1String("petunia.object");
+            column = op ? 1 : (toolObjects.contains(id) ? 0 : 2);
+        }
         const QPointF fallback(column * 260.0, rowInColumn[column]++ * 120.0);
         QPointF pos = rowPosition(row);
         m_serverPositions.insert(id, pos);
@@ -496,8 +603,8 @@ void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges
         m_selected = nodeIds().value(0);
     for (const auto &value : edges) {
         const auto e = value.toObject();
-        auto *wire = new PetuniaWireItem(e["from"].toString(), e["to"].toString(),
-                                         e["type"].toString());
+        auto *wire = new PetuniaWireItem(e["from"].toString(), e["from_port"].toInt(), e["to"].toString(),
+                                         e["to_port"].toInt(), e["type"].toString());
         m_scene->addItem(wire);
         m_wires.append(wire);
     }
@@ -517,7 +624,9 @@ void PetuniaNodeCanvas::updateWires() {
             continue;
         // Fio de operação: saída da operação → entrada "operations" do objeto.
         // Fio de geometria: saída "geometry" do objeto-ferramenta → entrada "tool".
-        wire->connectPorts(from->firstOutputScene(), to->firstInputScene());
+        const int out = std::clamp(wire->fromPort(), 0, std::max(0, from->outputCount() - 1));
+        const int in = std::clamp(wire->toPort(), 0, std::max(0, to->inputCount() - 1));
+        wire->connectPorts(from->outputScene(out), to->inputScene(in));
     }
 }
 
@@ -530,12 +639,27 @@ void PetuniaNodeCanvas::selectNode(const QString &id) {
     if (auto *item = m_nodes.value(id))
         ensureVisible(item, 40, 40);
     refreshAccessibility();
+    emit nodeSelected(id);
 }
 
 QString PetuniaNodeCanvas::describeNode(const QString &id) const {
     const auto row = nodeRow(id);
     if (row.isEmpty())
         return tr("Nenhum nó. Shift+A adiciona uma operação ao objeto ativo.");
+    if (m_domain == Domain::Material) {
+        QStringList sources, targets;
+        for (const auto &edge : m_edgeRows) {
+            const auto e = edge.toObject();
+            if (e["to"].toString() == id)
+                sources << nodeRow(e["from"].toString())["title"].toString();
+            if (e["from"].toString() == id)
+                targets << nodeRow(e["to"].toString())["title"].toString();
+        }
+        QString text = row["title"].toString();
+        text += sources.isEmpty() ? tr(". Sem entradas ligadas.") : tr(". Recebe de: %1.").arg(sources.join(QStringLiteral(", ")));
+        text += targets.isEmpty() ? tr(" Saída livre.") : tr(" Envia para: %1.").arg(targets.join(QStringLiteral(", ")));
+        return text;
+    }
     QString text = petuniaTr(row["label"].toString()) + QStringLiteral(": ") + row["title"].toString();
     if (row["type_id"].toString() == QLatin1String("petunia.object")) {
         QStringList ops;
@@ -590,6 +714,31 @@ bool PetuniaNodeCanvas::disconnectOperation(const QString &operationId, const QS
         return false;
     m_controller->request(QStringLiteral("graph_unapply"), {{"operation", operationId}, {"target", asset}});
     return true;
+}
+
+bool PetuniaNodeCanvas::connectSockets(const QString &from, int fromSocket, const QString &to, int toSocket) {
+    if (m_domain != Domain::Material || from == to || !m_nodes.contains(from) || !m_nodes.contains(to))
+        return false;
+    m_controller->request(QStringLiteral("material_recipe_connect"),
+                          {{"from", from}, {"from_socket", fromSocket}, {"to", to}, {"to_socket", toSocket}});
+    return true;
+}
+
+bool PetuniaNodeCanvas::disconnectSocket(const QString &to, int toSocket) {
+    if (m_domain != Domain::Material || !m_nodes.contains(to))
+        return false;
+    m_controller->request(QStringLiteral("material_recipe_disconnect"), {{"to", to}, {"to_socket", toSocket}});
+    return true;
+}
+
+QPointF PetuniaNodeCanvas::inputSocketScenePos(const QString &id, int socket) const {
+    auto *item = m_nodes.value(id);
+    return item ? item->inputScene(socket) : QPointF();
+}
+
+QPointF PetuniaNodeCanvas::outputSocketScenePos(const QString &id, int socket) const {
+    auto *item = m_nodes.value(id);
+    return item ? item->outputScene(socket) : QPointF();
 }
 
 QPointF PetuniaNodeCanvas::nodeScenePosition(const QString &id) const {
@@ -664,11 +813,18 @@ void PetuniaNodeCanvas::nudgeSelected(int dx, int dy) {
         return;
     item->setPos(item->pos() + QPointF(dx, dy));
     updateWires();
+    if (m_domain == Domain::Material)
+        return; // posição da receita é só da sessão (sem dado de documento)
     m_controller->request(QStringLiteral("graph_move_node"),
                           {{"node", m_selected}, {"x", item->pos().x()}, {"y", item->pos().y()}});
 }
 
 void PetuniaNodeCanvas::deleteSelected() {
+    if (m_domain == Domain::Material) {
+        if (m_nodes.contains(m_selected))
+            m_controller->request(QStringLiteral("material_recipe_remove"), {{"node", m_selected}});
+        return;
+    }
     if (!isOperation(m_selected))
         return;
     m_controller->request(QStringLiteral("graph_remove"), {{"node", m_selected}});
@@ -695,7 +851,10 @@ void PetuniaNodeCanvas::keyPressEvent(QKeyEvent *event) {
     switch (event->key()) {
     case Qt::Key_Return:
     case Qt::Key_Enter:
-        if (isOperation(m_selected)) {
+        if (m_domain == Domain::Material && m_nodes.contains(m_selected)) {
+            auto *item = m_nodes.value(m_selected);
+            showRecipeConnectMenu(viewport()->mapToGlobal(mapFromScene(item->pos())));
+        } else if (isOperation(m_selected)) {
             auto *item = m_nodes.value(m_selected);
             showConnectMenu(item ? viewport()->mapToGlobal(mapFromScene(item->pos())) : QCursor::pos());
         }
@@ -763,7 +922,74 @@ void PetuniaNodeCanvas::showConnectMenu(const QPoint &globalPos) {
     }
 }
 
+void PetuniaNodeCanvas::showRecipeConnectMenu(const QPoint &globalPos) {
+    auto *source = m_nodes.value(m_selected);
+    if (!source)
+        return;
+    QMenu menu(this);
+    menu.setAccessibleName(tr("Ligar a"));
+    int count = 0;
+    for (int out = 0; out < source->outputCount(); ++out) {
+        const QString type = source->outputType(out);
+        for (const auto &value : m_nodeRows) {
+            const QString target = value.toObject()["id"].toString();
+            auto *item = m_nodes.value(target);
+            if (!item || target == m_selected)
+                continue;
+            for (int in = 0; in < item->inputCount(); ++in) {
+                if (item->inputType(in) != type)
+                    continue;
+                bool linked = false;
+                for (const auto &edge : m_edgeRows) {
+                    const auto e = edge.toObject();
+                    linked |= e["from"].toString() == m_selected && e["to"].toString() == target &&
+                              e["to_port"].toInt() == in && e["from_port"].toInt() == out;
+                }
+                auto *action = menu.addAction(tr("%1 · %2").arg(value.toObject()["title"].toString(), item->inputLabel(in)));
+                action->setCheckable(true);
+                action->setChecked(linked);
+                action->setData(QStringList{target, QString::number(in), QString::number(out)});
+                ++count;
+            }
+        }
+    }
+    if (count == 0)
+        menu.addAction(tr("Nenhuma entrada compatível"))->setEnabled(false);
+    if (auto *chosen = menu.exec(globalPos)) {
+        const auto data = chosen->data().toStringList();
+        if (data.size() == 3) {
+            if (chosen->isChecked())
+                connectSockets(m_selected, data[2].toInt(), data[0], data[1].toInt());
+            else
+                disconnectSocket(data[0], data[1].toInt());
+        }
+    }
+}
+
 void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos) {
+    if (m_domain == Domain::Material) {
+        QMenu menu(this);
+        menu.setAccessibleName(tr("Adicionar nó de material"));
+        if (!m_hasRecipe) {
+            auto *create = menu.addAction(tr("Criar receita de nós para o material"));
+            menu.setEnabled(!m_state["material_recipe"].toObject()["material_id"].isNull());
+            if (menu.exec(globalPos) == create)
+                m_controller->request(QStringLiteral("material_recipe_create"));
+            return;
+        }
+        QString category;
+        for (const auto &value : m_catalog) {
+            const auto kind = value.toObject();
+            if (kind["category"].toString() != category) {
+                category = kind["category"].toString();
+                menu.addSection(petuniaTr(category.left(1).toUpper() + category.mid(1)));
+            }
+            menu.addAction(petuniaTr(kind["label"].toString()))->setData(kind["id"].toString());
+        }
+        if (auto *chosen = menu.exec(globalPos); chosen && !chosen->data().toString().isEmpty())
+            m_controller->request(QStringLiteral("material_recipe_add"), {{"kind", chosen->data().toString()}});
+        return;
+    }
     QMenu menu(this);
     menu.setAccessibleName(tr("Adicionar operação"));
     auto *boolean = menu.addAction(PetuniaIcons::get(QStringLiteral("boolean_cut")), tr("Booleana (objeto ativo é a ferramenta)"));
@@ -780,8 +1006,25 @@ void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos) {
 }
 
 void PetuniaNodeCanvas::contextMenuEvent(QContextMenuEvent *event) {
-    if (auto *item = nodeAt(mapToScene(event->pos())))
-        selectNode(item->id());
+    auto *hit = nodeAt(mapToScene(event->pos()));
+    if (hit)
+        selectNode(hit->id());
+    if (m_domain == Domain::Material) {
+        if (hit) {
+            QMenu menu(this);
+            auto *link = menu.addAction(tr("Ligar a…"));
+            auto *remove = menu.addAction(tr("Remover nó"));
+            auto *chosen = menu.exec(event->globalPos());
+            if (chosen == link)
+                showRecipeConnectMenu(event->globalPos());
+            else if (chosen == remove)
+                deleteSelected();
+        } else {
+            showAddMenu(event->globalPos());
+        }
+        event->accept();
+        return;
+    }
     if (isOperation(m_selected)) {
         QMenu menu(this);
         auto *apply = menu.addAction(tr("Aplicar em…"));
@@ -814,8 +1057,9 @@ void PetuniaNodeCanvas::mousePressEvent(QMouseEvent *event) {
         selectNode(node->id());
         // Arrasto de fio: só saídas de operação conectam (operação → objeto).
         const int output = node->outputAt(scenePos);
-        if (output >= 0 && !node->isObject()) {
+        if (output >= 0 && (m_domain == Domain::Material || !node->isObject())) {
             m_wireFrom = node->id();
+            m_wireFromSocket = output;
             m_ghost = m_scene->addPath(QPainterPath(), QPen(PetuniaTheme::instance().accentSelectionActive(), 2.4, Qt::DotLine));
             event->accept();
             return;
@@ -837,8 +1081,8 @@ void PetuniaNodeCanvas::mouseMoveEvent(QMouseEvent *event) {
         return;
     }
     const QPointF scenePos = mapToScene(event->pos());
-    if (m_ghost && !m_wireFrom.isEmpty()) {
-        QPainterPath path(m_nodes.value(m_wireFrom)->firstOutputScene());
+    if (m_ghost && !m_wireFrom.isEmpty() && m_nodes.contains(m_wireFrom)) {
+        QPainterPath path(m_nodes.value(m_wireFrom)->outputScene(m_wireFromSocket));
         const QPointF a = path.currentPosition();
         const qreal dx = std::max<qreal>(40, std::abs(scenePos.x() - a.x()) / 2);
         path.cubicTo(a + QPointF(dx, 0), scenePos - QPointF(dx, 0), scenePos);
@@ -865,14 +1109,34 @@ void PetuniaNodeCanvas::mouseReleaseEvent(QMouseEvent *event) {
         m_wireFrom.clear();
         delete m_ghost;
         m_ghost = nullptr;
-        if (auto *target = nodeAt(scenePos); target && target->isObject())
+        auto *target = nodeAt(scenePos);
+        auto *source = m_nodes.value(from); // pode ter sumido num sync durante o arrasto
+        if (m_domain == Domain::Material && source && target && target->id() != from &&
+            m_wireFromSocket < source->outputCount()) {
+            // Solta sobre uma entrada: essa; senão a primeira entrada do mesmo tipo.
+            const QString type = source->outputType(m_wireFromSocket);
+            int socket = target->inputAt(scenePos);
+            if (socket < 0 || target->inputType(socket) != type) {
+                socket = -1;
+                for (int i = 0; i < target->inputCount() && socket < 0; ++i)
+                    if (target->inputType(i) == type)
+                        socket = i;
+            }
+            if (socket >= 0)
+                connectSockets(from, m_wireFromSocket, target->id(), socket);
+        } else if (target && target->isObject()) {
             connectOperation(from, target->id());
+        }
         event->accept();
         return;
     }
     if (m_dragNode) {
         auto *node = m_dragNode;
         m_dragNode = nullptr;
+        if (m_domain == Domain::Material) {
+            event->accept();
+            return;
+        }
         m_controller->request(QStringLiteral("graph_move_node"),
                               {{"node", node->id()}, {"x", node->pos().x()}, {"y", node->pos().y()}});
         event->accept();

@@ -21,8 +21,12 @@ class PetuniaOperationCard : public QFrame {
     Q_OBJECT
 
   public:
+    /// `Operation`: nó do Operation Graph (pedidos `graph_*`). `Recipe`: nó da
+    /// receita de material (pedidos `material_recipe_*`, sem ativar/alvos).
+    enum class Mode { Operation, Recipe };
+
     PetuniaOperationCard(PetuniaShellController *controller, const QJsonObject &row, bool asTool,
-                         QWidget *parent = nullptr);
+                         QWidget *parent = nullptr, Mode mode = Mode::Operation);
 
     /// Atualiza valores/estados sem recriar controles (sinais bloqueados).
     void update(const QJsonObject &row, const QJsonArray &candidates);
@@ -43,6 +47,7 @@ class PetuniaOperationCard : public QFrame {
     PetuniaShellController *m_controller;
     QString m_nodeId;
     bool m_asTool;
+    Mode m_mode{Mode::Operation};
     QVBoxLayout *m_layout{nullptr};
     QCheckBox *m_enabled{nullptr};
     QLabel *m_subtitle{nullptr};

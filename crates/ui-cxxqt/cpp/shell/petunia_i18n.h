@@ -12,3 +12,13 @@ inline QString petuniaTr(const QString &source) {
         return source;
     return QCoreApplication::translate("PetuniaShell", source.toUtf8().constData());
 }
+
+/// Rótulo de uma opção de escolha publicada por id estável em inglês
+/// (`base_color` → "Base color", traduzido; `x` → "X").
+inline QString petuniaChoiceLabel(const QString &id) {
+    if (id.size() == 1)
+        return id.toUpper();
+    QString words = id;
+    words.replace(QLatin1Char('_'), QLatin1Char(' '));
+    return petuniaTr(words.left(1).toUpper() + words.mid(1));
+}

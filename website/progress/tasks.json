@@ -896,6 +896,21 @@
       "revision": "011f097b+working tree",
       "document": "09-ui/viewport-input-boundary.md",
       "summary": "2026-10-17, CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen: petunia_editor (lib 137 + integração, incl. paint_pointer_actions_u05 e temporary_transform_h11 9) pass; petunia_ui_cxxqt shell_v2 1, bridge_test 12, editor_parity 21, lib split_view pass; clippy -D warnings e fmt limpos. Não executado (Q08): mouse/tablet físicos em display real, Windows, DPR físico 2."
+    },
+    "o05-document-commands": {
+      "revision": "9d144c7c+working tree",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Material.recipe (MaterialRecipe: grafo SurfaceRecipe + imagem de entrada + canais gerados) com serde default; avaliação só do que alimenta Saídas ligadas, limpando mapas gerados antes; catálogo descritivo (Imagem, Xadrez, Gradiente, Ruído, Tingir, Misturar, Multiplicar, Inverter, Posterizar, Saída) com parâmetros tipados; repair de arquivo hostil. MaterialRecipeCmd (criar/adicionar/ligar substituindo entrada/desligar/parâmetro/remover/tornar estático) com Undo; recusas sem efeito. Testes: project material_recipe 7, core recipe_tests 3, ui-cxxqt material_recipe_view 2 — pass."
+    },
+    "o05-gui": {
+      "revision": "9d144c7c+working tree",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Gaveta Nós com PetuniaNodePage (Operações | Material, Criar receita, Tornar estático, painel de parâmetros gerado pelo catálogo com controle de cor) e 'Editar nós do material…' na seção Material. Canvas com soquetes tipados por forma (textura/cor/valor/geometria/operação), arrasto saída→entrada ou Enter 'Ligar a…', Shift+A com catálogo, Delete remove. Harness shell_v2 offscreen: material:* (criar, ligar substituindo, painel com cor e número, parâmetro, a11y, Undo, tornar estático) pass; capturas target/shell-captures/shell_POLY_material_nodes.png e shell_POLY_material_preview.png (xadrez visível no cubo em Material preview) revisadas."
+    },
+    "o05-gates": {
+      "revision": "9d144c7c+working tree",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "2026-10-17, CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen: petunia_project (todas as suítes), petunia_core lib 201, petunia_editor (lib+integração), petunia_ui_cxxqt lib 5, shell_v2 1, bridge_test 12, editor_parity 21, ui_i18n_catalog 3, component_contracts 1, ui_contract_ids 3 — pass; clippy -D warnings (project, core, editor, ui-cxxqt) e fmt limpos. Limites: posição dos nós da receita não é persistida; nós PbrMaterial/AssignMaterial do O04 aparecem sem controles; GPU física, leitor de tela e Windows not run (Q08)."
     }
   },
   "tasks": [
@@ -4837,6 +4852,37 @@
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
           "completed": true,
           "evidence": "o04-gates"
+        }
+      ],
+      "documents": [
+        "03-geometry/operation-graph.md",
+        "05-materials/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "O05",
+      "phase": "geometry",
+      "title": "Operation Graph — nós de material editáveis na GUI",
+      "description": "Receita de nós por material no documento, comandos com Undo e editor de nós (Operações | Material) com parâmetros gerados do catálogo.",
+      "document": "03-geometry/operation-graph.md",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "2026-10-17: SurfaceRecipe (O04) existia só como biblioteca, sem documento, comandos nem GUI; agora ponta a ponta.",
+      "checkpoints": [
+        {
+          "title": "Receita no documento, avaliação tolerante à edição e comandos com Undo.",
+          "completed": true,
+          "evidence": "o05-document-commands"
+        },
+        {
+          "title": "Editor de nós com domínio Material, soquetes tipados, teclado e parâmetros gerados.",
+          "completed": true,
+          "evidence": "o05-gui"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": true,
+          "evidence": "o05-gates"
         }
       ],
       "documents": [

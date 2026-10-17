@@ -87,7 +87,9 @@ void PetuniaPropertiesPanel::buildModeling() {
     });
 
     addSection(QStringLiteral("boolean"), tr("Booleana (direta)"), bound(new PetuniaBooleanForm()), false);
-    addSection(QStringLiteral("material"), tr("Material"), bound(new PetuniaMaterialForm()), false);
+    auto *material = new PetuniaMaterialForm();
+    connect(material, &PetuniaMaterialForm::nodeEditorRequested, this, &PetuniaPropertiesPanel::materialNodesRequested);
+    addSection(QStringLiteral("material"), tr("Material"), bound(material), false);
     m_layout->addStretch(1);
 }
 

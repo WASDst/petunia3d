@@ -24,10 +24,20 @@ class PetuniaNodeCanvas : public QGraphicsView {
     Q_OBJECT
 
   public:
+    /// Grafo exibido: operações de geometria (ADR-C13) ou receita do material ativo (O05).
+    enum class Domain { Operations, Material };
+
     explicit PetuniaNodeCanvas(PetuniaShellController *controller, QWidget *parent = nullptr);
     ~PetuniaNodeCanvas() override;
 
     void sync(const QJsonObject &state);
+    void setDomain(Domain domain);
+    Domain domain() const { return m_domain; }
+    /// Receita: liga `from.saída[fromSocket]` → `to.entrada[toSocket]` (substitui a ligação existente).
+    bool connectSockets(const QString &from, int fromSocket, const QString &to, int toSocket);
+    bool disconnectSocket(const QString &to, int toSocket);
+    QPointF inputSocketScenePos(const QString &id, int socket) const;
+    QPointF outputSocketScenePos(const QString &id, int socket) const;
     int nodeCount() const { return m_nodes.size(); }
     int wireCount() const { return m_wires.size(); }
     QStringList nodeIds() const;
@@ -51,6 +61,9 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QPointF inputPortScenePos(const QString &id) const;
     void fitAll();
 
+  signals:
+    void nodeSelected(const QString &id);
+
   protected:
     void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -72,6 +85,8 @@ class PetuniaNodeCanvas : public QGraphicsView {
     void moveSelection(int dx, int dy);
     void nudgeSelected(int dx, int dy);
     void showConnectMenu(const QPoint &globalPos);
+    void showRecipeConnectMenu(const QPoint &globalPos);
+    void normalizeRecipe(const QJsonObject &recipe, QJsonArray &nodes, QJsonArray &edges) const;
     void showAddMenu(const QPoint &globalPos);
     void deleteSelected();
     PetuniaNodeItem *nodeAt(const QPointF &scenePos) const;
@@ -92,6 +107,11 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QString m_signature;
     QString m_selected;
     QString m_activeAsset;
+    Domain m_domain{Domain::Operations};
+    QJsonObject m_state;
+    QJsonArray m_catalog;
+    bool m_hasRecipe{false};
+    int m_wireFromSocket{0};
     // Arrasto de fio a partir de uma saída.
     QString m_wireFrom;
     QGraphicsPathItem *m_ghost{nullptr};

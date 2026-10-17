@@ -3906,5 +3906,241 @@
   "Sem criatura": {
     "pt-BR": "Sem criatura",
     "en": "No creature"
+  },
+  "Remover nó": {
+    "pt-BR": "Remover nó",
+    "en": "Remove node"
+  },
+  "Editar nós do material…": {
+    "pt-BR": "Editar nós do material…",
+    "en": "Edit material nodes…"
+  },
+  "Abre o editor de nós com a receita de texturas deste material": {
+    "pt-BR": "Abre o editor de nós com a receita de texturas deste material",
+    "en": "Opens the node editor with this material's texture recipe"
+  },
+  "Editar nós do material": {
+    "pt-BR": "Editar nós do material",
+    "en": "Edit material nodes"
+  },
+  "Operações de geometria do objeto": {
+    "pt-BR": "Operações de geometria do objeto",
+    "en": "Object geometry operations"
+  },
+  "Receita de nós do material ativo": {
+    "pt-BR": "Receita de nós do material ativo",
+    "en": "Active material node recipe"
+  },
+  "Grafo exibido": {
+    "pt-BR": "Grafo exibido",
+    "en": "Displayed graph"
+  },
+  "Criar receita de nós": {
+    "pt-BR": "Criar receita de nós",
+    "en": "Create node recipe"
+  },
+  "Cria uma receita de nós para o material ativo (Imagem → Saída)": {
+    "pt-BR": "Cria uma receita de nós para o material ativo (Imagem → Saída)",
+    "en": "Creates a node recipe for the active material (Image → Output)"
+  },
+  "Tornar estático": {
+    "pt-BR": "Tornar estático",
+    "en": "Make static"
+  },
+  "Mantém os mapas gerados e remove a receita do material": {
+    "pt-BR": "Mantém os mapas gerados e remove a receita do material",
+    "en": "Keeps the generated maps and removes the recipe from the material"
+  },
+  "Parâmetros do nó": {
+    "pt-BR": "Parâmetros do nó",
+    "en": "Node parameters"
+  },
+  "Nenhum material no projeto.": {
+    "pt-BR": "Nenhum material no projeto.",
+    "en": "No material in the project."
+  },
+  "Material: %1 — sem receita de nós.": {
+    "pt-BR": "Material: %1 — sem receita de nós.",
+    "en": "Material: %1 — no node recipe."
+  },
+  "Material: %1 — erro: %2": {
+    "pt-BR": "Material: %1 — erro: %2",
+    "en": "Material: %1 — error: %2"
+  },
+  "Material: %1 · Shift+A adiciona nós": {
+    "pt-BR": "Material: %1 · Shift+A adiciona nós",
+    "en": "Material: %1 · Shift+A adds nodes"
+  },
+  "Operações do objeto · Shift+A adiciona": {
+    "pt-BR": "Operações do objeto · Shift+A adiciona",
+    "en": "Object operations · Shift+A adds"
+  },
+  "Selecione um nó para editar seus parâmetros.": {
+    "pt-BR": "Selecione um nó para editar seus parâmetros.",
+    "en": "Select a node to edit its parameters."
+  },
+  "Objeto: %1. Selecione uma operação para editar.": {
+    "pt-BR": "Objeto: %1. Selecione uma operação para editar.",
+    "en": "Object: %1. Select an operation to edit."
+  },
+  "Nós do material: setas navegam, Enter liga a…, Delete remove, Shift+A adiciona": {
+    "pt-BR": "Nós do material: setas navegam, Enter liga a…, Delete remove, Shift+A adiciona",
+    "en": "Material nodes: arrows navigate, Enter links to…, Delete removes, Shift+A adds"
+  },
+  ". Sem entradas ligadas.": {
+    "pt-BR": ". Sem entradas ligadas.",
+    "en": ". No inputs connected."
+  },
+  ". Recebe de: %1.": {
+    "pt-BR": ". Recebe de: %1.",
+    "en": ". Receives from: %1."
+  },
+  " Saída livre.": {
+    "pt-BR": " Saída livre.",
+    "en": " Output unconnected."
+  },
+  " Envia para: %1.": {
+    "pt-BR": " Envia para: %1.",
+    "en": " Sends to: %1."
+  },
+  "Ligar a": {
+    "pt-BR": "Ligar a",
+    "en": "Link to"
+  },
+  "%1 · %2": {
+    "pt-BR": "%1 · %2",
+    "en": "%1 · %2"
+  },
+  "Nenhuma entrada compatível": {
+    "pt-BR": "Nenhuma entrada compatível",
+    "en": "No compatible input"
+  },
+  "Adicionar nó de material": {
+    "pt-BR": "Adicionar nó de material",
+    "en": "Add material node"
+  },
+  "Criar receita de nós para o material": {
+    "pt-BR": "Criar receita de nós para o material",
+    "en": "Create a node recipe for the material"
+  },
+  "Ligar a…": {
+    "pt-BR": "Ligar a…",
+    "en": "Link to…"
+  },
+  "Image": {
+    "pt-BR": "Imagem",
+    "en": "Image"
+  },
+  "Checker": {
+    "pt-BR": "Xadrez",
+    "en": "Checker"
+  },
+  "Noise": {
+    "pt-BR": "Ruído",
+    "en": "Noise"
+  },
+  "Tint": {
+    "pt-BR": "Tingir",
+    "en": "Tint"
+  },
+  "Mix": {
+    "pt-BR": "Misturar",
+    "en": "Mix"
+  },
+  "Multiply": {
+    "pt-BR": "Multiplicar",
+    "en": "Multiply"
+  },
+  "Invert": {
+    "pt-BR": "Inverter",
+    "en": "Invert"
+  },
+  "Posterize": {
+    "pt-BR": "Posterizar",
+    "en": "Posterize"
+  },
+  "Material output": {
+    "pt-BR": "Saída do material",
+    "en": "Material output"
+  },
+  "Cell size": {
+    "pt-BR": "Tamanho da célula",
+    "en": "Cell size"
+  },
+  "Color A": {
+    "pt-BR": "Cor A",
+    "en": "Color A"
+  },
+  "Color B": {
+    "pt-BR": "Cor B",
+    "en": "Color B"
+  },
+  "Start X": {
+    "pt-BR": "Início X",
+    "en": "Start X"
+  },
+  "Start Y": {
+    "pt-BR": "Início Y",
+    "en": "Start Y"
+  },
+  "End X": {
+    "pt-BR": "Fim X",
+    "en": "End X"
+  },
+  "End Y": {
+    "pt-BR": "Fim Y",
+    "en": "End Y"
+  },
+  "Radial": {
+    "pt-BR": "Radial",
+    "en": "Radial"
+  },
+  "Intensity": {
+    "pt-BR": "Intensidade",
+    "en": "Intensity"
+  },
+  "Seed": {
+    "pt-BR": "Semente",
+    "en": "Seed"
+  },
+  "Factor": {
+    "pt-BR": "Fator",
+    "en": "Factor"
+  },
+  "Levels": {
+    "pt-BR": "Níveis",
+    "en": "Levels"
+  },
+  "Color": {
+    "pt-BR": "Cor",
+    "en": "Color"
+  },
+  "Value": {
+    "pt-BR": "Valor",
+    "en": "Value"
+  },
+  "Input": {
+    "pt-BR": "Entrada",
+    "en": "Input"
+  },
+  "Pattern": {
+    "pt-BR": "Padrão",
+    "en": "Pattern"
+  },
+  "Output": {
+    "pt-BR": "Saída",
+    "en": "Output"
+  },
+  "Texture A": {
+    "pt-BR": "Textura A",
+    "en": "Texture A"
+  },
+  "Texture B": {
+    "pt-BR": "Textura B",
+    "en": "Texture B"
+  },
+  "Emission": {
+    "pt-BR": "Emissão",
+    "en": "Emission"
   }
 }

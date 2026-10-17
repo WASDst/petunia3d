@@ -42,7 +42,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Id do material no slot ativo do Inspector.
-    fn active_material_id(&self) -> Option<uuid::Uuid> {
+    pub fn active_material_id(&self) -> Option<uuid::Uuid> {
         let slot = usize::try_from(self.active_material_slot.max(0)).ok()?;
         self.state.project.project.materials.get(slot).map(|m| m.id)
     }

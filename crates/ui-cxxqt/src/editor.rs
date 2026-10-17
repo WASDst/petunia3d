@@ -212,6 +212,10 @@ impl QtEditor {
             }))
             .collect::<Vec<_>>()
         );
+        v["material_recipe"] = crate::material_recipe_view::snapshot(
+            &self.state.project.project,
+            self.controller.active_material_id(),
+        );
         v["op_graph"] = crate::op_graph_view::snapshot(
             &self.state.project.project,
             self.state.project.active().map(|asset| asset.id),
@@ -503,6 +507,13 @@ impl QtEditor {
             "command" => {
                 self.execute_registered_command(string(request, "id")?)
                     .map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            action if action.starts_with("material_recipe_") => {
+                let material = self.controller.active_material_id();
+                let command = crate::material_recipe_view::command_for(action, request, material)?
+                    .ok_or_else(|| format!("Ação desconhecida: {action}"))?;
+                self.execute_command(&command).map_err(|e| e.to_string())?;
                 return Ok(true);
             }
             action if action.starts_with("graph_") => {

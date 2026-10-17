@@ -12,6 +12,7 @@
 #include "petunia_drawer.h"
 #include "petunia_i18n.h"
 #include "petunia_node_canvas.h"
+#include "petunia_node_page.h"
 #include "petunia_operation_hud.h"
 #include "petunia_properties_panel.h"
 #include "petunia_region_navigator.h"
@@ -85,8 +86,8 @@ PetuniaShellWindow::PetuniaShellWindow(QWidget *parent, bool interactive)
 PetuniaShellWindow::~PetuniaShellWindow() {
     m_controller.stop();
     // Páginas fora da gaveta ficam sem pai (clearPages): este é o único dono delas.
-    if (m_nodeCanvas && !m_nodeCanvas->parentWidget())
-        delete m_nodeCanvas;
+    if (m_nodePage && !m_nodePage->parentWidget())
+        delete m_nodePage;
     if (m_assetsHost && !m_assetsHost->parentWidget())
         delete m_assetsHost;
 }
@@ -199,6 +200,7 @@ void PetuniaShellWindow::buildUi() {
             [this] { m_controller.command(QStringLiteral("model.add_cube")); });
     connect(m_rail, &PetuniaToolRail::expandedChanged, this, [this](bool) { scheduleLayoutSave(); });
     connect(m_properties, &PetuniaPropertiesPanel::sectionToggled, this, [this](const QString &, bool) { scheduleLayoutSave(); });
+    connect(m_properties, &PetuniaPropertiesPanel::materialNodesRequested, this, [this] { openNodeEditor(true); });
     connect(m_drawer, &PetuniaDrawer::openChanged, this, [this](bool open) {
         if (m_assetsHost && open && !m_assetsPanel && m_drawer->currentPageId() == QLatin1String("assets")) {
             m_assetsPanel = new PetuniaEditorPanel(QStringLiteral("ASSETS"), m_assetsHost);
@@ -219,6 +221,19 @@ void PetuniaShellWindow::buildUi() {
 
 int PetuniaShellWindow::focusedRegion() const {
     return m_navigator ? m_navigator->regionOf(QApplication::focusWidget()) : -1;
+}
+
+PetuniaNodeCanvas *PetuniaShellWindow::nodeCanvas() const {
+    return m_nodePage ? m_nodePage->canvas() : nullptr;
+}
+
+void PetuniaShellWindow::openNodeEditor(bool material) {
+    if (!m_nodePage)
+        return;
+    m_nodePage->setDomain(material ? PetuniaNodeCanvas::Domain::Material : PetuniaNodeCanvas::Domain::Operations);
+    m_drawer->setCurrentPage(QStringLiteral("nodes"));
+    m_drawer->setOpen(true);
+    m_nodePage->canvas()->setFocus(Qt::OtherFocusReason);
 }
 
 void PetuniaShellWindow::syncNow() {
@@ -250,8 +265,8 @@ void PetuniaShellWindow::onState(const QJsonObject &state) {
     if (workspace != m_workspace)
         onWorkspaceChanged(workspace);
 
-    if (m_nodeCanvas)
-        m_nodeCanvas->sync(state);
+    if (m_nodePage)
+        m_nodePage->sync(state);
     m_appBar->sync(state);
     m_rail->sync(state);
     m_header->sync(state);
@@ -292,15 +307,15 @@ void PetuniaShellWindow::retranslateUi() {
         canvas->setParent(nullptr);
     if (m_assetsHost)
         m_assetsHost->setParent(nullptr);
-    if (m_nodeCanvas)
-        m_nodeCanvas->setParent(nullptr);
+    if (m_nodePage)
+        m_nodePage->setParent(nullptr);
     auto *old = takeCentralWidget();
     delete old;
     qDeleteAll(m_canvases);
     qDeleteAll(m_specialized);
     delete m_assetsHost;
-    delete m_nodeCanvas;
-    m_nodeCanvas = nullptr;
+    delete m_nodePage;
+    m_nodePage = nullptr;
     m_canvases.clear();
     m_specialized.clear();
     m_assetsHost = nullptr;
@@ -329,9 +344,9 @@ void PetuniaShellWindow::onWorkspaceChanged(const QString &workspace) {
         }
         m_drawer->addPage(QStringLiteral("assets"), tr("Assets"), QStringLiteral("asset_library"), m_assetsHost);
         if (m_controller.isModeling()) {
-            if (!m_nodeCanvas)
-                m_nodeCanvas = new PetuniaNodeCanvas(&m_controller, this);
-            m_drawer->addPage(QStringLiteral("nodes"), tr("Nós"), QStringLiteral("link"), m_nodeCanvas);
+            if (!m_nodePage)
+                m_nodePage = new PetuniaNodePage(&m_controller, this);
+            m_drawer->addPage(QStringLiteral("nodes"), tr("Nós"), QStringLiteral("link"), m_nodePage);
         }
     }
     applyLayout(workspace);

@@ -39,6 +39,10 @@ class PetuniaMaterialForm : public PetuniaBoundForm {
     Q_OBJECT
   public:
     explicit PetuniaMaterialForm(QWidget *parent = nullptr);
+
+  signals:
+    /// Abrir o editor de nós no grafo do material ativo (O05).
+    void nodeEditorRequested();
 };
 
 /// Booleana em modo direto (interino até o nó Boolean do Operation Graph, O02).

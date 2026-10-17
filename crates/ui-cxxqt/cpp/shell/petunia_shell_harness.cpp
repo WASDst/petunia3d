@@ -15,6 +15,10 @@
 #include "petunia_status_bar.h"
 #include "petunia_model_sections.h"
 #include "petunia_node_canvas.h"
+#include "petunia_node_page.h"
+#include "petunia_i18n.h"
+#include "../petunia_number_field.h"
+#include <QToolButton>
 #include "petunia_operation_card.h"
 #include "petunia_properties_panel.h"
 #include "petunia_structure_panel.h"
@@ -372,6 +376,114 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         c->request("workspace", {{"id", "POLY"}});
         settle(8);
         window.syncNow();
+        settle(4);
+    }
+
+    // O05: materiais como nós — receita criada, ligada, editada e desfeita pela GUI.
+    {
+        c->request("workspace", {{"id", "POLY"}});
+        c->request("create_material");
+        settle(4);
+        window.syncNow();
+        window.openNodeEditor(true);
+        settle(6);
+        window.syncNow();
+        auto *page = window.nodePage();
+        auto *canvas = page ? page->canvas() : nullptr;
+        h.add("material:page-opens-in-material-domain",
+              canvas && canvas->domain() == PetuniaNodeCanvas::Domain::Material && window.drawerRegion()->isOpen());
+        if (page && canvas) {
+            h.add("material:create-offered-without-recipe", page->createRecipeButton()->isVisibleTo(page) &&
+                                                                page->createRecipeButton()->isEnabled());
+            page->createRecipeButton()->click();
+            settle(4);
+            window.syncNow();
+            h.add("material:recipe-created", c->flag("material_recipe.has_recipe"));
+            h.add("material:canvas-shows-image-to-output", canvas->nodeCount() == 2 && canvas->wireCount() == 1,
+                  QStringLiteral("%1 nós, %2 fios").arg(canvas->nodeCount()).arg(canvas->wireCount()));
+            c->request("material_recipe_add", {{"kind", "checker"}});
+            settle(2);
+            window.syncNow();
+            QString checker, output;
+            for (const auto &value : c->state()["material_recipe"].toObject()["nodes"].toArray()) {
+                const auto node = value.toObject();
+                if (node["kind"].toString() == "checker")
+                    checker = node["id"].toString();
+                if (node["kind"].toString() == "output")
+                    output = node["id"].toString();
+            }
+            canvas->connectSockets(checker, 0, output, 0);
+            settle(2);
+            window.syncNow();
+            int intoOutput = 0;
+            bool fromChecker = false;
+            for (const auto &value : c->state()["material_recipe"].toObject()["edges"].toArray()) {
+                const auto edge = value.toObject();
+                if (edge["to"].toString() == output) {
+                    ++intoOutput;
+                    fromChecker = edge["from"].toString() == checker;
+                }
+            }
+            h.add("material:new-wire-replaces-input", intoOutput == 1 && fromChecker);
+            canvas->selectNode(checker);
+            settle(2);
+            auto *card = page->parameterCard();
+            {
+                // Nós de receita não têm ferramenta: nenhuma legenda "Ferramenta:" visível.
+                const QString prefix = petuniaTr(QStringLiteral("Ferramenta: %1")).section(QLatin1Char('%'), 0, 0).trimmed();
+                bool toolSubtitle = false;
+                if (card) {
+                    const auto labels = card->findChildren<QLabel *>();
+                    for (auto *label : labels)
+                        toolSubtitle |= !label->isHidden() && label->text().startsWith(prefix);
+                }
+                h.add("material:panel-has-no-tool-subtitle", card && !toolSubtitle);
+            }
+            h.add("material:panel-generates-checker-controls",
+                  card && card->findChildren<QToolButton *>().size() >= 2 &&
+                      !card->findChildren<PetuniaNumberField *>().isEmpty());
+            c->request("material_recipe_set", {{"node", checker}, {"key", "cell_size"}, {"value", 8}});
+            settle(2);
+            window.syncNow();
+            int cell = 0;
+            for (const auto &value : c->state()["material_recipe"].toObject()["nodes"].toArray())
+                if (value.toObject()["id"].toString() == checker)
+                    cell = value.toObject()["params"].toObject()["cell_size"].toInt();
+            h.add("material:param-edit-roundtrips", cell == 8, QString::number(cell));
+            auto *iface = QAccessible::queryAccessibleInterface(canvas);
+            h.add("material:a11y-lists-recipe-nodes", iface && iface->childCount() == canvas->nodeCount());
+            canvas->fitAll();
+            h.shot(&window, "shell_POLY_material_nodes");
+            // Paridade visual: o mapa gerado pela receita chega ao viewport (Material preview).
+            {
+                const auto items = c->state()["scene_items"].toArray();
+                if (!items.isEmpty())
+                    c->request("select", {{"id", items.first().toObject()["id"].toString()}});
+                c->request("material_assign");
+                c->request("set_shading_mode", {{"id", "material"}});
+                settle(6);
+                window.syncNow();
+                settle(4);
+                h.shot(&window, "shell_POLY_material_preview");
+                c->request("set_shading_mode", {{"id", "solid"}});
+                c->request("undo"); // atribuição
+                settle(2);
+            }
+            c->request("undo");
+            c->request("undo");
+            settle(2);
+            window.syncNow();
+            bool imageBack = false;
+            for (const auto &value : c->state()["material_recipe"].toObject()["edges"].toArray())
+                imageBack |= value.toObject()["to"].toString() == output && value.toObject()["from"].toString() != checker;
+            h.add("material:undo-restores-previous-wiring", imageBack);
+            page->bakeButton()->click();
+            settle(2);
+            window.syncNow();
+            h.add("material:bake-removes-recipe", !c->flag("material_recipe.has_recipe"));
+            page->setDomain(PetuniaNodeCanvas::Domain::Operations);
+        }
+        window.drawerRegion()->setOpen(false);
         settle(4);
     }
 
