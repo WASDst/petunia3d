@@ -134,7 +134,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         if self.state.session.tools.active_tool == "picker" {
-            return self.pick_paint_color_at(x, y);
+            let res = self.pick_paint_color_at(x, y);
+            self.state.finish_picker_sampling();
+            return res;
         }
         if self.state.session.tools.active_tool == "clone"
             && (actions.clone_source || self.state.session.tools.clone_source.is_none())

@@ -24,9 +24,9 @@
 use crate::command::CommandError;
 use crate::context::CommandContext;
 use crate::rig_commands::{
-    AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd, ApplyMotionNowCmd, ClearBoneTrackCmd,
-    DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd, InsertBoneKeyframeCmd,
-    RemoveMotionCmd, RemoveMotionLayerCmd, ResetBonePoseCmd, RigPresetKind,
+    AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd, ApplyIkPoseCmd, ApplyMotionNowCmd,
+    ClearBoneTrackCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd,
+    InsertBoneKeyframeCmd, RemoveMotionCmd, RemoveMotionLayerCmd, ResetBonePoseCmd, RigPresetKind,
     SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd, SetMotionLayerBlendModeCmd,
     SetMotionLayerWeightCmd, SetMotionParamCmd, SetMotionStyleCmd, ToggleMotionLayerEnabledCmd,
     UpdateMotionCmd,
@@ -49,6 +49,14 @@ pub const DEFAULT_TIMELINE_FPS: f32 = 24.0;
 pub struct BoneDraft {
     pub bone_id: u32,
     pub transform: Transform3D,
+}
+
+/// Rascunho temporário do solver IK durante interação manual ou arrasto de alvo (Task H15).
+#[derive(Debug, Clone, PartialEq)]
+pub struct IkDraft {
+    pub chain_id: Uuid,
+    pub bone_rotations: Vec<(u32, [f32; 4])>,
+    pub target_local: [f32; 3],
 }
 
 /// Valor provisório de um parâmetro durante o arrasto de um slider.
@@ -99,6 +107,7 @@ pub struct AnimateSession {
     pub motion_trail_steps: u32,
     draft: Option<ParamDraft>,
     bone_draft: Option<BoneDraft>,
+    ik_draft: Option<IkDraft>,
 }
 
 impl Default for AnimateSession {
@@ -125,6 +134,7 @@ impl Default for AnimateSession {
             motion_trail_steps: 24,
             draft: None,
             bone_draft: None,
+            ik_draft: None,
         }
     }
 }
@@ -215,6 +225,21 @@ impl AnimateSession {
     /// Descarta o rascunho de transformação do osso (ex: cancelamento por Esc).
     pub fn clear_bone_draft(&mut self) {
         self.bone_draft = None;
+    }
+
+    /// Rascunho temporário da pose IK calculada pelo solver durante arrasto.
+    pub fn ik_draft(&self) -> Option<&IkDraft> {
+        self.ik_draft.as_ref()
+    }
+
+    /// Define o rascunho temporário da cadeia IK.
+    pub fn set_ik_draft(&mut self, draft: IkDraft) {
+        self.ik_draft = Some(draft);
+    }
+
+    /// Descarta o rascunho de IK (ex: cancelamento por Esc).
+    pub fn clear_ik_draft(&mut self) {
+        self.ik_draft = None;
     }
 }
 
@@ -593,6 +618,18 @@ impl AnimatePreview {
             }
         }
 
+        if let Some(ik) = session.ik_draft()
+            && let Some(skeleton) = project.get_skeleton(skeleton_id)
+        {
+            for &(bone_id, rot) in &ik.bone_rotations {
+                if let Some(idx) = skeleton.bone_index(bone_id)
+                    && idx < local.len()
+                {
+                    local[idx].rotation = rot;
+                }
+            }
+        }
+
         if let Some(draft) = session.bone_draft()
             && let Some(skeleton) = project.get_skeleton(skeleton_id)
             && let Some(idx) = skeleton.bone_index(draft.bone_id)
@@ -807,6 +844,13 @@ impl CommandContext<'_> {
         } else if a.skeleton.is_none() {
             a.selected_bone = None;
             a.bone_draft = None;
+            a.ik_draft = None;
+        }
+        if a.ik_draft
+            .as_ref()
+            .is_some_and(|ik| project.ik_chains.iter().all(|c| c.id != ik.chain_id))
+        {
+            a.ik_draft = None;
         }
     }
 
@@ -1034,6 +1078,101 @@ impl CommandContext<'_> {
     /// Altera o modo IK da sessão de animação.
     pub fn animate_set_ik_mode(&mut self, ik_mode: bool) {
         self.editor.animate.ik_mode = ik_mode;
+    }
+
+    /// Resolve interativamente a cadeia IK para o alvo no espaço do mundo (sem Undo a cada movimento) (Task H15).
+    pub fn animate_solve_ik(
+        &mut self,
+        chain_id: Uuid,
+        target_world: [f32; 3],
+    ) -> Result<(), CommandError> {
+        if !target_world.iter().all(|x| x.is_finite()) {
+            return Err(CommandError::Execution(
+                "IK target coordinates are not finite".into(),
+            ));
+        }
+        let chain = self
+            .document
+            .project
+            .ik_chains
+            .iter()
+            .find(|c| c.id == chain_id)
+            .cloned()
+            .ok_or_else(|| CommandError::Execution("IK chain not found".into()))?;
+        let skel = self
+            .document
+            .project
+            .get_skeleton(chain.skeleton_id)
+            .cloned()
+            .ok_or_else(|| CommandError::Execution("Skeleton not found".into()))?;
+
+        // Converte do espaço do mundo para o espaço local da criatura / ativo ativo.
+        let target_local = if let Some(asset) = self
+            .document
+            .project
+            .assets
+            .iter()
+            .find(|a| a.skeleton_id == Some(skel.id))
+        {
+            let to_world = asset.transform.to_mat4();
+            let inv = to_world.inverse();
+            if inv.is_finite() {
+                inv.transform_point3(glam::Vec3::from(target_world))
+                    .to_array()
+            } else {
+                target_world
+            }
+        } else {
+            target_world
+        };
+
+        let mut preview = AnimatePreview::default();
+        let (eval_skel, mut local) = preview
+            .local_pose(&self.document.project, &self.editor.animate)
+            .ok_or_else(|| CommandError::Execution("Cannot evaluate base pose for IK".into()))?;
+        if eval_skel != skel.id {
+            return Err(CommandError::Execution(
+                "Evaluated pose belongs to another skeleton".into(),
+            ));
+        }
+
+        petunia_project::solve_chain(&skel, &mut local, &chain, glam::Vec3::from(target_local))
+            .map_err(|e| CommandError::Execution(format!("IK solver error: {e:?}")))?;
+
+        let mut bone_rotations = Vec::with_capacity(chain.bones.len());
+        for &bone_id in &chain.bones {
+            if let Some(idx) = skel.bone_index(bone_id)
+                && let Some(t) = local.get(idx)
+            {
+                bone_rotations.push((bone_id, t.rotation));
+            }
+        }
+
+        self.editor.animate.set_ik_draft(IkDraft {
+            chain_id,
+            bone_rotations,
+            target_local,
+        });
+        Ok(())
+    }
+
+    /// Descarta a pose provisória de IK (0 passos de Undo) (Task H15).
+    pub fn animate_cancel_ik(&mut self) {
+        self.editor.animate.clear_ik_draft();
+    }
+
+    /// Confirma a pose provisória de IK nos ossos do esqueleto (1 passo atômico de Undo) (Task H15).
+    pub fn animate_commit_ik(&mut self) -> Result<bool, CommandError> {
+        let Some(draft) = self.editor.animate.ik_draft.take() else {
+            return Ok(false);
+        };
+        let skeleton_id = self.editor.animate.skeleton.ok_or_else(no_rig)?;
+        self.dispatch(&ApplyIkPoseCmd {
+            skeleton_id,
+            chain_id: draft.chain_id,
+            bone_rotations: draft.bone_rotations,
+        })?;
+        Ok(true)
     }
 
     /// Define a pose/transformação de um osso via dispatcher (1 passo de Undo).

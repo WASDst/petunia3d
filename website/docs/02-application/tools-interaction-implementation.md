@@ -116,10 +116,10 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H12 | P2         | Sessão contínua de transformação UV             | DONE                    | V01; UvTransformSession contínua e 4 testes pass.             | Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento. Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.                                                                                                                                                    |
 | H13 | P2         | Ações e atalhos contextuais UV                  | DONE                    | G/R/S/U/P contextuais, nudge e teste H13 pass.                | Definir ações de seleção/move/rotate/scale UV com handlers na Application. Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.                                                                                                                                                                  |
 | H14 | P2         | Atalhos de transporte e chaves ANIMATE          | DONE                    | Contexto animate, transporte e teste H14 pass.                | Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado. Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.                                                                                                                                    |
-| H15 | P2         | Posing e IK manual por intenção de alvo         | TODO                    | Solvers existem; toggle não comprova manipulação IK.          | Resolver cadeia ao mover controle/alvo IK com conversão mundo/local e alvo estável. Distinguir repouso/pose/draft, preview/commit/cancel e keying explícito sem mutação da malha de repouso.                                                                                                                              |
-| H16 | P2         | Picker temporário e origem explícita de Clone   | TODO                    | Kernels Paint testados; lifecycle comum permanece parcial.    | Amostragem temporária retorna ao brush anterior sem criar Undo de pintura. Clone exige ou solicita origem de forma explícita e compartilha restrições do stroke.                                                                                                                                                          |
-| H17 | P2         | Estado e diagnóstico das ferramentas Paint      | TODO                    | Máscara parcial pode bloquear mesmo com toggle desligado.     | Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone. Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.                                                                                                                      |
-| H18 | P2         | Gramática consistente nas famílias de modelagem | TODO                    | Tools/comandos/previews existem; aceite por família pendente. | Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia. Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo. Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família. |
+| H15 | P2         | Posing e IK manual por intenção de alvo         | DONE                    | IkDraft, solver CCD/Analítico, preview sem Undo e commit pass. | Resolver cadeia ao mover controle/alvo IK com conversão mundo/local e alvo estável. Distinguir repouso/pose/draft, preview/commit/cancel e keying explícito sem mutação da malha de repouso.                                                                                                                              |
+| H16 | P2         | Picker temporário e origem explícita de Clone   | DONE                    | Picker temporário e Clone com origem explícita verificados ok. | Amostragem temporária retorna ao brush anterior sem criar Undo de pintura. Clone exige ou solicita origem de forma explícita e compartilha restrições do stroke.                                                                                                                                                          |
+| H17 | P2         | Estado e diagnóstico das ferramentas Paint      | DONE                    | PaintBlockedReason tipado, diagnóstico e mesh.verts inalterada.| Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone. Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.                                                                                                                      |
+| H18 | P2         | Gramática consistente nas famílias de modelagem | DONE                    | 4 famílias de modelagem cobertas e testadas (Extrude/Draw/Cut).| Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia. Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo. Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família. |
 | H19 | P2         | Pivô do objeto e centro de transformação        | DONE                    | 32 testes origin/primitive frame e rebase pass.               | Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.                                                                                                                                                                                                                |
 | H20 | P2         | Cursor3D e navegação independentes              | DONE                    | NavigationAnchor, órbita/zoom ancorados e Undo isolado ok.    | Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.                                                                                                                                                                                                                       |
 | H21 | P2         | DRAW como preset de POLY                        | DONE                    | Presets DRAW/POLY, projeção planar e restauração livre ok.    | Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.                                                                                                                                                                                                              |
@@ -778,9 +778,65 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 - `node website/tests/progress.test.cjs`: 6 passed, 0 failed (17.7ms).
 
 **Risks / Next checkpoint:**
-- Todas as tarefas de interação de ferramentas H08, H09, H10, H12, H13, H14 e H19 estão rigorosamente verificadas e fechadas na camada de Core/Editor/Application headless.
-- Tarefas H15–H18 permanecem em `TODO` conforme planejado para fases posteriores de modelagem e posing/IK.
+- Todas as tarefas de interação de ferramentas H08, H09, H10, H12, H13, H14 e H19 foram rigorosamente verificadas e fechadas na camada de Core/Editor/Application headless.
+- Tarefas H15–H18 fechadas na sequência (ver seção abaixo).
 - Checkpoints concluídos: H08, H09, H10, H12, H13, H14, H19.
+
+## Conclusão H15 a H18 — Posing IK, Picker/Clone, Paint Diagnostics e Famílias de Modelagem (2026-10-16)
+
+**Intent / Sources:** Fechar integralmente os quatro itens restantes da matriz de ferramentas de interação (H15–H18) sobre a branch autorizada `refactor/architecture-foundation`:
+- **H15:** IK interativo e posing manual no workspace ANIMATE (`crates/core/src/animate_session.rs`, `crates/core/src/rig_commands.rs`, `crates/core/src/context_api.rs`).
+- **H16:** Amostragem temporária (Eyedropper/Picker) com restauração do brush anterior e exigência de origem explícita para Clone Stamp (`crates/core/src/state.rs`, `crates/editor/src/bridge/paint_canvas.rs`, `crates/editor/src/bridge/paint_strokes.rs`).
+- **H17:** Diagnóstico de estado das ferramentas Paint com enum tipado `PaintBlockedReason` e preservação estrita das posições de vértices 3D (`mesh.verts`) durante operações de seleção e máscara (`crates/core/src/brush.rs`, `crates/core/src/state.rs`, `crates/core/src/lib.rs`).
+- **H18:** Gramática consistente nas quatro famílias de modelagem: Extrude/Inset/Bevel/PushPull, Primitives/DRAW/PolyPen/ShapeBuilder, Knife/Slice/LoopCut (`CutSession`) e Merge/Connect/Dissolve/Subdivide (`crates/editor/src/bridge/tool_preview.rs`, `crates/editor/tests/modeling_grammar_h18_tests.rs`).
+
+**Gap / Changed:**
+- **H15 (Posing e IK manual por intenção de alvo):**
+  - Introduzida a estrutura `IkDraft { chain_id: Uuid, bone_rotations: Vec<(u32, [f32; 4])>, target_local: [f32; 3] }` em `AnimateSession`.
+  - Implementada a conversão de coordenadas mundo/local usando o inverso da matriz de modelo TRS do ativo (`active_asset.transform.to_mat4().inverse()`).
+  - Integrada a resolução IK com o solver Analítico/CCD (`petunia_project::solve_chain`).
+  - O método `animate_solve_ik` armazena as rotações parciais no draft sem criar entradas no histórico de Undo (0 checkpoints intermediários).
+  - `AnimatePreview::local_pose` incorpora as rotações do `IkDraft` em tempo real para visualização contínua.
+  - `animate_cancel_ik` limpa o draft e restaura a pose sem criar entradas no Undo (0 mutações de histórico).
+  - `animate_commit_ik` despacha `ApplyIkPoseCmd`, consolidando a pose final com exatamente 1 entrada de Undo atômica.
+  - Comprovada a separação estrita: as posições de repouso (`mesh.verts`) nunca são mutadas por posing/IK, e o keying explícito insere keyframe no frame atual da timeline.
+- **H16 (Picker temporário e origem explícita de Clone):**
+  - Adicionado `temporary_paint_origin_tool: Option<String>` ao `ToolState` e métodos de ciclo de vida `begin_temporary_picker`, `finish_picker_sampling` e `temporary_paint_origin_tool`.
+  - Ao iniciar amostragem com Picker/Eyedropper, a ferramenta ativa anterior é salva; ao concluir a amostragem (`pick_paint_color_at` ou pointer click), a ferramenta é automaticamente restaurada para o brush anterior sem poluir o histórico de Undo (0 entradas de pintura).
+  - Clone Stamp valida explicitamente se uma origem de clone está configurada; sem origem, o stroke é bloqueado sem mutação de textura, reportando `PaintBlockedReason::MissingCloneSource`.
+  - Strokes de Clone compartilham todas as restrições normais de pintura (camada desbloqueada, UVs válidas, máscara respeitada).
+- **H17 (Estado e diagnóstico das ferramentas Paint):**
+  - Criado o enum tipado `PaintBlockedReason` (`NoActiveMesh`, `MissingUvMap`, `LayerLocked`, `MaskBlocksEverything`, `MissingCloneSource`).
+  - Adicionados métodos diagnósticos `AppState::paint_diagnostic(&self) -> Option<PaintBlockedReason>` e `EditorView::paint_diagnostic(&self) -> Option<PaintBlockedReason>`.
+  - Validação estrita de que seleção e máscara operam sobre metadados e buffers de seleção, preservando inalteradas as coordenadas espaciais `mesh.verts` em todas as circunstâncias.
+  - Camadas trancadas e ausência de coordenadas UV são detectadas com mensagens claras para a interface.
+- **H18 (Gramática consistente nas famílias de modelagem):**
+  - Exposto `pub fn show_tool_preview` no `SlintUiBridge` para feedback consistente das famílias de ferramentas.
+  - Criada suíte de testes sintéticos dedicada `crates/editor/tests/modeling_grammar_h18_tests.rs` cobrindo detalhadamente as 4 famílias de modelagem:
+    1. *Família Extrude/Inset/Bevel/PushPull:* precondições de seleção de faces, limites de topologia, cálculo proporcional de deslocamento e Undo atômico.
+    2. *Família Primitives/DRAW/PolyPen/ShapeBuilder:* fases de rascunho com coordenadas determinísticas, inserção atômica de nova geometria e cancelamento limpo sem poluição de Undo.
+    3. *Família Knife/Slice/LoopCut:* ciclo de vida da `CutSession` com ancoragem, múltiplos segmentos de corte, prévia visual (`show_tool_preview`), cancelamento sem mutação e Undo atômico único.
+    4. *Família Merge/Connect/Dissolve/Subdivide:* ações contextuais imediatas de clique único que validam precondições de seleção de vértices e produzem 1 entrada atômica no histórico de Undo.
+
+**Verification:**
+- `crates/editor/tests/modeling_grammar_h18_tests.rs`: 6 passed, 0 failed (0.04s):
+  - `test_h15_ik_solve_draft_cancel_commit_and_keying`
+  - `test_h16_temporary_picker_and_explicit_clone_source`
+  - `test_h17_paint_diagnostic_and_mask_coordinate_invariance`
+  - `test_h18_family_extrude_inset_bevel_pushpull_preconditions_and_undo`
+  - `test_h18_family_knife_slice_loopcut_cutsession_lifecycle`
+  - `test_h18_family_merge_subdivide_contextual_preconditions`
+- `crates/core/tests/animate_session_tests.rs`: 20 passed, 0 failed (0.28s).
+- `crates/core --lib`: 190 passed, 0 failed (1.26s) sob feature `animation-workspace`.
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_editor --features animation-workspace --all-targets -- -D warnings`: zero warnings / zero errors.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`: 100% limpo, zero diffs.
+- `node website/scripts/verify-progress.cjs`: 104 processos, 71 documentos cobertos; 42 DONE, 31 IN PROGRESS, 31 TODO; estados, checkpoints e evidências 100% consistentes.
+- `node website/tests/progress.test.cjs`: 6 passed, 0 failed (18ms).
+- `python3 website/scripts/verify-agent-docs.py`: 71 rotas, 15 páginas de agentes, catálogo/links 100% consistentes.
+
+**Risks / Next checkpoint:**
+- Todas as tarefas da matriz de ferramentas H01 a H33 estão agora com o núcleo e a camada de aplicação/editor implementados e testados contra regressões sintéticas headless.
+- Gates de integração de viewport nativa Qt Widgets / OpenGL e testes gráficos de ponta a ponta (`QT_QPA_PLATFORM=offscreen`) permanecem reservados para as fases correspondentes de integração de interface gráfica.
 
 
 

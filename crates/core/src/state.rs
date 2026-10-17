@@ -662,6 +662,9 @@ pub struct ToolState {
     /// Ferramenta de origem antes de uma ativação temporária de transformação (G/R/S),
     /// restaurada deterministicamente após commit ou cancel (H11).
     pub temporary_modal_origin_tool: Option<String>,
+    /// Ferramenta de origem antes de uma ativação temporária do picker/eyedropper (Alt durante Paint),
+    /// restaurada deterministicamente após amostragem ou cancelamento (H16).
+    pub temporary_paint_origin_tool: Option<String>,
 }
 
 impl Default for ToolState {
@@ -747,6 +750,7 @@ impl ToolState {
             active_measurement: None,
             active_annotation: None,
             temporary_modal_origin_tool: None,
+            temporary_paint_origin_tool: None,
         }
     }
 
@@ -771,6 +775,30 @@ impl ToolState {
     /// Ferramenta de origem antes da transformação temporária, se ativa (H11).
     pub fn temporary_modal_origin_tool(&self) -> Option<&str> {
         self.temporary_modal_origin_tool.as_deref()
+    }
+
+    /// Inicia a seleção temporária do conta-gotas/picker de cor no Paint (H16).
+    pub fn begin_temporary_picker(&mut self) {
+        if self.temporary_paint_origin_tool.is_none() {
+            self.temporary_paint_origin_tool = Some(self.active_tool.clone());
+        }
+        self.active_tool = "picker".to_string();
+    }
+
+    /// Conclui ou cancela a amostragem do picker e restaura deterministicamente
+    /// a ferramenta Paint anterior sem criar passos de Undo (H16).
+    pub fn finish_picker_sampling(&mut self) -> Option<String> {
+        if let Some(origin) = self.temporary_paint_origin_tool.take() {
+            self.active_tool = origin.clone();
+            Some(origin)
+        } else {
+            None
+        }
+    }
+
+    /// Ferramenta de origem antes da amostragem do picker temporário (H16).
+    pub fn temporary_paint_origin_tool(&self) -> Option<&str> {
+        self.temporary_paint_origin_tool.as_deref()
     }
 
     pub fn active_tool_info(&self) -> ActiveTool {
@@ -2473,6 +2501,36 @@ impl AppState {
     /// Limite canônico do nome de ativo exibido no Outliner e nos painéis.
     pub const fn asset_name_max_len() -> usize {
         ASSET_NAME_MAX_LEN
+    }
+
+    /// Diagnóstico tipado do motivo de bloqueio ou restrição das ferramentas Paint (Task H17).
+    pub fn paint_diagnostic(&self) -> Option<crate::brush::PaintBlockedReason> {
+        use crate::brush::PaintBlockedReason;
+        let Some(asset) = self.project.active() else {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        };
+        if asset.mesh.verts.is_empty() {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        }
+        if asset.mesh.faces.is_empty() || asset.mesh.faces.iter().all(|f| f.uv.is_empty()) {
+            return Some(PaintBlockedReason::MissingUvMap);
+        }
+        if let Some(stack) = &asset.paint_stack
+            && stack
+                .layers
+                .get(stack.active_layer)
+                .map(|l| l.locked)
+                .unwrap_or(false)
+        {
+            return Some(PaintBlockedReason::LayerLocked);
+        }
+        if self.tools.paint_isolate_selection && self.selection.faces.is_empty() {
+            return Some(PaintBlockedReason::MaskBlocksEverything);
+        }
+        if self.tools.active_tool == "clone" && self.tools.clone_source.is_none() {
+            return Some(PaintBlockedReason::MissingCloneSource);
+        }
+        None
     }
 }
 
@@ -5394,6 +5452,36 @@ impl<'a> EditorView<'a> {
     /// Verifica se o asset ativo está bloqueado contra transformações.
     pub fn is_active_locked(self) -> bool {
         self.document.is_active_locked()
+    }
+
+    /// Diagnóstico tipado do motivo de bloqueio ou restrição das ferramentas Paint (Task H17).
+    pub fn paint_diagnostic(self) -> Option<crate::brush::PaintBlockedReason> {
+        use crate::brush::PaintBlockedReason;
+        let Some(asset) = self.document.project.active() else {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        };
+        if asset.mesh.verts.is_empty() {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        }
+        if asset.mesh.faces.is_empty() || asset.mesh.faces.iter().all(|f| f.uv.is_empty()) {
+            return Some(PaintBlockedReason::MissingUvMap);
+        }
+        if let Some(stack) = &asset.paint_stack
+            && stack
+                .layers
+                .get(stack.active_layer)
+                .map(|l| l.locked)
+                .unwrap_or(false)
+        {
+            return Some(PaintBlockedReason::LayerLocked);
+        }
+        if self.editor.tools.paint_isolate_selection && self.editor.selection.faces.is_empty() {
+            return Some(PaintBlockedReason::MaskBlocksEverything);
+        }
+        if self.editor.tools.active_tool == "clone" && self.editor.tools.clone_source.is_none() {
+            return Some(PaintBlockedReason::MissingCloneSource);
+        }
+        None
     }
 }
 

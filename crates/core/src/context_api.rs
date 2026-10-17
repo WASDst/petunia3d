@@ -45,6 +45,25 @@ impl AppState {
     }
 
     #[inline]
+    pub fn animate_solve_ik(
+        &mut self,
+        chain_id: Uuid,
+        target_world: [f32; 3],
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_solve_ik(chain_id, target_world))
+    }
+
+    #[inline]
+    pub fn animate_cancel_ik(&mut self) {
+        self.in_context(|ctx| ctx.animate_cancel_ik())
+    }
+
+    #[inline]
+    pub fn animate_commit_ik(&mut self) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_commit_ik())
+    }
+
+    #[inline]
     pub fn animate_set_bone_transform(
         &mut self,
         bone_id: u32,

@@ -42,7 +42,7 @@ pub(crate) fn same_geometry(a: &petunia_core::Mesh, b: &petunia_core::Mesh) -> b
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Mostra `mesh` no lugar da malha ativa, só no viewport.
-    pub(crate) fn show_tool_preview(&mut self, mesh: petunia_core::Mesh) -> bool {
+    pub fn show_tool_preview(&mut self, mesh: petunia_core::Mesh) -> bool {
         let Some(id) = self.state.project.active().map(|asset| asset.id) else {
             return false;
         };

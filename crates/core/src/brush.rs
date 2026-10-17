@@ -50,6 +50,33 @@ pub enum BrushType {
     Ellipse,
 }
 
+/// Diagnóstico tipado do motivo de bloqueio ou restrição das ferramentas Paint (Task H17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PaintBlockedReason {
+    /// Não há malha/objeto ativo no projeto.
+    NoActiveMesh,
+    /// A malha ativa não possui coordenadas UV ou mapa UV mapeado.
+    MissingUvMap,
+    /// A camada de pintura ativa na pilha está bloqueada (locked).
+    LayerLocked,
+    /// A máscara de seleção (isolamento) bloqueia todas as faces (ex: nenhuma face selecionada com isolamento).
+    MaskBlocksEverything,
+    /// A ferramenta de clonagem requer uma origem de cópia explícita.
+    MissingCloneSource,
+}
+
+impl PaintBlockedReason {
+    pub fn message_key(&self) -> &'static str {
+        match self {
+            Self::NoActiveMesh => "status.no_active_mesh",
+            Self::MissingUvMap => "status.missing_uv_map",
+            Self::LayerLocked => "status.layer_locked",
+            Self::MaskBlocksEverything => "status.mask_blocks_everything",
+            Self::MissingCloneSource => "status.missing_clone_source",
+        }
+    }
+}
+
 /// Transient, toolkit-independent projector used as a brush opacity mask.
 #[derive(Clone, Debug)]
 pub struct SurfaceStencil {

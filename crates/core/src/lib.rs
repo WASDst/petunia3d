@@ -68,8 +68,8 @@ pub use visual_assistance::{
 };
 
 pub use animate_session::{
-    AnimatePreview, AnimateSession, BoneDraft, MotionCatalogEntry, MotionUnavailable, PosePreview,
-    PreviewBone, motion_catalog, pick_bone,
+    AnimatePreview, AnimateSession, BoneDraft, IkDraft, MotionCatalogEntry, MotionUnavailable,
+    PosePreview, PreviewBone, motion_catalog, pick_bone,
 };
 pub use cutting_session::CutSession;
 pub use diagnostics::{DiagnosticCategory, DiagnosticEvent, log_event};
@@ -138,11 +138,11 @@ pub use project_service::{
 };
 pub use rig_commands::{
     AddAnimationCmd, AddBoneCmd, AddIkChainCmd, AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd,
-    AddStructuralJointCmd, AddStructuralPartCmd, ApplyMotionNowCmd, ApplyPoseAsRestCmd,
-    AssignRigRoleCmd, AutoRigActiveAssetCmd, BindRigCmd, ClearBoneTrackCmd, ClearRigRoleCmd,
-    ClearVertexWeightOverrideCmd, ConnectStructuralPartsCmd, CreateEmptySkeletonCmd,
-    CreateStructuralGraphCmd, DeleteBoneKeyCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd,
-    EditBoneRestPoseCmd, FitBlocked, FitRigToActiveAssetCmd, InferRigRolesCmd,
+    AddStructuralJointCmd, AddStructuralPartCmd, ApplyIkPoseCmd, ApplyMotionNowCmd,
+    ApplyPoseAsRestCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, BindRigCmd, ClearBoneTrackCmd,
+    ClearRigRoleCmd, ClearVertexWeightOverrideCmd, ConnectStructuralPartsCmd,
+    CreateEmptySkeletonCmd, CreateStructuralGraphCmd, DeleteBoneKeyCmd, DeleteBoneKeyframeCmd,
+    DuplicateMotionCmd, EditBoneRestPoseCmd, FitBlocked, FitRigToActiveAssetCmd, InferRigRolesCmd,
     InsertBoneKeyframeCmd, RemapRigWeightsCmd, RemoveAnimationCmd, RemoveBoneCmd, RemoveIkChainCmd,
     RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd, RemoveStructuralPartCmd,
     RenameBoneCmd, ReparentBoneCmd, ResetAllBonePosesCmd, ResetBonePoseCmd, RigPresetKind,
@@ -156,8 +156,8 @@ pub use rig_commands::{
 pub use brush::{
     BRUSH_PX_PER_UNIT, BrushBlend, BrushLock, BrushPreset, BrushPreviewKind, BrushPreviewStyle,
     BrushProjectionMode, BrushSettings, BrushStyle, BrushTip, BrushType, FillScope,
-    PaintRestriction, PointStabilizer, StrokeBuffer, StrokeSampler, brush_size_px_from_slider,
-    brush_type_from_kind, hash01, kind_from_brush_type,
+    PaintBlockedReason, PaintRestriction, PointStabilizer, StrokeBuffer, StrokeSampler,
+    brush_size_px_from_slider, brush_type_from_kind, hash01, kind_from_brush_type,
 };
 pub use camera::{Camera, NavigationAnchor, Projection, ViewPreset};
 pub use clock::{Clock, FixedClock, SystemClock};

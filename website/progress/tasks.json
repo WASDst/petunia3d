@@ -490,6 +490,26 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/origin_commands.rs, crates/core/src/state.rs, crates/core/tests/origin_frame.rs, crates/core/tests/primitive_frame.rs, crates/editor/tests/primitive_frame_bridge.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H19: Pivô do objeto e centro de transformação. Origem local persistente com conversão mundo/local explícita (SetObjectOriginCmd, ObjectTransform::from_trs, origin_world). Presets de origem: Geometry (centro da malha), Selection (centro dos elementos selecionados), Bottom (base inferior no chão), Cursor3D (posição do cursor). Rebase estático preserva superfície no espaço de mundo, topologia, normais, cores e flags sem distorção. Suporte a pose atual de rigs, criação e regeneração de primitivas no frame local (PrimitiveKind::Cube/Sphere/Cylinder/Plane), compatibilidade com objetos legados e metadados TRS assados, limites numéricos (rejeição de NaN/Inf e coordenadas que colapsariam precisão f32), instâncias, prefabs e separação de geometria. Testes: 20 testes em core/tests/origin_frame.rs pass (0.24s), 10 testes em core/tests/primitive_frame.rs pass (0.34s), 2 testes em editor/tests/primitive_frame_bridge.rs pass. Fmt e Clippy zero warnings com CARGO_BUILD_JOBS=1."
+    },
+    "ik-posing-h15-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/animate_session.rs, crates/core/src/rig_commands.rs, crates/core/src/context_api.rs, crates/core/tests/animate_session_tests.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H15: Posing e IK manual por intenção de alvo. Sessão de IK interativo baseada em IkDraft (chain_id, bone_rotations, target_local), convertendo alvos mundo/local através do inverso da matriz de modelo do ativo e acionando o solver Analítico/CCD (petunia_project::solve_chain). Preview contínuo através de AnimatePreview::local_pose sem poluir o histórico de Undo (0 entradas durante manipulação). animate_cancel_ik cancela o draft imediatamente restaurando a pose anterior (0 Undo). animate_commit_ik aplica as rotações calculadas como ApplyIkPoseCmd atômico com exatamente 1 entrada no histórico de Undo. Distinção rigorosa entre malha de repouso (mesh.verts inalterada) e poses de animação; keying explícito no frame da timeline. Testes: 20 testes em core/tests/animate_session_tests.rs e 190 testes em core lib pass com a feature animation-workspace (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "picker-clone-h16-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/state.rs, crates/editor/src/bridge/paint_canvas.rs, crates/editor/src/bridge/paint_strokes.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H16: Picker temporário e origem explícita de Clone. Amostragem rápida (Eyedropper/Picker) retém a ferramenta de origem em temporary_paint_origin_tool; após a amostragem ou cancelamento, a ferramenta ativa é restaurada automaticamente para o brush anterior sem poluir o histórico de Undo (0 entradas de pintura). Clone Stamp valida rigorosamente a existência de origem explícita; sem ponto de origem definido, aborta o stroke sem mutações de textura e sinaliza PaintBlockedReason::MissingCloneSource. Stroke compartilha todas as restrições normais de pintura (camada desbloqueada, UVs válidas, máscara respeitada). Testes: suíte contextual_interactions e paint_canvas passam com CARGO_BUILD_JOBS=1. Fmt e Clippy zero warnings."
+    },
+    "paint-diagnostics-h17-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/brush.rs, crates/core/src/state.rs, crates/core/src/lib.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H17: Estado e diagnóstico das ferramentas Paint. Enum tipado PaintBlockedReason (NoActiveMesh, MissingUvMap, LayerLocked, MaskBlocksEverything, MissingCloneSource) com diagnósticos em AppState::paint_diagnostic e EditorView::paint_diagnostic. Validação de precondições sem bloquear ferramentas de seleção. Seleção e máscara preservam estritamente a posição dos vértices 3D (mesh.verts) sem mutação geométrica acidental. Camadas trancadas e ausência de coordenadas UV são detectadas com mensagens claras para o usuário. Testes: 190 unitários em core lib e suítes do editor passam com CARGO_BUILD_JOBS=1. Fmt e Clippy zero warnings."
+    },
+    "modeling-grammar-h18-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/editor/src/bridge/tool_preview.rs, crates/editor/tests/modeling_grammar_h18_tests.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H18: Gramática consistente nas famílias de modelagem. Cobertura completa das 4 famílias de modelagem: 1) Família Extrude/Inset/Bevel/PushPull com validação de precondições, limites de topologia e preview contínuo; 2) Família Primitives/DRAW/PolyPen/ShapeBuilder com fases claras de rascunho, inserção determinística e cancelamento limpo; 3) Família Knife/Slice/LoopCut (CutSession) com segmentos de corte precisos, cancelamento sem mutação e Undo atômico; 4) Família Merge/Connect/Dissolve/Subdivide como ações contextuais atômicas de clique único preservando integridade topológica. Exposição de show_tool_preview no SlintUiBridge. Testes: 6 testes dedicados em crates/editor/tests/modeling_grammar_h18_tests.rs pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
     }
   },
   "tasks": [
@@ -3344,24 +3364,24 @@
       "title": "Posing e IK manual por intenção de alvo",
       "description": "Resolver cadeia ao mover controle/alvo IK com conversão mundo/local e alvo estável. Distinguir repouso/pose/draft, preview/commit/cancel e keying explícito sem mutação da malha de repouso.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Solvers existem; toggle não comprova manipulação IK. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Concluído em 2026-10-16: IkDraft com conversão mundo/local, solver CCD/Analítico (petunia_project::solve_chain), preview em tempo real via AnimatePreview::local_pose sem poluir Undo, cancelamento sem mutação e commit atômico via ApplyIkPoseCmd (1 Undo). Malha de repouso preservada. 20 testes em core/tests/animate_session_tests.rs e 190 testes em core lib pass com CARGO_BUILD_JOBS=1.",
       "checkpoints": [
         {
           "title": "Resolver cadeia ao mover controle/alvo IK com conversão mundo/local e alvo estável.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "ik-posing-h15-20261016"
         },
         {
           "title": "Distinguir repouso/pose/draft, preview/commit/cancel e keying explícito sem mutação da malha de repouso.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "ik-posing-h15-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "ik-posing-h15-20261016"
         }
       ],
       "documents": [
@@ -3377,24 +3397,24 @@
       "title": "Picker temporário e origem explícita de Clone",
       "description": "Amostragem temporária retorna ao brush anterior sem criar Undo de pintura. Clone exige ou solicita origem de forma explícita e compartilha restrições do stroke.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Kernels Paint testados; lifecycle comum permanece parcial. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Concluído em 2026-10-16: Eyedropper/Picker armazena temporary_paint_origin_tool e restaura a ferramenta anterior após a amostragem sem criar comandos de Undo. Clone Stamp exige origem explícita, bloqueia se ausente emitindo PaintBlockedReason::MissingCloneSource e respeita todas as travas de stroke (camada, UV, máscara). Fmt e Clippy 100% limpos com CARGO_BUILD_JOBS=1.",
       "checkpoints": [
         {
           "title": "Amostragem temporária retorna ao brush anterior sem criar Undo de pintura.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "picker-clone-h16-20261016"
         },
         {
           "title": "Clone exige ou solicita origem de forma explícita e compartilha restrições do stroke.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "picker-clone-h16-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "picker-clone-h16-20261016"
         }
       ],
       "documents": [
@@ -3410,24 +3430,24 @@
       "title": "Estado e diagnóstico das ferramentas Paint",
       "description": "Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone. Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Máscara parcial pode bloquear mesmo com toggle desligado. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Concluído em 2026-10-16: PaintBlockedReason tipado exposto em AppState e EditorView. Diagnósticos claros de falta de malha, UVs ausentes, layer bloqueada, máscara total e falta de origem para Clone. Preservação estrita das coordenadas de vértices da malha (mesh.verts) em seleções e máscaras. 190 testes em core lib pass com CARGO_BUILD_JOBS=1.",
       "checkpoints": [
         {
           "title": "Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "paint-diagnostics-h17-20261016"
         },
         {
           "title": "Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "paint-diagnostics-h17-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "paint-diagnostics-h17-20261016"
         }
       ],
       "documents": [
@@ -3443,29 +3463,29 @@
       "title": "Gramática consistente nas famílias de modelagem",
       "description": "Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia. Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo. Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Tools/comandos/previews existem; aceite por família pendente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Concluído em 2026-10-16: Gramática consistente nas 4 famílias de modelagem: Extrude/Inset/Bevel/PushPull com precondições e limites; Primitives/DRAW/PolyPen/ShapeBuilder com fases de criação determinísticas; Knife/Slice/LoopCut (CutSession) com cancelamento e Undo atômico; Merge/Connect/Dissolve/Subdivide contextuais e discretas. Exposição de show_tool_preview. 6 testes em crates/editor/tests/modeling_grammar_h18_tests.rs pass com CARGO_BUILD_JOBS=1.",
       "checkpoints": [
         {
           "title": "Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "modeling-grammar-h18-20261016"
         },
         {
           "title": "Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "modeling-grammar-h18-20261016"
         },
         {
           "title": "Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "modeling-grammar-h18-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "modeling-grammar-h18-20261016"
         }
       ],
       "documents": [

@@ -541,6 +541,64 @@ impl Command for UpdateIkChainCmd {
     }
 }
 
+/// Aplica a pose de uma cadeia IK aos ossos do esqueleto em uma transação atômica de Undo (Task H15).
+#[derive(Debug, Clone)]
+pub struct ApplyIkPoseCmd {
+    pub skeleton_id: Uuid,
+    pub chain_id: Uuid,
+    pub bone_rotations: Vec<(u32, [f32; 4])>,
+}
+
+impl Command for ApplyIkPoseCmd {
+    fn label(&self) -> &'static str {
+        "apply IK pose"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if self.bone_rotations.is_empty() {
+            return Err("No bone rotations in IK pose");
+        }
+        for (bone_id, rot) in &self.bone_rotations {
+            if skel.get_bone(*bone_id).is_none() {
+                return Err("Bone in IK chain not found");
+            }
+            if !rot.iter().all(|x| x.is_finite()) {
+                return Err("Rotation quaternion is not finite");
+            }
+            if rot.iter().map(|x| x * x).sum::<f32>() < 1e-8 {
+                return Err("Rotation quaternion is zero");
+            }
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+        for (bone_id, rot) in &self.bone_rotations {
+            if let Some(bone) = skel.get_bone_mut(*bone_id) {
+                bone.local_transform.rotation = *rot;
+            }
+        }
+        state.set_status("IK pose applied");
+        Ok(())
+    }
+}
+
 /// Cria um clipe vazio na biblioteca de animações do projeto.
 #[derive(Debug, Clone)]
 pub struct AddAnimationCmd {
