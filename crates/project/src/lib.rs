@@ -68,6 +68,7 @@ impl std::ops::BitOrAssign for ProjectChanges {
     }
 }
 
+pub mod align;
 pub mod animation;
 pub mod shared;
 pub use shared::Shared;
@@ -106,6 +107,10 @@ pub mod surface_attachment;
 pub mod surface_recipe;
 pub mod svg;
 
+pub use align::{
+    AlignAxis, AlignError, AlignMode, AlignReference, BoundingBox3D, compute_alignment_deltas,
+    compute_distribution_deltas,
+};
 pub use animation::{
     AnimationAsset, AnimationClip, AnimationLibrary, BlendMode, BoneTrack, CurveChannel,
     CurvePoint, Interpolation, Keyframe, MotionLayer, RetargetProfile, RigPreset,
@@ -737,6 +742,11 @@ impl Asset {
             .iter()
             .map(|v| matrix.transform_point3(v.vec()))
             .collect()
+    }
+
+    /// Caixa delimitadora alinhada aos eixos (AABB) em coordenadas de mundo.
+    pub fn world_bounds(&self) -> Option<align::BoundingBox3D> {
+        align::BoundingBox3D::from_asset(self)
     }
 
     /// Ponto em mundo → frame local do objeto (entrada de cursor, snap, raio).

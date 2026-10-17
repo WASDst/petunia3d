@@ -1051,6 +1051,162 @@ impl CommandDispatcher {
 
         d.register_with_meta(
             CommandMetadata::new(
+                "model.align_objects",
+                "Align Objects",
+                "Align selected objects in 3D space",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_x(),
+        );
+        d.alias("object.align", "model.align_objects");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_center_x",
+                "Align Centers X",
+                "Align centers of selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_x(),
+        );
+        d.alias("align.center_x", "model.align_center_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_center_y",
+                "Align Centers Y",
+                "Align centers of selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_y(),
+        );
+        d.alias("align.center_y", "model.align_center_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_center_z",
+                "Align Centers Z",
+                "Align centers of selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_z(),
+        );
+        d.alias("align.center_z", "model.align_center_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_min_x",
+                "Align Left (Min X)",
+                "Align minimum edges of selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::min_x(),
+        );
+        d.alias("align.left", "model.align_min_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_max_x",
+                "Align Right (Max X)",
+                "Align maximum edges of selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::max_x(),
+        );
+        d.alias("align.right", "model.align_max_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_min_y",
+                "Align Bottom (Min Y)",
+                "Align bottom base of selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::min_y(),
+        );
+        d.alias("align.bottom", "model.align_min_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_max_y",
+                "Align Top (Max Y)",
+                "Align top edges of selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::max_y(),
+        );
+        d.alias("align.top", "model.align_max_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_min_z",
+                "Align Back (Min Z)",
+                "Align back edges of selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::min_z(),
+        );
+        d.alias("align.back", "model.align_min_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_max_z",
+                "Align Front (Max Z)",
+                "Align front edges of selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::max_z(),
+        );
+        d.alias("align.front", "model.align_max_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.distribute_objects_x",
+                "Distribute Objects X",
+                "Distribute spacing between selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::DistributeObjectsCmd::on_x(),
+        );
+        d.alias("distribute.x", "model.distribute_objects_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.distribute_objects_y",
+                "Distribute Objects Y",
+                "Distribute spacing between selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::DistributeObjectsCmd::on_y(),
+        );
+        d.alias("distribute.y", "model.distribute_objects_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.distribute_objects_z",
+                "Distribute Objects Z",
+                "Distribute spacing between selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::DistributeObjectsCmd::on_z(),
+        );
+        d.alias("distribute.z", "model.distribute_objects_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.imprint_profile",
                 "Imprint Profile on Surface",
                 "Imprint profile contour and holes onto coplanar surface faces",

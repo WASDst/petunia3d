@@ -1,6 +1,8 @@
 //! Petunia3D core neutro: tipos compartilhados, eventos e contrato de módulo.
 //! Features conhecem estas abstrações — nunca umas às outras (§22).
 
+pub mod align_commands;
+pub use align_commands::{AlignObjectsCmd, DistributeObjectsCmd};
 pub mod animate_session;
 pub mod brush;
 pub mod bvh;

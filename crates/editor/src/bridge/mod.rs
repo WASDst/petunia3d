@@ -2,6 +2,7 @@ pub(crate) mod shell_layout;
 pub(crate) mod viewport;
 pub(crate) mod viewport_actions;
 
+mod align;
 mod application;
 pub use application::ApplicationState;
 mod booleans;
