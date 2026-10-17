@@ -232,7 +232,7 @@ fn load_and_evaluate(mut project: Project) {
 #[test]
 fn hostile_graph_documents_never_panic_and_leave_a_valid_graph() {
     let seed = serde_json::to_value(seed_project()).unwrap();
-    let mut rng = Rng(0x5EED_0F_6A_7A9E);
+    let mut rng = Rng(0x5EED_0F6A_7A9E);
     let (mut parsed, mut rejected) = (0, 0);
     for round in 0..400 {
         let mut document = seed.clone();
