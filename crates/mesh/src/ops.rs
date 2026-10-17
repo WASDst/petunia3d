@@ -1606,12 +1606,11 @@ impl Mesh {
             faces_added: 0,
             verts_removed: verts_before.saturating_sub(self.verts.len()),
             faces_removed: faces_before.saturating_sub(self.faces.len()),
-            remap: ElementRemap {
-                vertices: vertex_remap,
-                faces: face_remap,
-            },
+            remap: ElementRemap::new(vertex_remap, face_remap),
             uv_faces_touched: Vec::new(),
             invalidated: DirtyDomains::topology_edit(),
+            sharp_edges_touched: Vec::new(),
+            material_slots_touched: Vec::new(),
         };
         // Repara seams/pins não são "faces tocadas por UV", mas o documento pede
         // relatório explícito de invalidação. Registramos em uv_faces_touched as

@@ -96,7 +96,7 @@
 | O01 | ADR-C13; extração do núcleo de grafo a partir de `SurfaceRecipe`; `NodeDescriptor`; comandos `graph.*`               | ciclos, tipos, retrocompatibilidade de `.petunia`, fuzz de arquivos hostis, sem panics | [x] DONE     |
 | O02 | Nó Boolean + Saída de Objeto + Bake; migração de Mirror/Symmetry                                                     | paridade com `BooleanOpCmd` atual; Undo; operandos inválidos; resultado vazio          | [x] DONE     |
 | O03 | Pilha no Inspector + Gaveta "Nós" + HUD gerados do descriptor                                                        | `EditorController` headless (Camada 2); QTestLib offscreen; teclado/a11y               | [x] DONE     |
-| O04 | Materiais/texturas/PBR como nós; catálogo N1                                                                         | visual parity; export/bake; cache por revisão                                          | [ ] TODO     |
+| O04 | Materiais/texturas/PBR como nós; catálogo N1                                                                         | visual parity; export/bake; cache por revisão                                          | [x] DONE     |
 
 Cada tarefa fecha com testes de regressão, evidência com SHA e `not run / pass / fail / blocked`.
 

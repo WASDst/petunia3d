@@ -771,6 +771,31 @@
       "revision": "6341ddf4+working tree (não commitado)",
       "document": "09-ui/shell-v2-proposal.md",
       "summary": "Pilha no Inspector: PetuniaOperationCard gerado do descriptor (segmentado/combo/checkbox/NumberField, alvo 'Aplicar em'), menu '+' com Booleana/Mirror/Symmetry, 'Tornar editável'. Gaveta 'Nós': PetuniaNodeCanvas (QGraphicsView) com fios tipados (sólido=operação, tracejado=geometria + rótulo), arrasto de saída a objeto = graph_apply, teclado (setas, Enter 'Aplicar em…', Delete, Ctrl+setas, Shift+A), nome/descrição acessíveis resumindo ligações. shell_v2 (offscreen) 1/1 pass com capturas em target/shell-captures/shell_POLY_nodes.png e shell_POLY_boolean_applied.png; editor_parity 21, gallery_test 1, component_contracts 1, ui_contract_ids 3, ui_i18n_catalog 3, bridge_test 11 (skip test_widgets_studio_window_creation) pass. Corrigido: gaveta não abria (applyLayout relia layout salvo) e canvas não pode herdar o atalho Delete do editor. Limitações: sem QAccessibleInterface por nó/porta (só descrição da view), sem leitor de tela/AT-SPI testado, undo de MoveNode não reflete no canvas, HUD ainda não gerado do descriptor, sem nós de material."
+    },
+    "g04-remap-provenance": {
+      "revision": "6341ddf4",
+      "document": "03-geometry/architecture-decision.md",
+      "summary": "Fortalecimento de ElementRemap com mapeamento canônico de arestas (map_edge) e cantos (map_corner), rastreamento explícito de proveniência por ElementProvenance (Preserved, Merged, SplitFrom, Created) e campos de rastreamento de sharp_edges e material_slots em TopologyResult."
+    },
+    "g04-gates": {
+      "revision": "6341ddf4",
+      "document": "03-geometry/architecture-decision.md",
+      "summary": "Bateria completa de 269 testes em petunia_mesh aprovada, incluindo testes unitários de proveniência e remapeamento; clippy sem warnings (-D warnings) e fmt verificado."
+    },
+    "o04-material-nodes-cache": {
+      "revision": "6341ddf4",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Nós NodeSpec::PbrMaterial e AssignMaterial integrados ao SurfaceRecipe com avaliação determinística e SurfaceRecipeCache chaveado por param_revision."
+    },
+    "o04-visual-parity-bake": {
+      "revision": "6341ddf4",
+      "document": "05-materials/architecture-decision.md",
+      "summary": "Avaliação de receitas para preenchimento de materiais PBR (evaluate_to_material) com albedo, normal, roughness, metallic e emission, e exportação persistente via bake."
+    },
+    "o04-gates": {
+      "revision": "6341ddf4",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Suíte de testes de surface_recipe aprovada cobrindo nós PBR, avaliação de canais, invalidação de cache e bake isolado; clippy e fmt verificados."
     }
   },
   "tasks": [
@@ -1690,7 +1715,7 @@
       "description": "Manter Mesh indexada autoral, HalfEdge derivado, n-gons e triangulação compartilhada; fortalecer TopologyResult/ElementRemap, UV/material/color/sharp/provenance, seleção e attachments.",
       "document": "03-geometry/architecture-decision.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-09",
+      "updated": "2026-10-17",
       "baseline": "Parcial. Mesh indexada autoral, HalfEdge derivado, n-gons e triangulação compartilhada confirmados e testados em crates/mesh. TopologyResult/ElementRemap fortalecidos: weld_with_remap devolve remap completo de vértices e faces. Seleção ainda embutida em Vertex/Face/Mesh (migração para Application pendente); shadp edges autorais e provenance pendentes.",
       "checkpoints": [
         {
@@ -1700,8 +1725,8 @@
         },
         {
           "title": "fortalecer TopologyResult/ElementRemap, UV/material/color/sharp/provenance, seleção e attachments",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g04-remap-provenance"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
@@ -4591,7 +4616,7 @@
       "title": "Operation Graph — núcleo genérico e comandos",
       "description": "Extrair núcleo de SurfaceRecipe, NodeDescriptor, comandos graph.* e fonte Graph(output); ADR-C13.",
       "document": "03-geometry/operation-graph.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "2026-10-17: núcleo do Operation Graph implementado e testado (project 263, core 197 pass); extração genérica de SurfaceRecipe pendente.",
       "checkpoints": [
@@ -4627,7 +4652,7 @@
       "title": "Operation Graph — nó Boolean, Saída de Objeto e Bake",
       "description": "Nó Boolean multi-tool sobre petunia_mesh::boolean, Saída de Objeto, Bake e migração de Mirror/Symmetry.",
       "document": "03-geometry/operation-graph.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "2026-10-17: nós Boolean/Object/Mirror/Symmetry e Bake com Undo funcionando de ponta a ponta no shell v2; paridade com BooleanOpCmd e migração de ModifierKind pendentes.",
       "checkpoints": [
@@ -4663,7 +4688,7 @@
       "title": "Operation Graph — Pilha, Gaveta Nós e HUD gerados do descriptor",
       "description": "Pilha no Inspector e Gaveta Nós (QGraphicsView) com a11y completa, gerados do NodeDescriptor.",
       "document": "03-geometry/operation-graph.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "2026-10-17: Pilha no Inspector e canvas de nós na gaveta funcionando offscreen; QAccessible completo, HUD gerado e leitor de tela pendentes.",
       "checkpoints": [
@@ -4694,24 +4719,24 @@
       "title": "Operation Graph — materiais, texturas e PBR como nós",
       "description": "PBR Material, Atribuir Material e catálogo inicial de superfície sobre SurfaceRecipe, mantendo avaliação CPU.",
       "document": "03-geometry/operation-graph.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Nós de material e textura com cache por revisão.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o04-material-nodes-cache"
         },
         {
           "title": "Paridade visual e export/bake.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o04-visual-parity-bake"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o04-gates"
         }
       ],
       "documents": [

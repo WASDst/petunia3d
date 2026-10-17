@@ -1970,6 +1970,7 @@ dependencies = [
  "manifold-rust",
  "proptest",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "xatlas-rs-v2",
 ]
