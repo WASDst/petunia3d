@@ -1,5 +1,6 @@
 #include "petunia_uv_panel.h"
 #include "petunia_icons.h"
+#include "petunia_theme.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -220,7 +221,7 @@ void PetuniaUvPanel::setupUi() {
     auto *packForm = new QFormLayout(packGroup);
     packForm->setContentsMargins(8, 8, 8, 8);
 
-    m_marginSpin = new QDoubleSpinBox(packGroup);
+    m_marginSpin = new PetuniaNumberField(packGroup);
     m_marginSpin->setRange(0.001, 0.2);
     m_marginSpin->setValue(0.02);
     m_marginSpin->setSingleStep(0.005);
@@ -248,7 +249,10 @@ void PetuniaUvPanel::refreshDiagnostics() {
         if (m_diagIslandsLabel) m_diagIslandsLabel->setText(QString::number(islands));
         if (m_diagOverlapLabel) {
             m_diagOverlapLabel->setText(QStringLiteral("%1%").arg(overlap * 100.0f, 0, 'f', 1));
-            m_diagOverlapLabel->setStyleSheet(overlap > 0.01f ? QStringLiteral("font-weight: bold; color: #ff5252;") : QStringLiteral("font-weight: bold; color: #81c784;"));
+            const auto &theme = PetuniaTheme::instance();
+            m_diagOverlapLabel->setStyleSheet(overlap > 0.01f
+                ? QStringLiteral("font-weight: bold; color: %1;").arg(theme.statusError().name())
+                : QStringLiteral("font-weight: bold; color: %1;").arg(theme.statusSuccess().name()));
         }
         if (m_diagStretchLabel) {
             m_diagStretchLabel->setText(QString::number(stretch, 'f', 2));

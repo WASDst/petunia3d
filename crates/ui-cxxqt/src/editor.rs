@@ -657,7 +657,7 @@ impl QtEditor {
                 );
                 let intent = if request["lasso"].as_bool().unwrap_or(false) {
                     I::Lasso {
-                        polygon: ViewportLassoPolygon::from_slint_path(string(request, "path")?)
+                        polygon: ViewportLassoPolygon::from_polygon_path(string(request, "path")?)
                             .ok_or("Laço inválido")?,
                         mode,
                     }
@@ -1235,6 +1235,36 @@ fn dispatch_controller(
         "adjust_proportional_radius" => b.adjust_proportional_radius(number(v, "delta")?),
         "airbrush_tick" => b.airbrush_tick(),
         "align_reference_view" => b.align_reference_view(string(v, "axis_str")?),
+        "align_objects" => {
+            let axis_str = string(v, "axis").unwrap_or("X");
+            let mode_str = string(v, "mode").unwrap_or("center");
+            let ref_str = string(v, "reference").unwrap_or("active");
+            let axis = match axis_str {
+                "y" | "Y" => petunia_project::AlignAxis::Y,
+                "z" | "Z" => petunia_project::AlignAxis::Z,
+                _ => petunia_project::AlignAxis::X,
+            };
+            let mode = match mode_str {
+                "min" | "Min" => petunia_project::AlignMode::Min,
+                "max" | "Max" => petunia_project::AlignMode::Max,
+                _ => petunia_project::AlignMode::Center,
+            };
+            let reference = match ref_str {
+                "bounds" | "selection" => petunia_project::AlignReference::SelectionBounds,
+                "origin" | "world" => petunia_project::AlignReference::WorldOrigin,
+                _ => petunia_project::AlignReference::ActiveObject,
+            };
+            b.align_objects(axis, mode, reference)
+        }
+        "distribute_objects" => {
+            let axis_str = string(v, "axis").unwrap_or("X");
+            let axis = match axis_str {
+                "y" | "Y" => petunia_project::AlignAxis::Y,
+                "z" | "Z" => petunia_project::AlignAxis::Z,
+                _ => petunia_project::AlignAxis::X,
+            };
+            b.distribute_objects(axis)
+        }
         "apply_brush_preset" => b.apply_brush_preset(integer(v, "index")?.max(0) as usize),
         "apply_modifier" => b.apply_modifier(string(v, "id")?),
         "assign_material_slot" => b.assign_material_slot(integer(v, "slot")?.max(0) as usize),

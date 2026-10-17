@@ -4,7 +4,6 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
-#include <QDoubleSpinBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -14,6 +13,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <QWidget>
+#include "petunia_number_field.h"
 
 class PetuniaPrimitiveCard : public QFrame {
     Q_OBJECT
@@ -29,7 +29,7 @@ class PetuniaPrimitiveCard : public QFrame {
 
   private:
     QLabel *m_titleLabel{nullptr};
-    QDoubleSpinBox *m_sizeSpin{nullptr};
+    PetuniaNumberField *m_sizeSpin{nullptr};
     QSpinBox *m_segmentsSpin{nullptr};
     QSpinBox *m_ringsSpin{nullptr};
     QCheckBox *m_capEndsCheck{nullptr};
@@ -47,7 +47,7 @@ class PetuniaLoopCutCard : public QFrame {
 
   private:
     QSpinBox *m_cutsSpin{nullptr};
-    QDoubleSpinBox *m_slideSpin{nullptr};
+    PetuniaNumberField *m_slideSpin{nullptr};
 };
 
 class PetuniaToolOptionsBar : public QFrame {
@@ -84,6 +84,7 @@ class PetuniaToolOptionsBar : public QFrame {
 
   private slots:
     void openOriginMenu();
+    void openAlignMenu();
 
   private:
     // Selection Domain Group
@@ -94,14 +95,15 @@ class PetuniaToolOptionsBar : public QFrame {
     QPushButton *m_domainFaceBtn{nullptr};
     QFrame *m_sepDomain{nullptr};
 
-    // Transform Helpers (Snapping, Proportional, Pivot)
+    // Transform Helpers (Snapping, Proportional, Pivot, Align)
     QWidget *m_transformGroup{nullptr};
     QPushButton *m_snapBtn{nullptr};
     QComboBox *m_snapTargetCombo{nullptr};
     QPushButton *m_propBtn{nullptr};
-    QDoubleSpinBox *m_propRadiusSpin{nullptr};
+    PetuniaNumberField *m_propRadiusSpin{nullptr};
     QComboBox *m_pivotCombo{nullptr};
     QPushButton *m_originBtn{nullptr};
+    QPushButton *m_alignBtn{nullptr};
     QFrame *m_sepTransform{nullptr};
 
     // Camera & View
@@ -265,9 +267,9 @@ class PetuniaColorPickerPopover : public QDialog {
   private:
     QLabel *m_titleLabel{nullptr};
     PetuniaColorWheel *m_wheel{nullptr};
-    QDoubleSpinBox *m_hueSpin{nullptr};
-    QDoubleSpinBox *m_satSpin{nullptr};
-    QDoubleSpinBox *m_valSpin{nullptr};
+    PetuniaNumberField *m_hueSpin{nullptr};
+    PetuniaNumberField *m_satSpin{nullptr};
+    PetuniaNumberField *m_valSpin{nullptr};
     QFrame *m_swatchPreview{nullptr};
     QLineEdit *m_hexEdit{nullptr};
     QLabel *m_rgbLabel{nullptr};

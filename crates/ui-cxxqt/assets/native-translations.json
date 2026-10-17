@@ -15,6 +15,22 @@
     "pt-BR": "Perfil",
     "en": "Profile"
   },
+  "Transf": {
+    "pt-BR": "Transf",
+    "en": "Transf"
+  },
+  "Modif": {
+    "pt-BR": "Modif",
+    "en": "Modif"
+  },
+  "Ações": {
+    "pt-BR": "Ações",
+    "en": "Actions"
+  },
+  "Ferram": {
+    "pt-BR": "Ferram",
+    "en": "Tools"
+  },
   "Transformação": {
     "pt-BR": "Transformação",
     "en": "Transform"
@@ -854,6 +870,10 @@
   "Tamanho": {
     "pt-BR": "Tamanho",
     "en": "Size"
+  },
+  "Alinhar": {
+    "pt-BR": "Alinhar",
+    "en": "Align"
   },
   "Alinhar vista": {
     "pt-BR": "Alinhar vista",

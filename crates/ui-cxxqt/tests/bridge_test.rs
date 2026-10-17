@@ -627,3 +627,54 @@ fn test_timeline_and_dopesheet_ffi() {
         petunia_qt_app_set_timeline_frame(1);
     }
 }
+
+#[test]
+fn test_align_and_distribute_objects_via_qt_app() {
+    unsafe {
+        reset_editor_fixture();
+
+        // 1. Adiciona dois cubos na cena
+        let c_cube = std::ffi::CString::new("model.add_cube").unwrap();
+        assert!(petunia_qt_app_execute_command(c_cube.as_ptr()));
+        assert!(petunia_qt_app_execute_command(c_cube.as_ptr()));
+
+        // Posiciona o segundo cubo em X = 20
+        petunia_qt_app_set_asset_position(1, 20.0, 0.0, 0.0);
+
+        // Seleciona ambos os objetos
+        petunia_ui_cxxqt::render::opengl_viewport::VIEWPORT_RENDERER
+            .with(|renderer| {
+                let mut host = renderer.borrow_mut();
+                host.app.state.select_object(Some(0), false);
+                host.app.state.select_object(Some(1), true);
+            })
+            .unwrap();
+
+        // Executa alinhamento de centro em X
+        let c_align = std::ffi::CString::new("model.align_center_x").unwrap();
+        let aligned = petunia_qt_app_execute_command(c_align.as_ptr());
+        assert!(aligned);
+
+        // Verifica que os dois cubos agora compartilham a mesma coordenada X
+        let mut x0 = 0.0;
+        let mut y0 = 0.0;
+        let mut z0 = 0.0;
+        let mut x1 = 0.0;
+        let mut y1 = 0.0;
+        let mut z1 = 0.0;
+        petunia_qt_app_get_asset_position(0, &mut x0, &mut y0, &mut z0);
+        petunia_qt_app_get_asset_position(1, &mut x1, &mut y1, &mut z1);
+        assert!(
+            (x0 - x1).abs() < 1e-4,
+            "Posições X devem ser iguais após alinhamento: x0={x0}, x1={x1}"
+        );
+
+        // Testa Desfazer (Undo)
+        assert!(petunia_qt_app_undo());
+        petunia_qt_app_get_asset_position(1, &mut x1, &mut y1, &mut z1);
+        assert!(
+            (x1 - 20.0).abs() < 1e-4,
+            "Undo deve restaurar posição X = 20 do segundo cubo"
+        );
+    }
+}

@@ -69,23 +69,23 @@ void PetuniaReferenceDialog::setupUi() {
     connect(m_opacitySlider, &QSlider::valueChanged, this, &PetuniaReferenceDialog::updateImageOpacity);
     form->addRow(QStringLiteral("Opacidade:"), opacityRow);
 
-    m_scaleSpin = new QDoubleSpinBox(propsGroup);
+    m_scaleSpin = new PetuniaNumberField(QStringLiteral("S"), propsGroup);
     m_scaleSpin->setRange(0.01, 100.0);
     m_scaleSpin->setValue(1.0);
     m_scaleSpin->setSingleStep(0.1);
     m_scaleSpin->setSuffix(QStringLiteral("x"));
     form->addRow(QStringLiteral("Escala:"), m_scaleSpin);
 
-    m_offsetX = new QDoubleSpinBox(propsGroup);
+    m_offsetX = new PetuniaNumberField(QStringLiteral("X"), propsGroup);
     m_offsetX->setRange(-1000.0, 1000.0);
     m_offsetX->setSingleStep(0.1);
-    m_offsetX->setSuffix(QStringLiteral(" m"));
+    m_offsetX->setSuffix(QStringLiteral("m"));
     form->addRow(QStringLiteral("Deslocamento X:"), m_offsetX);
 
-    m_offsetY = new QDoubleSpinBox(propsGroup);
+    m_offsetY = new PetuniaNumberField(QStringLiteral("Y"), propsGroup);
     m_offsetY->setRange(-1000.0, 1000.0);
     m_offsetY->setSingleStep(0.1);
-    m_offsetY->setSuffix(QStringLiteral(" m"));
+    m_offsetY->setSuffix(QStringLiteral("m"));
     form->addRow(QStringLiteral("Deslocamento Y:"), m_offsetY);
 
     rightCol->addWidget(propsGroup);

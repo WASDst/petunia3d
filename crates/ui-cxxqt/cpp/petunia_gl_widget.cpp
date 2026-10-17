@@ -311,12 +311,14 @@ struct AxisRenderInfo {
 };
 
 void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
-    m_gizmoCenter = QPoint(width() - 54, 54);
+    m_gizmoCenter = QPoint(width() - 52, 52);
     const int radius = m_gizmoRadius;
 
-    // Fundo circular do Gizmo
-    painter.setPen(QColor(55, 55, 55, 120));
-    painter.setBrush(QColor(25, 25, 25, 140));
+    // Fundo circular do Gizmo com acabamento sutil de estúdio
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(255, 255, 255, 25), 1.0));
+    painter.setBrush(QColor(22, 22, 24, 170));
     painter.drawEllipse(m_gizmoCenter, radius, radius);
 
     float rx = 1.0f, ry = 0.0f, rz = 0.0f;
@@ -325,22 +327,23 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
 
     if (!petunia_qt_camera_get_orientation(&rx, &ry, &rz, &ux, &uy, &uz, &fx,
                                            &fy, &fz)) {
+        painter.restore();
         return;
     }
 
-    const float armLength = 26.0f;
+    const float armLength = 25.0f;
     std::vector<AxisRenderInfo> axes = {
-        {1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(255, 110, 110), QStringLiteral("X"),
+        {1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(255, 95, 95), QStringLiteral("X"),
          3, true}, // +X (Right)
-        {-1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(140, 45, 45), QStringLiteral(""), 4,
+        {-1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(130, 40, 40), QStringLiteral(""), 4,
          false}, // -X (Left)
-        {0.0f, 1.0f, 0.0f, 0, 0, 0, QColor(105, 219, 124), QStringLiteral("Y"),
+        {0.0f, 1.0f, 0.0f, 0, 0, 0, QColor(95, 215, 115), QStringLiteral("Y"),
          2, true}, // +Y (Back)
-        {0.0f, -1.0f, 0.0f, 0, 0, 0, QColor(45, 120, 55), QStringLiteral(""), 1,
+        {0.0f, -1.0f, 0.0f, 0, 0, 0, QColor(40, 110, 50), QStringLiteral(""), 1,
          false}, // -Y (Front)
-        {0.0f, 0.0f, 1.0f, 0, 0, 0, QColor(77, 171, 247), QStringLiteral("Z"),
+        {0.0f, 0.0f, 1.0f, 0, 0, 0, QColor(70, 160, 245), QStringLiteral("Z"),
          5, true}, // +Z (Top)
-        {0.0f, 0.0f, -1.0f, 0, 0, 0, QColor(35, 80, 140), QStringLiteral(""), 6,
+        {0.0f, 0.0f, -1.0f, 0, 0, 0, QColor(30, 75, 130), QStringLiteral(""), 6,
          false} // -Z (Bottom)
     };
 
@@ -372,25 +375,26 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
 
         if (ax.isPositive) {
             // Linha da origem até a esfera
-            QPen pen(ax.color, 2.5);
+            QPen pen(ax.color, 2.0, Qt::SolidLine, Qt::RoundCap);
             painter.setPen(pen);
             painter.drawLine(m_gizmoCenter, pEnd);
 
             // Esfera de ponta com rótulo
             painter.setPen(Qt::NoPen);
             painter.setBrush(ax.color);
-            painter.drawEllipse(pEnd, 7.5, 7.5);
+            painter.drawEllipse(pEnd, 8.5, 8.5);
 
-            painter.setPen(QColor(18, 18, 18));
-            painter.drawText(QRectF(pEnd.x() - 7.5, pEnd.y() - 7.5, 15, 15),
+            painter.setPen(QColor(16, 16, 16));
+            painter.drawText(QRectF(pEnd.x() - 8.5, pEnd.y() - 8.5, 17, 17),
                              Qt::AlignCenter, ax.label);
         } else {
             // Eixo negativo: ponto pequeno
             painter.setPen(Qt::NoPen);
             painter.setBrush(ax.color);
-            painter.drawEllipse(pEnd, 4.0, 4.0);
+            painter.drawEllipse(pEnd, 3.5, 3.5);
         }
     }
+    painter.restore();
 }
 
 bool PetuniaGlWidget::handleGizmoClick(const QPoint &pos) {
@@ -809,48 +813,93 @@ void PetuniaGlWidget::drawTransformGizmo(QPainter &painter) {
     const auto gizmo = m_overlayState["gizmo"].toObject();
     if (!gizmo["visible"].toBool())
         return;
+
+    const QString activeTool = m_overlayState["active_tool"].toString();
+    const bool isRotate = (activeTool == QStringLiteral("rotate"));
+    const bool isScale = (activeTool == QStringLiteral("scale"));
+    const bool isTransform = (activeTool == QStringLiteral("transform"));
+    const bool isMove = (activeTool == QStringLiteral("move") || activeTool == QStringLiteral("select") || activeTool.isEmpty());
+
+    const bool showArrows = isMove || isTransform;
+    const bool showPlanes = isMove || isTransform;
+    const bool showRings = isRotate || isTransform;
+    const bool showScaleBoxes = isScale || isTransform;
+
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const QColor colors[] = {QColor("#ff5555"), QColor("#55e055"),
-                             QColor("#4b87f5")};
+    const QColor colors[] = {QColor(255, 95, 95), QColor(95, 215, 115),
+                             QColor(70, 160, 245)};
     const QStringList axes{"x", "y", "z"};
     for (int i = 0; i < axes.size(); ++i) {
-        painter.setPen(QPen(colors[i], 2.2));
-        painter.setBrush(colors[i]);
-        for (const auto &suffix :
-             QStringList{"_commands", "_arrow_commands", "_scale_commands",
-                         "_rotate_commands"})
-            painter.drawPath(petuniaPath(gizmo[axes[i] + suffix].toString()));
-        const auto label = gizmo[axes[i] + "_label"].toArray();
-        if (label.size() == 2) {
-            painter.setPen(colors[i]);
-            QFont font = painter.font();
-            font.setPointSize(9);
-            font.setBold(true);
-            painter.setFont(font);
-            painter.drawText(QPointF(label[0].toDouble(), label[1].toDouble()),
-                             axes[i].toUpper());
+        // 1. Linhas de eixo (traço limpo, sem preenchimento)
+        if (showArrows || showScaleBoxes) {
+            painter.setPen(QPen(colors[i], 1.8));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(petuniaPath(gizmo[axes[i] + "_commands"].toString()));
+        }
+
+        // 2. Anéis de rotação (apenas no modo de rotação ou combinado)
+        if (showRings) {
+            QColor rotColor = colors[i];
+            if (isTransform) {
+                rotColor.setAlpha(110);
+            }
+            painter.setPen(QPen(rotColor, isRotate ? 2.0 : 1.2, Qt::SolidLine, Qt::RoundCap));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(petuniaPath(gizmo[axes[i] + "_rotate_commands"].toString()));
+        }
+
+        // 3. Pontas de seta de translação
+        if (showArrows) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(colors[i]);
+            painter.drawPath(petuniaPath(gizmo[axes[i] + "_arrow_commands"].toString()));
+        }
+
+        // 4. Caixas de escala (cubos preenchidos com contorno sutil)
+        if (showScaleBoxes) {
+            painter.setPen(QPen(colors[i].darker(140), 1.0));
+            painter.setBrush(colors[i]);
+            painter.drawPath(petuniaPath(gizmo[axes[i] + "_scale_commands"].toString()));
+        }
+
+        if (showArrows || isRotate || isScale) {
+            const auto label = gizmo[axes[i] + "_label"].toArray();
+            if (label.size() == 2) {
+                painter.setPen(colors[i]);
+                QFont font = painter.font();
+                font.setPointSize(9);
+                font.setBold(true);
+                painter.setFont(font);
+                painter.drawText(QPointF(label[0].toDouble(), label[1].toDouble()),
+                                 axes[i].toUpper());
+            }
         }
     }
     // Planar handles (XY, XZ, YZ) com preenchimento translúcido moderno
-    const struct { const char *key; QColor col; } planes[] = {
-        {"plane_xy_commands", QColor(75, 135, 245, 65)},
-        {"plane_xz_commands", QColor(85, 224, 85, 65)},
-        {"plane_yz_commands", QColor(255, 85, 85, 65)},
-    };
-    for (const auto &p : planes) {
-        QPainterPath path = petuniaPath(gizmo[p.key].toString());
-        if (!path.isEmpty()) {
-            painter.setPen(QPen(p.col.lighter(130), 1.5));
-            painter.setBrush(p.col);
-            painter.drawPath(path);
+    if (showPlanes) {
+        const struct { const char *key; QColor col; } planes[] = {
+            {"plane_xy_commands", QColor(70, 160, 245, 60)},
+            {"plane_xz_commands", QColor(95, 215, 115, 60)},
+            {"plane_yz_commands", QColor(255, 95, 95, 60)},
+        };
+        for (const auto &p : planes) {
+            QPainterPath path = petuniaPath(gizmo[p.key].toString());
+            if (!path.isEmpty()) {
+                painter.setPen(QPen(p.col.lighter(130), 1.2));
+                painter.setBrush(p.col);
+                painter.drawPath(path);
+            }
         }
     }
-    const QString roll = gizmo["view_roll_commands"].toString();
-    if (!roll.isEmpty()) {
-        painter.setPen(QPen(QColor(255, 255, 255, 160), 1.5));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawPath(petuniaPath(roll));
+
+    if (isRotate) {
+        const QString roll = gizmo["view_roll_commands"].toString();
+        if (!roll.isEmpty()) {
+            painter.setPen(QPen(QColor(255, 255, 255, 120), 1.2));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(petuniaPath(roll));
+        }
     }
     painter.restore();
 }
@@ -977,30 +1026,23 @@ void PetuniaGlWidget::draw3dCursor(QPainter &painter) {
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // Anel externo branco tracejado (#ffffff)
-    QPen dashPen(QColor(255, 255, 255, 230), 1.6, Qt::DashLine);
+    // Anel externo branco tracejado sutil e fino
+    QPen dashPen(QColor(255, 255, 255, 180), 1.0, Qt::DashLine);
     dashPen.setDashPattern({3.0, 3.0});
     painter.setBrush(Qt::NoBrush);
     painter.setPen(dashPen);
-    painter.drawEllipse(QPointF(cx, cy), 13, 13);
+    painter.drawEllipse(QPointF(cx, cy), 12, 12);
 
-    // Anel interno vermelho (#e54d42)
-    painter.setPen(QPen(QColor(229, 77, 66, 240), 1.6));
-    painter.drawEllipse(QPointF(cx, cy), 10, 10);
+    // Anel interno vermelho de precisão
+    painter.setPen(QPen(QColor(229, 77, 66, 200), 1.0));
+    painter.drawEllipse(QPointF(cx, cy), 9, 9);
 
-    // Linhas de mira (crosshairs com eixos coloridos RGB)
-    painter.setPen(QPen(QColor(255, 110, 110, 240), 1.5)); // X red
-    painter.drawLine(QPointF(cx - 18, cy), QPointF(cx - 2, cy));
-    painter.drawLine(QPointF(cx + 2, cy), QPointF(cx + 18, cy));
-
-    painter.setPen(QPen(QColor(105, 219, 124, 240), 1.5)); // Y green
-    painter.drawLine(QPointF(cx, cy - 18), QPointF(cx, cy - 2));
-    painter.drawLine(QPointF(cx, cy + 2), QPointF(cx, cy + 18));
-
-    // Ponto central
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(255, 255, 255));
-    painter.drawEllipse(QPointF(cx, cy), 2.0, 2.0);
+    // Mira cruzada sutil (crosshair central fino)
+    painter.setPen(QPen(QColor(255, 255, 255, 140), 1.0));
+    painter.drawLine(QPointF(cx - 15, cy), QPointF(cx - 12, cy));
+    painter.drawLine(QPointF(cx + 12, cy), QPointF(cx + 15, cy));
+    painter.drawLine(QPointF(cx, cy - 15), QPointF(cx, cy - 12));
+    painter.drawLine(QPointF(cx, cy + 12), QPointF(cx, cy + 15));
 
     painter.restore();
 }

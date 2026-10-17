@@ -2,6 +2,7 @@
 #include "petunia_overlay_cards.h"
 #include "petunia_angle_dial.h"
 #include "petunia_icons.h"
+#include "petunia_property_group.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -322,7 +323,7 @@ void PetuniaPaintPanel::setupUi() {
     auto *propsLayout = new QVBoxLayout(scrollContent);
     propsLayout->setContentsMargins(0, 0, 0, 0);
 
-    auto *brushGroup = new QGroupBox(QStringLiteral("Propriedades do Pincel"), scrollContent);
+    auto *brushGroup = new QGroupBox(QStringLiteral("Essenciais do Pincel"), scrollContent);
     auto *form = new QFormLayout(brushGroup);
     form->setContentsMargins(6, 6, 6, 6);
     form->setSpacing(6);
@@ -378,55 +379,63 @@ void PetuniaPaintPanel::setupUi() {
     opacRow->addWidget(m_opacityLabel);
     form->addRow(QStringLiteral("Opacidade:"), opacRow);
 
+    propsLayout->addWidget(brushGroup);
+
+    // Dinâmica e Traço (Grupo secundário com disclosure progressivo)
+    auto *dynamicsGroup = new PropertyGroup(QStringLiteral("Dinâmica e Traço"), scrollContent);
+    dynamicsGroup->setExpanded(false);
+    auto *dynamicsForm = new QFormLayout();
+    dynamicsForm->setContentsMargins(6, 6, 6, 6);
+    dynamicsForm->setSpacing(6);
+
     // Espaçamento (Spacing)
     auto *spacingRow = new QHBoxLayout();
-    m_spacingSlider = new QSlider(Qt::Horizontal, brushGroup);
+    m_spacingSlider = new QSlider(Qt::Horizontal, dynamicsGroup);
     m_spacingSlider->setRange(1, 100);
     m_spacingSlider->setValue(15);
-    m_spacingLabel = new QLabel(QStringLiteral("15%"), brushGroup);
+    m_spacingLabel = new QLabel(QStringLiteral("15%"), dynamicsGroup);
     connect(m_spacingSlider, &QSlider::valueChanged, this, [this](int v) {
         m_spacingLabel->setText(QStringLiteral("%1%").arg(v));
     });
     spacingRow->addWidget(m_spacingSlider);
     spacingRow->addWidget(m_spacingLabel);
-    form->addRow(QStringLiteral("Espaçamento:"), spacingRow);
+    dynamicsForm->addRow(QStringLiteral("Espaçamento:"), spacingRow);
 
     // Jitter Tamanho
     auto *jitterRow = new QHBoxLayout();
-    m_jitterSizeSlider = new QSlider(Qt::Horizontal, brushGroup);
+    m_jitterSizeSlider = new QSlider(Qt::Horizontal, dynamicsGroup);
     m_jitterSizeSlider->setRange(0, 100);
     m_jitterSizeSlider->setValue(0);
-    m_jitterSizeLabel = new QLabel(QStringLiteral("0%"), brushGroup);
+    m_jitterSizeLabel = new QLabel(QStringLiteral("0%"), dynamicsGroup);
     connect(m_jitterSizeSlider, &QSlider::valueChanged, this, [this](int v) {
         m_jitterSizeLabel->setText(QStringLiteral("%1%").arg(v));
     });
     jitterRow->addWidget(m_jitterSizeSlider);
     jitterRow->addWidget(m_jitterSizeLabel);
-    form->addRow(QStringLiteral("Jitter:"), jitterRow);
+    dynamicsForm->addRow(QStringLiteral("Jitter:"), jitterRow);
 
     // Suavização (Smoothing)
     auto *smoothRow = new QHBoxLayout();
-    m_smoothingSlider = new QSlider(Qt::Horizontal, brushGroup);
+    m_smoothingSlider = new QSlider(Qt::Horizontal, dynamicsGroup);
     m_smoothingSlider->setRange(0, 100);
     m_smoothingSlider->setValue(50);
-    m_smoothingLabel = new QLabel(QStringLiteral("50%"), brushGroup);
+    m_smoothingLabel = new QLabel(QStringLiteral("50%"), dynamicsGroup);
     connect(m_smoothingSlider, &QSlider::valueChanged, this, [this](int v) {
         m_smoothingLabel->setText(QStringLiteral("%1%").arg(v));
     });
     smoothRow->addWidget(m_smoothingSlider);
     smoothRow->addWidget(m_smoothingLabel);
-    form->addRow(QStringLiteral("Suavização:"), smoothRow);
+    dynamicsForm->addRow(QStringLiteral("Suavização:"), smoothRow);
 
     // Ângulo (Dial circular DCC com SpinBox sincronizado)
     auto *angleRow = new QHBoxLayout();
-    m_angleDial = new PetuniaAngleDial(brushGroup);
+    m_angleDial = new PetuniaAngleDial(dynamicsGroup);
     m_angleDial->setFixedSize(36, 36);
-    m_angleSpin = new QDoubleSpinBox(brushGroup);
+    m_angleSpin = new PetuniaNumberField(QStringLiteral("∠"), dynamicsGroup);
     m_angleSpin->setRange(0.0, 360.0);
     m_angleSpin->setSingleStep(1.0);
-    m_angleSpin->setDecimals(1);
+    m_angleSpin->setMaxDecimals(1);
     m_angleSpin->setSuffix(QStringLiteral("°"));
-    m_angleSpin->setWrapping(true);
     m_angleSpin->setValue(0.0);
     m_angleSpin->setAccessibleName(tr("Ângulo do pincel"));
 
@@ -441,7 +450,7 @@ void PetuniaPaintPanel::setupUi() {
         emit brushAngleChanged(deg);
     });
 
-    connect(m_angleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double val) {
+    connect(m_angleSpin, &PetuniaNumberField::valueChanged, this, [this](double val) {
         float fVal = static_cast<float>(val);
         if (std::abs(m_angleDial->angle() - fVal) > 0.1f) {
             m_angleDial->setAngle(fVal);
@@ -455,18 +464,19 @@ void PetuniaPaintPanel::setupUi() {
     angleRow->addWidget(m_angleDial);
     angleRow->addWidget(m_angleSpin);
     angleRow->addStretch();
-    form->addRow(QStringLiteral("Ângulo:"), angleRow);
+    dynamicsForm->addRow(QStringLiteral("Ângulo:"), angleRow);
 
     // Modo de Mesclagem
-    m_blendModeCombo = new QComboBox(brushGroup);
+    m_blendModeCombo = new QComboBox(dynamicsGroup);
     m_blendModeCombo->addItem(QStringLiteral("Normal"));
     m_blendModeCombo->addItem(QStringLiteral("Multiplicação (Multiply)"));
     m_blendModeCombo->addItem(QStringLiteral("Adição (Add)"));
     m_blendModeCombo->addItem(QStringLiteral("Sobreposição (Overlay)"));
     connect(m_blendModeCombo, &QComboBox::currentTextChanged, this, &PetuniaPaintPanel::blendModeChanged);
-    form->addRow(QStringLiteral("Blend Mode:"), m_blendModeCombo);
+    dynamicsForm->addRow(QStringLiteral("Blend Mode:"), m_blendModeCombo);
 
-    propsLayout->addWidget(brushGroup);
+    dynamicsGroup->addLayout(dynamicsForm);
+    propsLayout->addWidget(dynamicsGroup);
 
     // 4. Seção Cores e Paleta de Amostras (Swatches)
     auto *colorGroup = new QGroupBox(QStringLiteral("Paleta de Cores & Swatches"), scrollContent);

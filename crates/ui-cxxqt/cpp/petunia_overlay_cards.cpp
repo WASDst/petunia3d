@@ -46,11 +46,11 @@ PetuniaPrimitiveCard::PetuniaPrimitiveCard(QWidget *parent) : QFrame(parent) {
     layout->addLayout(headerRow);
 
     auto *form = new QFormLayout();
-    m_sizeSpin = new QDoubleSpinBox(this);
+    m_sizeSpin = new PetuniaNumberField(this);
     m_sizeSpin->setRange(0.01, 100.0);
     m_sizeSpin->setValue(2.0);
     m_sizeSpin->setSingleStep(0.1);
-    m_sizeSpin->setSuffix(QStringLiteral(" m"));
+    m_sizeSpin->setSuffix(QStringLiteral("m"));
     form->addRow(QStringLiteral("Tamanho / Raio:"), m_sizeSpin);
 
     m_segmentsSpin = new QSpinBox(this);
@@ -88,7 +88,7 @@ PetuniaPrimitiveCard::PetuniaPrimitiveCard(QWidget *parent) : QFrame(parent) {
                               m_segmentsSpin->value(), m_ringsSpin->value());
     };
 
-    connect(m_sizeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    connect(m_sizeSpin, &PetuniaNumberField::valueChanged,
             this, onParamChanged);
     connect(m_segmentsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
             onParamChanged);
@@ -142,7 +142,7 @@ PetuniaLoopCutCard::PetuniaLoopCutCard(QWidget *parent) : QFrame(parent) {
     m_cutsSpin->setValue(1);
     form->addRow(QStringLiteral("Número de Cortes:"), m_cutsSpin);
 
-    m_slideSpin = new QDoubleSpinBox(this);
+    m_slideSpin = new PetuniaNumberField(this);
     m_slideSpin->setRange(-1.0, 1.0);
     m_slideSpin->setValue(0.0);
     m_slideSpin->setSingleStep(0.05);
@@ -171,7 +171,7 @@ PetuniaLoopCutCard::PetuniaLoopCutCard(QWidget *parent) : QFrame(parent) {
 
     connect(m_cutsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
             onParamChanged);
-    connect(m_slideSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    connect(m_slideSpin, &PetuniaNumberField::valueChanged,
             this, onParamChanged);
 
     adjustSize();
@@ -180,24 +180,28 @@ PetuniaLoopCutCard::PetuniaLoopCutCard(QWidget *parent) : QFrame(parent) {
 
 // --- Tool Options Bar (Snapping, Proportional, Pivot, Shading & Overlays) ---
 PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
-    setFixedHeight(38);
+    setFixedHeight(34);
     setStyleSheet(QStringLiteral(
-        "PetuniaToolOptionsBar { background-color: rgba(24, 24, 24, 235); "
-        "border: 1px solid #383838; border-radius: 19px; }"
-        "QPushButton { background: transparent; color: #b5b5b5; font-size: "
-        "11px; border: none; border-radius: 10px; padding: 2px "
-        "8px; font-weight: bold; min-height: 22px; }"
-        "QPushButton:hover { background-color: rgba(255, 255, 255, 0.10); color: #eeeeee; }"
-        "QPushButton:pressed { background-color: rgba(255, 255, 255, 0.18); }"
-        "QPushButton:checked { background-color: rgba(181, 140, 255, 0.32); color: #ffffff; }"
-        "QPushButton#DomainBtn:checked { background-color: #e96a00; color: #ffffff; }"
-        "QComboBox { background-color: #292929; color: #eeeeee; font-size: "
-        "11px; border: 1px solid #383838; border-radius: 4px; padding: 2px "
-        "6px; min-height: 20px; }"
-        "QDoubleSpinBox { background-color: #292929; color: #eeeeee; "
-        "font-size: 11px; border: 1px solid #383838; border-radius: 4px; "
-        "padding: 2px 4px; min-height: 20px; }"
-        "QLabel { color: #888888; font-size: 11px; }"));
+        "PetuniaToolOptionsBar { background-color: rgba(26, 26, 28, 0.95); "
+        "border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; }\n"
+        "QWidget#DomainSegmented { background-color: rgba(36, 36, 38, 0.95); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 4px; }\n"
+        "QWidget#DomainSegmented QPushButton { background: transparent; border: none; border-radius: 3px; min-width: 24px; min-height: 20px; }\n"
+        "QWidget#DomainSegmented QPushButton:hover { background-color: rgba(255, 255, 255, 0.10); }\n"
+        "QWidget#DomainSegmented QPushButton:checked { background-color: #b58cff; color: #121212; font-weight: bold; }\n"
+        "QWidget#CameraSegmented { background-color: rgba(36, 36, 38, 0.95); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 4px; }\n"
+        "QWidget#CameraSegmented QPushButton { background: transparent; border: none; border-radius: 3px; min-width: 22px; min-height: 20px; font-size: 11px; padding: 1px 5px; color: #cccccc; }\n"
+        "QWidget#CameraSegmented QPushButton:hover { background-color: rgba(255, 255, 255, 0.10); color: #ffffff; }\n"
+        "QWidget#CameraSegmented QPushButton:checked { background-color: #b58cff; color: #121212; font-weight: bold; }\n"
+        "QPushButton { background: transparent; color: #cccccc; font-size: 11px; "
+        "border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; font-weight: 500; min-height: 22px; }\n"
+        "QPushButton:hover { background-color: rgba(255, 255, 255, 0.08); color: #ffffff; border-color: rgba(255, 255, 255, 0.15); }\n"
+        "QPushButton:pressed { background-color: rgba(255, 255, 255, 0.14); }\n"
+        "QPushButton:checked { background-color: rgba(181, 140, 255, 0.25); color: #ffffff; border: 1px solid #b58cff; font-weight: bold; }\n"
+        "QComboBox { background-color: rgba(38, 38, 40, 0.95); color: #eeeeee; font-size: 11px; "
+        "border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 4px; padding: 2px 6px; min-height: 20px; }\n"
+        "QComboBox:hover { border-color: rgba(255, 255, 255, 0.25); }\n"
+        "QComboBox::drop-down { border: none; width: 14px; }\n"
+        "QLabel { color: #aaaaaa; font-size: 11px; font-weight: 500; }"));
 
     auto *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(16);
@@ -211,15 +215,16 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
 
     // 1. Selection Domains (Object, Vertex, Edge, Face / Shape, Curve, Point, Region)
     m_domainGroup = new QWidget(this);
+    m_domainGroup->setObjectName(QStringLiteral("DomainSegmented"));
     auto *domainLayout = new QHBoxLayout(m_domainGroup);
-    domainLayout->setContentsMargins(0, 0, 0, 0);
-    domainLayout->setSpacing(3);
+    domainLayout->setContentsMargins(1, 1, 1, 1);
+    domainLayout->setSpacing(1);
 
     m_domainObjBtn = new QPushButton(PetuniaIcons::get("mode_object"), QString(), m_domainGroup);
     m_domainObjBtn->setObjectName(QStringLiteral("DomainBtn"));
     m_domainObjBtn->setCheckable(true);
     m_domainObjBtn->setChecked(true);
-    m_domainObjBtn->setFixedSize(28, 26);
+    m_domainObjBtn->setFixedSize(24, 20);
     m_domainObjBtn->setToolTip(QStringLiteral("Modo Objeto (Atalho 1)"));
     connect(m_domainObjBtn, &QPushButton::clicked, this, [this]() {
         emit selectionDomainChanged(0);
@@ -229,7 +234,7 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     m_domainVertBtn = new QPushButton(PetuniaIcons::get("select_vertex"), QString(), m_domainGroup);
     m_domainVertBtn->setObjectName(QStringLiteral("DomainBtn"));
     m_domainVertBtn->setCheckable(true);
-    m_domainVertBtn->setFixedSize(28, 26);
+    m_domainVertBtn->setFixedSize(24, 20);
     m_domainVertBtn->setToolTip(QStringLiteral("Modo Vértice / Ponto (Atalho 1 em POLY)"));
     connect(m_domainVertBtn, &QPushButton::clicked, this, [this]() {
         emit selectionDomainChanged(1);
@@ -239,7 +244,7 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     m_domainEdgeBtn = new QPushButton(PetuniaIcons::get("select_edge"), QString(), m_domainGroup);
     m_domainEdgeBtn->setObjectName(QStringLiteral("DomainBtn"));
     m_domainEdgeBtn->setCheckable(true);
-    m_domainEdgeBtn->setFixedSize(28, 26);
+    m_domainEdgeBtn->setFixedSize(24, 20);
     m_domainEdgeBtn->setToolTip(QStringLiteral("Modo Aresta / Curva (Atalho 2)"));
     connect(m_domainEdgeBtn, &QPushButton::clicked, this, [this]() {
         emit selectionDomainChanged(2);
@@ -249,7 +254,7 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     m_domainFaceBtn = new QPushButton(PetuniaIcons::get("select_face"), QString(), m_domainGroup);
     m_domainFaceBtn->setObjectName(QStringLiteral("DomainBtn"));
     m_domainFaceBtn->setCheckable(true);
-    m_domainFaceBtn->setFixedSize(28, 26);
+    m_domainFaceBtn->setFixedSize(24, 20);
     m_domainFaceBtn->setToolTip(QStringLiteral("Modo Face / Região (Atalho 3)"));
     connect(m_domainFaceBtn, &QPushButton::clicked, this, [this]() {
         emit selectionDomainChanged(3);
@@ -271,7 +276,7 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
 
     m_snapBtn = new QPushButton(PetuniaIcons::get("snap_magnet"), QString(), m_transformGroup);
     m_snapBtn->setCheckable(true);
-    m_snapBtn->setFixedSize(28, 26);
+    m_snapBtn->setFixedSize(26, 22);
     m_snapBtn->setToolTip(QStringLiteral("Ativar/Desativar Snap (Shift+Tab)"));
     connect(m_snapBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::snapToggled);
     transLayout->addWidget(m_snapBtn);
@@ -280,6 +285,7 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     m_snapTargetCombo->addItems({QStringLiteral("Grade"), QStringLiteral("Vértice"),
                                   QStringLiteral("Aresta"), QStringLiteral("Face")});
     m_snapTargetCombo->setToolTip(QStringLiteral("Alvo do Snap"));
+    m_snapTargetCombo->setFixedHeight(22);
     for (int i = 0; i < 4; ++i)
         m_snapTargetCombo->setItemData(i, QStringList{"grid", "vertex", "edge", "face"}[i]);
     connect(m_snapTargetCombo, &QComboBox::activated, this, [this](int i) {
@@ -289,18 +295,19 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
 
     m_propBtn = new QPushButton(PetuniaIcons::get("circle_dot"), QString(), m_transformGroup);
     m_propBtn->setCheckable(true);
-    m_propBtn->setFixedSize(28, 26);
+    m_propBtn->setFixedSize(26, 22);
     m_propBtn->setToolTip(QStringLiteral("Edição Proporcional (O)"));
     connect(m_propBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::proportionalToggled);
     transLayout->addWidget(m_propBtn);
 
-    m_propRadiusSpin = new QDoubleSpinBox(m_transformGroup);
+    m_propRadiusSpin = new PetuniaNumberField(m_transformGroup);
     m_propRadiusSpin->setRange(0.05, 50.0);
     m_propRadiusSpin->setValue(1.0);
     m_propRadiusSpin->setSingleStep(0.1);
-    m_propRadiusSpin->setSuffix(QStringLiteral(" m"));
+    m_propRadiusSpin->setSuffix(QStringLiteral("m"));
+    m_propRadiusSpin->setFixedHeight(22);
     m_propRadiusSpin->setToolTip(QStringLiteral("Raio de Influência"));
-    connect(m_propRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    connect(m_propRadiusSpin, &PetuniaNumberField::valueChanged, this,
             &PetuniaToolOptionsBar::proportionalRadiusChanged);
     transLayout->addWidget(m_propRadiusSpin);
 
@@ -308,17 +315,26 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     m_pivotCombo->addItems({QStringLiteral("Ponto Médio"), QStringLiteral("Cursor 3D"),
                             QStringLiteral("Origens Individuais"), QStringLiteral("Caixa Delimitadora")});
     m_pivotCombo->setToolTip(QStringLiteral("Ponto de Pivô para Transformação"));
+    m_pivotCombo->setFixedHeight(22);
     for (int i = 0; i < 4; ++i)
         m_pivotCombo->setItemData(i, QStringList{"median", "cursor", "individual", "bounds"}[i]);
     connect(m_pivotCombo, &QComboBox::activated, this, [this](int i) {
         emit pivotChanged(m_pivotCombo->itemData(i).toString());
     });
-    transLayout->addWidget(m_pivotCombo);
+    m_pivotCombo->hide();
 
     m_originBtn = new QPushButton(QStringLiteral("Origem ▾"), m_transformGroup);
     m_originBtn->setToolTip(QStringLiteral("Ajustar Origem do Objeto"));
+    m_originBtn->setFixedHeight(22);
+    m_originBtn->setMaximumWidth(70);
     connect(m_originBtn, &QPushButton::clicked, this, &PetuniaToolOptionsBar::openOriginMenu);
-    transLayout->addWidget(m_originBtn);
+    m_originBtn->hide();
+
+    m_alignBtn = new QPushButton(QStringLiteral("Alinhar ▾"), m_transformGroup);
+    m_alignBtn->setToolTip(QStringLiteral("Alinhar e Distribuir Objetos"));
+    m_alignBtn->setFixedHeight(22);
+    m_alignBtn->setMaximumWidth(75);
+    connect(m_alignBtn, &QPushButton::clicked, this, &PetuniaToolOptionsBar::openAlignMenu);
 
     layout->addWidget(m_transformGroup);
 
@@ -327,31 +343,37 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     m_sepTransform->setStyleSheet(QStringLiteral("background-color: #404040; max-width: 1px;"));
     layout->addWidget(m_sepTransform);
 
-    // 3. Camera & View Controls
-    m_planarBtn = new QPushButton(QStringLiteral("Planar"), this);
+    // 3. Camera & View Controls (Projeção e Enquadramento)
+    m_planarBtn = new QPushButton(PetuniaIcons::get("view_top"), QStringLiteral("Planar"), this);
     m_planarBtn->setCheckable(true);
+    m_planarBtn->setFixedHeight(22);
     m_planarBtn->setToolTip(QStringLiteral("Alternar Vista Planar / Livre"));
     connect(m_planarBtn, &QPushButton::clicked, this, &PetuniaToolOptionsBar::planarNavigationToggled);
+    m_planarBtn->hide();
     layout->addWidget(m_planarBtn);
 
     m_cameraGroup = new QWidget(this);
+    m_cameraGroup->setObjectName(QStringLiteral("CameraSegmented"));
     auto *camLayout = new QHBoxLayout(m_cameraGroup);
-    camLayout->setContentsMargins(0, 0, 0, 0);
+    camLayout->setContentsMargins(1, 1, 1, 1);
     camLayout->setSpacing(1);
 
-    m_perspBtn = new QPushButton(QStringLiteral("Persp"), m_cameraGroup);
+    m_perspBtn = new QPushButton(PetuniaIcons::get("view_perspective"), QStringLiteral("Persp"), m_cameraGroup);
     m_perspBtn->setCheckable(true);
     m_perspBtn->setChecked(true);
+    m_perspBtn->setFixedHeight(22);
     m_perspBtn->setToolTip(QStringLiteral("Visão em Perspectiva (Numpad 5)"));
     camLayout->addWidget(m_perspBtn);
 
-    m_orthoBtn = new QPushButton(QStringLiteral("Orto"), m_cameraGroup);
+    m_orthoBtn = new QPushButton(PetuniaIcons::get("view_orthographic"), QStringLiteral("Orto"), m_cameraGroup);
     m_orthoBtn->setCheckable(true);
+    m_orthoBtn->setFixedHeight(22);
     m_orthoBtn->setToolTip(QStringLiteral("Visão Ortográfica (Numpad 5)"));
     camLayout->addWidget(m_orthoBtn);
 
     m_iso21Btn = new QPushButton(QStringLiteral("2:1"), m_cameraGroup);
     m_iso21Btn->setCheckable(true);
+    m_iso21Btn->setFixedHeight(22);
     m_iso21Btn->setToolTip(QStringLiteral("Câmera Pseudo-Isométrica 2:1 (Numpad 2)"));
     camLayout->addWidget(m_iso21Btn);
 
@@ -370,7 +392,8 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     layout->addWidget(m_cameraGroup);
 
     m_frameBtn = new QPushButton(PetuniaIcons::get("frame_selection"), QString(), this);
-    m_frameBtn->setToolTip(QStringLiteral("Enquadrar Seleção (Numpad .)"));
+    m_frameBtn->setFixedSize(26, 22);
+    m_frameBtn->setToolTip(QStringLiteral("Enquadrar Seleção (Numpad . / F)"));
     connect(m_frameBtn, &QPushButton::clicked, this, &PetuniaToolOptionsBar::frameSelectionRequested);
     layout->addWidget(m_frameBtn);
 
@@ -381,6 +404,7 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
 
     // 4. Shading & Overlays
     m_shadingCombo = new QComboBox(this);
+    m_shadingCombo->setFixedHeight(22);
     m_shadingCombo->addItems({QStringLiteral("○ Aramado"), QStringLiteral("◐ Sólido"),
                               QStringLiteral("● Material"), QStringLiteral("◉ Render")});
     m_shadingCombo->setCurrentIndex(1);
@@ -391,35 +415,67 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     });
     layout->addWidget(m_shadingCombo);
 
-    m_xrayBtn = new QPushButton(QStringLiteral("Raio-X"), this);
+    m_xrayBtn = new QPushButton(PetuniaIcons::get("xray"), QStringLiteral("Raio-X"), this);
     m_xrayBtn->setCheckable(true);
+    m_xrayBtn->setFixedHeight(22);
     m_xrayBtn->setToolTip(QStringLiteral("Alternar Visão de Raio-X (Alt+Z)"));
     connect(m_xrayBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::xrayToggled);
     layout->addWidget(m_xrayBtn);
 
-    m_matcapBtn = new QPushButton(QStringLiteral("MatCap"), this);
+    m_matcapBtn = new QPushButton(this);
     m_matcapBtn->setCheckable(true);
-    m_matcapBtn->setToolTip(QStringLiteral("Ativar Sombreamento MatCap"));
+    m_matcapBtn->hide();
     connect(m_matcapBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::matcapToggled);
-    layout->addWidget(m_matcapBtn);
 
-    m_aoBtn = new QPushButton(QStringLiteral("AO"), this);
+    m_aoBtn = new QPushButton(this);
     m_aoBtn->setCheckable(true);
-    m_aoBtn->setToolTip(QStringLiteral("Oclusão Ambiente (GTAO)"));
+    m_aoBtn->hide();
     connect(m_aoBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::ambientOcclusionToggled);
-    layout->addWidget(m_aoBtn);
 
-    m_faceOrientationBtn = new QPushButton(QStringLiteral("Normais"), this);
+    m_faceOrientationBtn = new QPushButton(this);
     m_faceOrientationBtn->setCheckable(true);
-    m_faceOrientationBtn->setToolTip(QStringLiteral("Orientação de Faces (Azul=Frente, Vermelho=Trás)"));
+    m_faceOrientationBtn->hide();
     connect(m_faceOrientationBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::faceOrientationToggled);
-    layout->addWidget(m_faceOrientationBtn);
 
-    m_uvCheckerBtn = new QPushButton(QStringLiteral("Checker"), this);
+    m_uvCheckerBtn = new QPushButton(this);
     m_uvCheckerBtn->setCheckable(true);
-    m_uvCheckerBtn->setToolTip(QStringLiteral("Sobreposição de Xadrez UV"));
+    m_uvCheckerBtn->hide();
     connect(m_uvCheckerBtn, &QPushButton::toggled, this, &PetuniaToolOptionsBar::uvCheckerToggled);
-    layout->addWidget(m_uvCheckerBtn);
+
+    auto *overlaysMenuBtn = new QPushButton(PetuniaIcons::get("overlays"), tr("Overlays ▾"), this);
+    overlaysMenuBtn->setFixedHeight(22);
+    overlaysMenuBtn->setToolTip(tr("Sobreposições da Viewport (MatCap, AO, Normais, Checker)"));
+    connect(overlaysMenuBtn, &QPushButton::clicked, this, [this, overlaysMenuBtn]() {
+        QMenu menu(this);
+        menu.setStyleSheet(QStringLiteral(
+            "QMenu { background-color: #202020; border: 1px solid #444444; color: #eeeeee; font-size: 11px; padding: 4px; }\n"
+            "QMenu::item { padding: 5px 24px 5px 12px; border-radius: 3px; }\n"
+            "QMenu::item:selected { background-color: #b58cff; color: #121212; font-weight: bold; }\n"
+        ));
+        auto *matcapAct = menu.addAction(tr("Sombreamento MatCap"));
+        matcapAct->setCheckable(true);
+        matcapAct->setChecked(m_matcapBtn->isChecked());
+        connect(matcapAct, &QAction::toggled, m_matcapBtn, &QPushButton::setChecked);
+
+        auto *aoAct = menu.addAction(tr("Oclusão de Ambiente (GTAO)"));
+        aoAct->setCheckable(true);
+        aoAct->setChecked(m_aoBtn->isChecked());
+        connect(aoAct, &QAction::toggled, m_aoBtn, &QPushButton::setChecked);
+
+        auto *normalsAct = menu.addAction(tr("Orientação de Faces (Normais)"));
+        normalsAct->setCheckable(true);
+        normalsAct->setChecked(m_faceOrientationBtn->isChecked());
+        connect(normalsAct, &QAction::toggled, m_faceOrientationBtn, &QPushButton::setChecked);
+
+        auto *checkerAct = menu.addAction(tr("Sobreposição de Xadrez UV"));
+        checkerAct->setCheckable(true);
+        checkerAct->setChecked(m_uvCheckerBtn->isChecked());
+        connect(checkerAct, &QAction::toggled, m_uvCheckerBtn, &QPushButton::setChecked);
+
+        QPoint pos = overlaysMenuBtn->mapToGlobal(QPoint(0, overlaysMenuBtn->height() + 2));
+        menu.exec(pos);
+    });
+    layout->addWidget(overlaysMenuBtn);
 }
 
 bool PetuniaToolOptionsBar::isSnappingEnabled() const {
@@ -471,6 +527,70 @@ void PetuniaToolOptionsBar::openOriginMenu() {
     });
 
     menu.exec(m_originBtn->mapToGlobal(QPoint(0, m_originBtn->height())));
+}
+
+void PetuniaToolOptionsBar::openAlignMenu() {
+    QMenu menu(this);
+    menu.setStyleSheet(QStringLiteral(
+        "QMenu { background-color: #202020; border: 1px solid #444444; color: "
+        "#eeeeee; font-size: 11px; padding: 4px; }"
+        "QMenu::item { padding: 4px 12px; border-radius: 3px; }"
+        "QMenu::item:selected { background-color: #b58cff; color: #121212; "
+        "font-weight: bold; }"));
+
+    auto *alignCenterX = menu.addAction(QStringLiteral("Centralizar em X"));
+    auto *alignCenterY = menu.addAction(QStringLiteral("Centralizar em Y"));
+    auto *alignCenterZ = menu.addAction(QStringLiteral("Centralizar em Z"));
+    menu.addSeparator();
+    auto *alignMinX = menu.addAction(QStringLiteral("Esquerda (Min X)"));
+    auto *alignMaxX = menu.addAction(QStringLiteral("Direita (Max X)"));
+    auto *alignMinY = menu.addAction(QStringLiteral("Base (Min Y)"));
+    auto *alignMaxY = menu.addAction(QStringLiteral("Topo (Max Y)"));
+    auto *alignMinZ = menu.addAction(QStringLiteral("Fundo (Min Z)"));
+    auto *alignMaxZ = menu.addAction(QStringLiteral("Frente (Max Z)"));
+    menu.addSeparator();
+    auto *distribX = menu.addAction(QStringLiteral("Distribuir em X"));
+    auto *distribY = menu.addAction(QStringLiteral("Distribuir em Y"));
+    auto *distribZ = menu.addAction(QStringLiteral("Distribuir em Z"));
+
+    connect(alignCenterX, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_center_x"));
+    });
+    connect(alignCenterY, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_center_y"));
+    });
+    connect(alignCenterZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_center_z"));
+    });
+    connect(alignMinX, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_min_x"));
+    });
+    connect(alignMaxX, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_max_x"));
+    });
+    connect(alignMinY, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_min_y"));
+    });
+    connect(alignMaxY, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_max_y"));
+    });
+    connect(alignMinZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_min_z"));
+    });
+    connect(alignMaxZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.align_max_z"));
+    });
+    connect(distribX, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.distribute_objects_x"));
+    });
+    connect(distribY, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.distribute_objects_y"));
+    });
+    connect(distribZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered(QStringLiteral("model.distribute_objects_z"));
+    });
+
+    menu.exec(m_alignBtn ? m_alignBtn->mapToGlobal(QPoint(0, m_alignBtn->height())) : QCursor::pos());
 }
 
 // --- Micro Inspector ---
@@ -733,6 +853,8 @@ void PetuniaToolOptionsBar::sync(const QJsonObject &state) {
     m_planarBtn->setVisible(isDraw);
     m_planarBtn->setChecked(state["planar_navigation"].toBool());
     m_cameraGroup->setVisible(!isDraw);
+    m_frameBtn->setVisible(!isDraw);
+    m_sepCamera->setVisible(!isDraw);
     const bool isOrtho = state["is_orthographic"].toBool();
     const bool isIso21 = state["camera_preset"].toString() == "iso21";
     m_iso21Btn->setChecked(isIso21);
@@ -764,33 +886,34 @@ void PetuniaToolOptionsBar::sync(const QJsonObject &state) {
 // =========================================================================
 
 PetuniaFloatingContextBar::PetuniaFloatingContextBar(QWidget *parent) : QFrame(parent) {
-    setFixedHeight(40);
+    setFixedHeight(36);
     setStyleSheet(QStringLiteral(
-        "PetuniaFloatingContextBar { background-color: rgba(24, 24, 24, 235); "
-        "border: 1px solid #383838; border-radius: 20px; }\n"
-        "QPushButton { background: transparent; color: #b5b5b5; font-size: 11px; "
-        "border: none; border-radius: 6px; padding: 2px 4px; font-weight: bold; min-height: 24px; }\n"
-        "QPushButton:hover { background-color: rgba(255, 255, 255, 0.10); color: #ffffff; }\n"
-        "QPushButton:pressed { background-color: rgba(255, 255, 255, 0.18); }\n"
-        "QPushButton:checked { background-color: rgba(181, 140, 255, 0.32); color: #ffffff; }\n"
-        "QLabel { color: #888888; font-size: 11px; font-weight: bold; padding: 0 4px; }"));
+        "PetuniaFloatingContextBar { background-color: rgba(26, 26, 28, 0.94); "
+        "border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; }\n"
+        "QPushButton { background: transparent; color: #d0d0d0; font-size: 11px; "
+        "border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; font-weight: 500; min-height: 24px; }\n"
+        "QPushButton:hover { background-color: rgba(255, 255, 255, 0.08); color: #ffffff; border-color: rgba(255, 255, 255, 0.15); }\n"
+        "QPushButton:pressed { background-color: rgba(255, 255, 255, 0.16); }\n"
+        "QPushButton:checked { background-color: rgba(181, 140, 255, 0.28); color: #ffffff; border: 1px solid #b58cff; font-weight: bold; }\n"
+        "QLabel { color: #888888; font-size: 11px; font-weight: 500; padding: 0 4px; }"));
 
     auto *shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(18);
+    shadow->setBlurRadius(16);
     shadow->setColor(QColor(0, 0, 0, 180));
     shadow->setOffset(0, 4);
     setGraphicsEffect(shadow);
 
     auto *rootLayout = new QHBoxLayout(this);
-    rootLayout->setContentsMargins(10, 4, 10, 4);
+    rootLayout->setContentsMargins(8, 4, 8, 4);
     rootLayout->setSpacing(4);
 
     // Helper lambdas for buttons and separators
-    auto makeBtn = [this](QWidget *parent, const char *cmd, const char *icon, const char *tip, bool checkable = false) {
+    auto makeBtn = [this](QWidget *parent, const char *cmd, const char *icon, const char *label, const char *tip, bool checkable = false) {
         auto *btn = new QPushButton(parent);
-        btn->setFixedSize(28, 28);
+        btn->setFixedHeight(26);
         btn->setIcon(PetuniaIcons::get(QString::fromUtf8(icon)));
-        btn->setIconSize(QSize(18, 18));
+        btn->setIconSize(QSize(16, 16));
+        btn->setText(QString::fromUtf8(label));
         btn->setToolTip(QString::fromUtf8(tip));
         btn->setProperty("toolCmd", QString::fromUtf8(cmd));
         if (checkable)
@@ -809,6 +932,37 @@ PetuniaFloatingContextBar::PetuniaFloatingContextBar(QWidget *parent) : QFrame(p
         return btn;
     };
 
+    auto makeMoreBtn = [this](QWidget *parent, const QList<QPair<QString, QString>> &actions) {
+        auto *btn = new QPushButton(parent);
+        btn->setFixedHeight(26);
+        btn->setIcon(PetuniaIcons::get(QStringLiteral("more_horiz")));
+        btn->setIconSize(QSize(16, 16));
+        btn->setText(tr("Mais ▾"));
+        btn->setToolTip(tr("Mais ações deste domínio"));
+        connect(btn, &QPushButton::clicked, this, [this, btn, actions]() {
+            QMenu menu(this);
+            menu.setStyleSheet(QStringLiteral(
+                "QMenu { background-color: #202020; border: 1px solid #444444; color: #eeeeee; font-size: 12px; padding: 4px; }"
+                "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
+                "QMenu::item:selected { background-color: #b58cff; color: #121212; font-weight: bold; }"
+            ));
+            for (const auto &pair : actions) {
+                const auto cmd = pair.first;
+                const auto label = pair.second;
+                auto *act = menu.addAction(label);
+                connect(act, &QAction::triggered, this, [this, cmd]() {
+                    if (cmd == "duplicate" || cmd == "delete" || cmd == "origin_geometry")
+                        emit actionTriggered(cmd);
+                    else
+                        emit commandExecuted(cmd);
+                });
+            }
+            QPoint pos = btn->mapToGlobal(QPoint(0, -menu.sizeHint().height() - 4));
+            menu.exec(pos);
+        });
+        return btn;
+    };
+
     auto makeSep = [](QWidget *parent) {
         auto *sep = new QFrame(parent);
         sep->setFrameShape(QFrame::VLine);
@@ -822,68 +976,75 @@ PetuniaFloatingContextBar::PetuniaFloatingContextBar(QWidget *parent) : QFrame(p
     modelLayout->setContentsMargins(0, 0, 0, 0);
     modelLayout->setSpacing(2);
 
-    // 1a. Object Domain Tools
+    // 1a. Object Domain Tools (3 Prominent + More)
     m_domainObjectWidget = new QWidget(m_modelWidget);
     auto *objLayout = new QHBoxLayout(m_domainObjectWidget);
     objLayout->setContentsMargins(0, 0, 0, 0);
-    objLayout->setSpacing(2);
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "duplicate", "copy", "Duplicar Objeto (Shift+D)"));
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "model.separate_selection", "separate", "Separar Seleção (P)"));
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "model.join", "boolean_join", "Unir Objetos (Ctrl+J)"));
+    objLayout->setSpacing(4);
+    objLayout->addWidget(makeBtn(m_domainObjectWidget, "duplicate", "duplicate", "Duplicar", "Duplicar Objeto (Shift+D)"));
+    objLayout->addWidget(makeBtn(m_domainObjectWidget, "model.join", "boolean_join", "Unir", "Unir Objetos (Ctrl+J)"));
+    objLayout->addWidget(makeBtn(m_domainObjectWidget, "model.separate_selection", "separate", "Separar", "Separar Seleção (P)"));
     objLayout->addWidget(makeSep(m_domainObjectWidget));
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "origin_geometry", "origin", "Definir Origem na Geometria"));
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "view.shade_smooth", "shade_smooth", "Sombreamento Suave"));
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "view.shade_flat", "shade_flat", "Sombreamento Plano"));
-    objLayout->addWidget(makeSep(m_domainObjectWidget));
-    objLayout->addWidget(makeBtn(m_domainObjectWidget, "delete", "delete", "Excluir Objeto (X)"));
+    objLayout->addWidget(makeMoreBtn(m_domainObjectWidget, {
+        {"origin_geometry", tr("Definir Origem na Geometria")},
+        {"view.shade_smooth", tr("Sombreamento Suave")},
+        {"view.shade_flat", tr("Sombreamento Plano")},
+        {"delete", tr("Excluir Objeto (X)")}
+    }));
     modelLayout->addWidget(m_domainObjectWidget);
 
-    // 1b. Vertex Domain Tools
+    // 1b. Vertex Domain Tools (3 Prominent + More)
     m_domainVertexWidget = new QWidget(m_modelWidget);
     auto *vertLayout = new QHBoxLayout(m_domainVertexWidget);
     vertLayout->setContentsMargins(0, 0, 0, 0);
-    vertLayout->setSpacing(2);
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.extrude", "tool_extrude", "Extrudar Vértices (E)", true));
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.bevel", "tool_bevel", "Chanfrar Vértices (Ctrl+B)", true));
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.merge", "tool_merge", "Fundir Vértices (M)"));
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.connect", "tool_connect", "Conectar Vértices (J)"));
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.make_face", "make_face", "Criar Face / Aresta (F)"));
+    vertLayout->setSpacing(4);
+    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.extrude", "tool_extrude", "Extrudar", "Extrudar Vértices (E)", true));
+    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.bevel", "tool_bevel", "Bevel", "Chanfrar Vértices (Ctrl+B)", true));
+    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.merge", "tool_merge", "Fundir", "Fundir Vértices (M)"));
     vertLayout->addWidget(makeSep(m_domainVertexWidget));
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "model.dissolve", "tool_dissolve", "Dissolver Vértices (Ctrl+X)"));
-    vertLayout->addWidget(makeBtn(m_domainVertexWidget, "delete", "delete", "Excluir Vértices (X)"));
+    vertLayout->addWidget(makeMoreBtn(m_domainVertexWidget, {
+        {"model.connect", tr("Conectar Vértices (J)")},
+        {"model.make_face", tr("Criar Face / Aresta (F)")},
+        {"model.dissolve", tr("Dissolver Vértices (Ctrl+X)")},
+        {"delete", tr("Excluir Vértices (X)")}
+    }));
     modelLayout->addWidget(m_domainVertexWidget);
 
-    // 1c. Edge Domain Tools
+    // 1c. Edge Domain Tools (3 Prominent + More)
     m_domainEdgeWidget = new QWidget(m_modelWidget);
     auto *edgeLayout = new QHBoxLayout(m_domainEdgeWidget);
     edgeLayout->setContentsMargins(0, 0, 0, 0);
-    edgeLayout->setSpacing(2);
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.extrude", "tool_extrude", "Extrudar Arestas (E)", true));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.bevel", "tool_bevel", "Chanfrar Arestas (Ctrl+B)", true));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "loop_cut", "tool_loopcut", "Inserir Corte em Loop (Ctrl+R)", true));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.subdivide", "tool_subdivide", "Subdividir Arestas"));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.knife", "tool_knife", "Corte por Faca (K)", true));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.make_face", "make_face", "Criar Face a partir de Arestas (F)"));
+    edgeLayout->setSpacing(4);
+    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.extrude", "tool_extrude", "Extrudar", "Extrudar Arestas (E)", true));
+    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.bevel", "tool_bevel", "Bevel", "Chanfrar Arestas (Ctrl+B)", true));
+    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "loop_cut", "tool_loopcut", "Loop Cut", "Inserir Corte em Loop (Ctrl+R)", true));
     edgeLayout->addWidget(makeSep(m_domainEdgeWidget));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "model.dissolve", "tool_dissolve", "Dissolver Arestas (Ctrl+X)"));
-    edgeLayout->addWidget(makeBtn(m_domainEdgeWidget, "delete", "delete", "Excluir Arestas (X)"));
+    edgeLayout->addWidget(makeMoreBtn(m_domainEdgeWidget, {
+        {"model.subdivide", tr("Subdividir Arestas")},
+        {"model.knife", tr("Corte por Faca (K)")},
+        {"model.make_face", tr("Criar Face a partir de Arestas (F)")},
+        {"model.dissolve", tr("Dissolver Arestas (Ctrl+X)")},
+        {"delete", tr("Excluir Arestas (X)")}
+    }));
     modelLayout->addWidget(m_domainEdgeWidget);
 
-    // 1d. Face Domain Tools
+    // 1d. Face Domain Tools (3 Prominent + More)
     m_domainFaceWidget = new QWidget(m_modelWidget);
     auto *faceLayout = new QHBoxLayout(m_domainFaceWidget);
     faceLayout->setContentsMargins(0, 0, 0, 0);
-    faceLayout->setSpacing(2);
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.extrude", "tool_extrude", "Extrudar Faces (E)", true));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.push_pull", "tool_pushpull", "Push / Pull Faces (Shift+P)", true));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.inset", "tool_inset", "Inserir Borda Poligonal / Inset (I)", true));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.bevel", "tool_bevel", "Chanfrar Faces (Ctrl+B)", true));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.knife", "tool_knife", "Corte por Faca (K)", true));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.subdivide", "tool_subdivide", "Subdividir Faces"));
+    faceLayout->setSpacing(4);
+    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.extrude", "tool_extrude", "Extrudar", "Extrudar Faces (E)", true));
+    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.push_pull", "tool_pushpull", "Push/Pull", "Push / Pull Faces (Shift+P)", true));
+    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.inset", "tool_inset", "Inset", "Inserir Borda Poligonal / Inset (I)", true));
     faceLayout->addWidget(makeSep(m_domainFaceWidget));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.flip_normals", "flip_normals", "Inverter Normais"));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "model.dissolve", "tool_dissolve", "Dissolver Faces (Ctrl+X)"));
-    faceLayout->addWidget(makeBtn(m_domainFaceWidget, "delete", "delete", "Excluir Faces (X)"));
+    faceLayout->addWidget(makeMoreBtn(m_domainFaceWidget, {
+        {"model.bevel", tr("Chanfrar Faces (Ctrl+B)")},
+        {"model.knife", tr("Corte por Faca (K)")},
+        {"model.subdivide", tr("Subdividir Faces")},
+        {"model.flip_normals", tr("Inverter Normais")},
+        {"model.dissolve", tr("Dissolver Faces (Ctrl+X)")},
+        {"delete", tr("Excluir Faces (X)")}
+    }));
     modelLayout->addWidget(m_domainFaceWidget);
 
     rootLayout->addWidget(m_modelWidget);
@@ -1383,19 +1544,19 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
     auto *hsvRow = new QHBoxLayout();
     hsvRow->setSpacing(4);
 
-    m_hueSpin = new QDoubleSpinBox(card);
+    m_hueSpin = new PetuniaNumberField(QStringLiteral("H"), card);
     m_hueSpin->setRange(0, 360);
     m_hueSpin->setSuffix(QStringLiteral("°"));
     m_hueSpin->setToolTip(QStringLiteral("Matiz (Hue)"));
     hsvRow->addWidget(m_hueSpin);
 
-    m_satSpin = new QDoubleSpinBox(card);
+    m_satSpin = new PetuniaNumberField(QStringLiteral("S"), card);
     m_satSpin->setRange(0, 100);
     m_satSpin->setSuffix(QStringLiteral("%"));
     m_satSpin->setToolTip(QStringLiteral("Saturação"));
     hsvRow->addWidget(m_satSpin);
 
-    m_valSpin = new QDoubleSpinBox(card);
+    m_valSpin = new PetuniaNumberField(QStringLiteral("V"), card);
     m_valSpin->setRange(0, 100);
     m_valSpin->setSuffix(QStringLiteral("%"));
     m_valSpin->setToolTip(QStringLiteral("Luminosidade / Valor"));
@@ -1413,9 +1574,9 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
         emit colorChanged(col);
         m_updating = false;
     };
-    connect(m_hueSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, onHsvChanged);
-    connect(m_satSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, onHsvChanged);
-    connect(m_valSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, onHsvChanged);
+    connect(m_hueSpin, &PetuniaNumberField::valueChanged, this, onHsvChanged);
+    connect(m_satSpin, &PetuniaNumberField::valueChanged, this, onHsvChanged);
+    connect(m_valSpin, &PetuniaNumberField::valueChanged, this, onHsvChanged);
 
     layout->addLayout(hsvRow);
 

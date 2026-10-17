@@ -40,6 +40,7 @@ class PetuniaMainWindow : public QMainWindow {
     void toggleSplitView();
     void toggleMicroInspector();
     void showOperationHud(const QString &opName, const QString &details);
+    void setPrimaryCameraPreset(const QString &preset);
     void setSecondaryCameraPreset(const QString &preset);
     void setWorkspace(const QString &workspace);
     void setSelectionDomain(int domain);
@@ -91,6 +92,10 @@ class PetuniaMainWindow : public QMainWindow {
     void applyDarkTheme();
     void repositionFloatingBars();
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
+private:
     PetuniaGlWidget *m_viewport{nullptr};
     QStackedWidget *m_primaryStack{nullptr};
     PetuniaEditorCanvas *m_primaryPaintCanvas{nullptr};

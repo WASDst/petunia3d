@@ -5,8 +5,8 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QComboBox>
-#include <QDoubleSpinBox>
 #include <QLabel>
+#include "petunia_number_field.h"
 
 class PetuniaReferenceDialog : public QDialog {
     Q_OBJECT
@@ -30,7 +30,7 @@ private:
     QComboBox *m_planeCombo{nullptr};
     QSlider *m_opacitySlider{nullptr};
     QLabel *m_opacityLabel{nullptr};
-    QDoubleSpinBox *m_scaleSpin{nullptr};
-    QDoubleSpinBox *m_offsetX{nullptr};
-    QDoubleSpinBox *m_offsetY{nullptr};
+    PetuniaNumberField *m_scaleSpin{nullptr};
+    PetuniaNumberField *m_offsetX{nullptr};
+    PetuniaNumberField *m_offsetY{nullptr};
 };

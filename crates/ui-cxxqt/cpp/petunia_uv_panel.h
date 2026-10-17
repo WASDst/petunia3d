@@ -2,10 +2,10 @@
 
 #include <QWidget>
 #include <QPushButton>
-#include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QLabel>
+#include "petunia_number_field.h"
 
 class PetuniaUvCanvasWidget : public QWidget {
     Q_OBJECT
@@ -55,7 +55,7 @@ private:
     QPushButton *m_clearSeamBtn{nullptr};
     QPushButton *m_packBtn{nullptr};
 
-    QDoubleSpinBox *m_marginSpin{nullptr};
+    PetuniaNumberField *m_marginSpin{nullptr};
     QComboBox *m_resolutionCombo{nullptr};
     QCheckBox *m_showStretchCheck{nullptr};
 

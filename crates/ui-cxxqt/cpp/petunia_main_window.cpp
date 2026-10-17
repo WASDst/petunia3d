@@ -19,6 +19,8 @@ extern "C" size_t petunia_qt_software_frame_rgba(uint64_t, uint32_t, uint32_t,
 #include "petunia_placeholder_message.h"
 #include "petunia_dock_manager.h"
 #include "petunia_icons.h"
+#include "petunia_theme.h"
+#include "petunia_number_field.h"
 #include <QScrollArea>
 
 #include <QAbstractSpinBox>
@@ -78,6 +80,7 @@ bool petunia_qt_app_get_scene_stats(int *verts_out, int *tris_out);
 void petunia_qt_app_set_selection_domain(int domain);
 void petunia_qt_app_frame_selection();
 void petunia_qt_camera_set_preset(int preset);
+void petunia_qt_camera_toggle_projection();
 bool petunia_qt_app_save_project(const char *path);
 bool petunia_qt_app_load_project(const char *path);
 bool petunia_qt_app_export_gltf(const char *path);
@@ -180,7 +183,7 @@ void PetuniaMainWindow::setupUi() {
     connect(m_toolOptionsBar, &PetuniaToolOptionsBar::selectionDomainChanged, this,
             &PetuniaMainWindow::setSelectionDomain);
     connect(m_toolOptionsBar, &PetuniaToolOptionsBar::cameraPresetRequested, this,
-            &PetuniaMainWindow::setSecondaryCameraPreset);
+            &PetuniaMainWindow::setPrimaryCameraPreset);
     connect(m_toolOptionsBar, &PetuniaToolOptionsBar::planarNavigationToggled, this, [this]() {
         petuniaRequest("command", {{"id", "view.planar_navigation"}});
         syncFromApplication();
@@ -634,7 +637,77 @@ void PetuniaMainWindow::setupMenuBar() {
         showPrimitiveCard(QStringLiteral("Cápsula"));
     });
 
-    // 5. Menu Ferramentas
+    // 5. Menu Objeto
+    auto *objectMenu = menuBar->addMenu(QStringLiteral("&Objeto"));
+    auto *alignMenu = objectMenu->addMenu(QStringLiteral("&Alinhar"));
+
+    auto *alignCenterX = alignMenu->addAction(QStringLiteral("Centralizar em X"));
+    connect(alignCenterX, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_center_x");
+    });
+
+    auto *alignCenterY = alignMenu->addAction(QStringLiteral("Centralizar em Y"));
+    connect(alignCenterY, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_center_y");
+    });
+
+    auto *alignCenterZ = alignMenu->addAction(QStringLiteral("Centralizar em Z"));
+    connect(alignCenterZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_center_z");
+    });
+
+    alignMenu->addSeparator();
+
+    auto *alignMinX = alignMenu->addAction(QStringLiteral("Alinhar à Esquerda (Min X)"));
+    connect(alignMinX, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_min_x");
+    });
+
+    auto *alignMaxX = alignMenu->addAction(QStringLiteral("Alinhar à Direita (Max X)"));
+    connect(alignMaxX, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_max_x");
+    });
+
+    auto *alignMinY = alignMenu->addAction(QStringLiteral("Apoiar na Base (Min Y)"));
+    connect(alignMinY, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_min_y");
+    });
+
+    auto *alignMaxY = alignMenu->addAction(QStringLiteral("Alinhar ao Topo (Max Y)"));
+    connect(alignMaxY, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_max_y");
+    });
+
+    alignMenu->addSeparator();
+
+    auto *alignMinZ = alignMenu->addAction(QStringLiteral("Alinhar ao Fundo (Min Z)"));
+    connect(alignMinZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_min_z");
+    });
+
+    auto *alignMaxZ = alignMenu->addAction(QStringLiteral("Alinhar à Frente (Max Z)"));
+    connect(alignMaxZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.align_max_z");
+    });
+
+    alignMenu->addSeparator();
+
+    auto *distribX = alignMenu->addAction(QStringLiteral("Distribuir Espaçamento em X"));
+    connect(distribX, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.distribute_objects_x");
+    });
+
+    auto *distribY = alignMenu->addAction(QStringLiteral("Distribuir Espaçamento em Y"));
+    connect(distribY, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.distribute_objects_y");
+    });
+
+    auto *distribZ = alignMenu->addAction(QStringLiteral("Distribuir Espaçamento em Z"));
+    connect(distribZ, &QAction::triggered, this, [this]() {
+        emit actionTriggered("model.distribute_objects_z");
+    });
+
+    // 6. Menu Ferramentas
     auto *toolsMenu = menuBar->addMenu(QStringLiteral("&Ferramentas"));
     auto *refAct = toolsMenu->addAction(
         QStringLiteral("Gerenciador de Imagens de Referência..."));
@@ -683,6 +756,31 @@ void PetuniaMainWindow::setupMenuBar() {
         petunia_qt_camera_reset();
         if (m_viewport)
             m_viewport->update();
+    });
+
+    viewMenu->addSeparator();
+
+    auto *resetLayoutAct = viewMenu->addAction(QStringLiteral("Restaurar Layout Deste Workspace"));
+    connect(resetLayoutAct, &QAction::triggered, this, [this]() {
+        QSettings settings("Petunia3D", "QtStudio");
+        settings.remove("workspace/" + m_activeWorkspace);
+        if (m_dockManager) {
+            m_dockManager->applyWorkspacePreset(m_activeWorkspace);
+        }
+        setStatusMessage(tr("Layout do workspace redefinido para o padrão"));
+    });
+
+    auto *resetAllLayoutsAct = viewMenu->addAction(QStringLiteral("Restaurar Todos os Layouts de Fábrica"));
+    connect(resetAllLayoutsAct, &QAction::triggered, this, [this]() {
+        QSettings settings("Petunia3D", "QtStudio");
+        settings.remove("workspace");
+        if (m_dockManager) {
+            for (const auto &ws : {"DRAW", "POLY", "PAINT", "UV", "ANIMATE"}) {
+                m_dockManager->applyWorkspacePreset(ws);
+            }
+            m_dockManager->applyWorkspacePreset(m_activeWorkspace);
+        }
+        setStatusMessage(tr("Todos os layouts de workspace redefinidos"));
     });
 
     // 7. Menu Ajuda
@@ -942,6 +1040,8 @@ void PetuniaMainWindow::setupDocks() {
     m_outlinerTree = new QTreeView(container);
     m_outlinerTree->setAccessibleName(tr("Partes da cena"));
     m_outlinerTree->setMinimumWidth(230);
+    m_outlinerTree->setRootIsDecorated(false);
+    m_outlinerTree->setIndentation(0);
     m_outlinerTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_outlinerTree->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_outlinerTree->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -949,8 +1049,8 @@ void PetuniaMainWindow::setupDocks() {
     m_outlinerTree->setAcceptDrops(true);
     m_outlinerTree->setDropIndicatorShown(true);
     m_outlinerTree->setDragDropMode(QAbstractItemView::InternalMove);
-    m_outlinerTree->setStyleSheet(QStringLiteral("QTreeView::item { height: 22px; }"));
-    m_outlinerTree->setIconSize(QSize(14, 14));
+    m_outlinerTree->setStyleSheet(QStringLiteral("QTreeView::item { height: 26px; }"));
+    m_outlinerTree->setIconSize(QSize(16, 16));
 
     auto *outlinerDelShortcut = new QShortcut(QKeySequence(Qt::Key_Delete), m_outlinerTree);
     connect(outlinerDelShortcut, &QShortcut::activated, this, [this]() {
@@ -965,6 +1065,46 @@ void PetuniaMainWindow::setupDocks() {
     auto *outlinerSoloShortcut = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_H), m_outlinerTree);
     connect(outlinerSoloShortcut, &QShortcut::activated, this, [this]() {
         petuniaRequest("isolate");
+        syncFromApplication();
+    });
+    auto *outlinerVisShortcut = new QShortcut(QKeySequence(Qt::Key_H), m_outlinerTree);
+    connect(outlinerVisShortcut, &QShortcut::activated, this, [this]() {
+        for (const auto &row : m_outlinerTree->selectionModel()->selectedRows()) {
+            auto src = m_outlinerProxy->mapToSource(row);
+            auto *item = m_outlinerModel->item(src.row(), 0);
+            if (item) {
+                petuniaRequest("visibility", {{"id", item->data(Qt::UserRole).toString()}});
+            }
+        }
+        syncFromApplication();
+    });
+    auto *outlinerLockShortcut = new QShortcut(QKeySequence(Qt::Key_L), m_outlinerTree);
+    connect(outlinerLockShortcut, &QShortcut::activated, this, [this]() {
+        for (const auto &row : m_outlinerTree->selectionModel()->selectedRows()) {
+            auto src = m_outlinerProxy->mapToSource(row);
+            auto *item = m_outlinerModel->item(src.row(), 0);
+            if (item) {
+                petuniaRequest("lock", {{"id", item->data(Qt::UserRole).toString()}});
+            }
+        }
+        syncFromApplication();
+    });
+    auto *outlinerRenameShortcut = new QShortcut(QKeySequence(Qt::Key_F2), m_outlinerTree);
+    connect(outlinerRenameShortcut, &QShortcut::activated, this, [this]() {
+        auto current = m_outlinerTree->currentIndex();
+        if (current.isValid()) {
+            m_outlinerTree->edit(current.siblingAtColumn(0));
+        }
+    });
+    auto *outlinerDupShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), m_outlinerTree);
+    connect(outlinerDupShortcut, &QShortcut::activated, this, [this]() {
+        for (const auto &row : m_outlinerTree->selectionModel()->selectedRows()) {
+            auto src = m_outlinerProxy->mapToSource(row);
+            auto *item = m_outlinerModel->item(src.row(), 0);
+            if (item) {
+                petuniaRequest("scene_context", {{"id", item->data(Qt::UserRole).toString()}, {"target", "duplicate"}});
+            }
+        }
         syncFromApplication();
     });
 
@@ -1021,12 +1161,13 @@ void PetuniaMainWindow::setupDocks() {
             });
 
     layout->addWidget(rowSizeContainer);
+    rowSizeContainer->hide();
 
     m_outlinerTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_outlinerTree->header()->setSectionResizeMode(1, QHeaderView::Fixed);
-    m_outlinerTree->header()->resizeSection(1, 20);
+    m_outlinerTree->header()->resizeSection(1, 26);
     m_outlinerTree->header()->setSectionResizeMode(2, QHeaderView::Fixed);
-    m_outlinerTree->header()->resizeSection(2, 20);
+    m_outlinerTree->header()->resizeSection(2, 26);
     m_outlinerTree->setHeaderHidden(true);
 
     connect(m_outlinerSearch, &QLineEdit::textChanged, m_outlinerProxy,
@@ -1053,10 +1194,28 @@ void PetuniaMainWindow::setupDocks() {
                 const auto id = m_outlinerModel->item(src.row(), 0)
                                     ->data(Qt::UserRole)
                                     .toString();
-                if (src.column() == 1)
-                    petuniaRequest("visibility", {{"id", id}});
-                else if (src.column() == 2)
-                    petuniaRequest("lock", {{"id", id}});
+                auto selectedRows = m_outlinerTree->selectionModel()->selectedRows();
+                if (src.column() == 1) {
+                    if (selectedRows.size() > 1 && selectedRows.contains(proxy.siblingAtColumn(0))) {
+                        for (const auto &pRow : selectedRows) {
+                            auto sRow = m_outlinerProxy->mapToSource(pRow);
+                            auto *it = m_outlinerModel->item(sRow.row(), 0);
+                            if (it) petuniaRequest("visibility", {{"id", it->data(Qt::UserRole).toString()}});
+                        }
+                    } else {
+                        petuniaRequest("visibility", {{"id", id}});
+                    }
+                } else if (src.column() == 2) {
+                    if (selectedRows.size() > 1 && selectedRows.contains(proxy.siblingAtColumn(0))) {
+                        for (const auto &pRow : selectedRows) {
+                            auto sRow = m_outlinerProxy->mapToSource(pRow);
+                            auto *it = m_outlinerModel->item(sRow.row(), 0);
+                            if (it) petuniaRequest("lock", {{"id", it->data(Qt::UserRole).toString()}});
+                        }
+                    } else {
+                        petuniaRequest("lock", {{"id", id}});
+                    }
+                }
                 syncFromApplication();
             });
     connect(m_outlinerTree->selectionModel(),
@@ -1122,7 +1281,10 @@ void PetuniaMainWindow::setupDocks() {
     m_paintDock->hide();
     m_uvDock->hide();
     m_timelineDock->hide();
-    resizeDocks({m_outlinerDock, m_inspectorDock}, {220, 450}, Qt::Vertical);
+    m_outlinerDock->setMinimumWidth(300);
+    m_inspectorDock->setMinimumWidth(300);
+    resizeDocks({m_outlinerDock, m_inspectorDock}, {240, 450}, Qt::Vertical);
+    resizeDocks({m_outlinerDock, m_inspectorDock}, {320, 320}, Qt::Horizontal);
 }
 
 void PetuniaMainWindow::setupStatusBar() {
@@ -1220,16 +1382,37 @@ void PetuniaMainWindow::onOutlinerContextMenu(const QPoint &pos) {
         m_outlinerModel->item(src.row(), 0)->data(Qt::UserRole).toString();
     petuniaRequest("select", {{"id", id}});
     QMenu menu(this);
-    auto *rename = menu.addAction(tr("Renomear"));
-    auto *duplicate = menu.addAction(tr("Duplicar"));
-    auto *remove = menu.addAction(tr("Excluir"));
-    auto *isolate = menu.addAction(tr("Isolar"));
+    auto *rename = menu.addAction(tr("Renomear (F2)"));
+    auto *duplicate = menu.addAction(tr("Duplicar (Ctrl+D)"));
+    auto *remove = menu.addAction(tr("Excluir (Del)"));
+    menu.addSeparator();
+    auto *toggleVis = menu.addAction(tr("Alternar visibilidade (H)"));
+    auto *toggleLock = menu.addAction(tr("Bloquear / Desbloquear (L)"));
+    auto *isolate = menu.addAction(tr("Isolar (Shift+H)"));
+    menu.addSeparator();
     auto *save = menu.addAction(tr("Salvar como asset"));
     auto *selectionColor = menu.addAction(tr("Cor de seleção da parte"));
     auto *defaultColor = menu.addAction(tr("Usar cor de seleção global"));
     menu.addSeparator();
     auto *up = menu.addAction(tr("Mover acima"));
     auto *down = menu.addAction(tr("Mover abaixo"));
+    menu.addSeparator();
+    auto *alignSub = menu.addMenu(tr("Alinhar"));
+    auto *aCenterX = alignSub->addAction(tr("Centralizar em X"));
+    auto *aCenterY = alignSub->addAction(tr("Centralizar em Y"));
+    auto *aCenterZ = alignSub->addAction(tr("Centralizar em Z"));
+    alignSub->addSeparator();
+    auto *aMinX = alignSub->addAction(tr("Esquerda (Min X)"));
+    auto *aMaxX = alignSub->addAction(tr("Direita (Max X)"));
+    auto *aMinY = alignSub->addAction(tr("Base (Min Y)"));
+    auto *aMaxY = alignSub->addAction(tr("Topo (Max Y)"));
+    auto *aMinZ = alignSub->addAction(tr("Fundo (Min Z)"));
+    auto *aMaxZ = alignSub->addAction(tr("Frente (Max Z)"));
+    alignSub->addSeparator();
+    auto *aDistX = alignSub->addAction(tr("Distribuir em X"));
+    auto *aDistY = alignSub->addAction(tr("Distribuir em Y"));
+    auto *aDistZ = alignSub->addAction(tr("Distribuir em Z"));
+
     auto *action = menu.exec(m_outlinerTree->viewport()->mapToGlobal(pos));
     if (action == rename)
         m_outlinerTree->edit(proxy);
@@ -1237,6 +1420,10 @@ void PetuniaMainWindow::onOutlinerContextMenu(const QPoint &pos) {
         petuniaRequest("scene_context", {{"id", id}, {"target", "duplicate"}});
     else if (action == remove)
         petuniaRequest("scene_context", {{"id", id}, {"target", "delete"}});
+    else if (action == toggleVis)
+        petuniaRequest("visibility", {{"id", id}});
+    else if (action == toggleLock)
+        petuniaRequest("lock", {{"id", id}});
     else if (action == isolate)
         petuniaRequest("isolate");
     else if (action == save)
@@ -1258,6 +1445,30 @@ void PetuniaMainWindow::onOutlinerContextMenu(const QPoint &pos) {
     else if (action == up || action == down)
         petuniaRequest("scene_move",
                        {{"id", id}, {"delta", action == up ? -1 : 1}});
+    else if (action == aCenterX)
+        emit actionTriggered("model.align_center_x");
+    else if (action == aCenterY)
+        emit actionTriggered("model.align_center_y");
+    else if (action == aCenterZ)
+        emit actionTriggered("model.align_center_z");
+    else if (action == aMinX)
+        emit actionTriggered("model.align_min_x");
+    else if (action == aMaxX)
+        emit actionTriggered("model.align_max_x");
+    else if (action == aMinY)
+        emit actionTriggered("model.align_min_y");
+    else if (action == aMaxY)
+        emit actionTriggered("model.align_max_y");
+    else if (action == aMinZ)
+        emit actionTriggered("model.align_min_z");
+    else if (action == aMaxZ)
+        emit actionTriggered("model.align_max_z");
+    else if (action == aDistX)
+        emit actionTriggered("model.distribute_objects_x");
+    else if (action == aDistY)
+        emit actionTriggered("model.distribute_objects_y");
+    else if (action == aDistZ)
+        emit actionTriggered("model.distribute_objects_z");
     syncFromApplication();
 }
 
@@ -1356,11 +1567,11 @@ void PetuniaMainWindow::refreshModifiers() {
         optsRow->addWidget(axisCombo);
 
         auto *weldLabel = new QLabel(QStringLiteral("Solda:"), card);
-        auto *weldSpin = new QDoubleSpinBox(card);
+        auto *weldSpin = new PetuniaNumberField(card);
         weldSpin->setRange(0.0001, 1.0);
         weldSpin->setSingleStep(0.001);
         weldSpin->setValue(static_cast<double>(weld));
-        weldSpin->setSuffix(QStringLiteral(" m"));
+        weldSpin->setSuffix(QStringLiteral("m"));
         optsRow->addWidget(weldLabel);
         optsRow->addWidget(weldSpin);
 
@@ -1447,8 +1658,11 @@ void PetuniaMainWindow::setWorkspace(const QString &workspace) {
                      : workspace == "UV"      ? m_uvDock
                      : workspace == "ANIMATE" ? m_timelineDock
                                               : nullptr;
-        if (dock)
-            resizeDocks({dock}, {qMax(190, height() / 3)}, Qt::Vertical);
+        if (dock) {
+            int targetH = (workspace == "UV") ? qMax(300, int(height() * 0.58))
+                                              : qMax(190, height() / 3);
+            resizeDocks({dock}, {targetH}, Qt::Vertical);
+        }
     }
     syncFromApplication();
 }
@@ -1546,14 +1760,12 @@ void PetuniaMainWindow::populateOutliner(const QStringList &objectNames,
         name->setToolTip(o["active"].toBool() ? tr("Objeto ativo")
                                               : tr("Objeto da cena"));
 
-        QPixmap colorBadge(10, 10);
+        QString iconColor = QStringLiteral("#b58cff");
         if (o.contains("selection_color") && o["selection_color"].isArray()) {
             auto arr = o["selection_color"].toArray();
-            colorBadge.fill(QColor(arr[0].toInt(), arr[1].toInt(), arr[2].toInt()));
-        } else {
-            colorBadge.fill(QColor(181, 140, 255));
+            iconColor = QColor(arr[0].toInt(), arr[1].toInt(), arr[2].toInt()).name();
         }
-        name->setIcon(QIcon(colorBadge));
+        name->setIcon(PetuniaIcons::get(QStringLiteral("cube"), iconColor));
 
         auto *eye = m_outlinerModel->item(i, 1);
         if (o["visible"].toBool()) {
@@ -1732,6 +1944,42 @@ void PetuniaMainWindow::showOperationHud(const QString &opName,
     if (m_operationHud) {
         m_operationHud->showFeedback(opName, details);
     }
+}
+
+void PetuniaMainWindow::setPrimaryCameraPreset(const QString &preset) {
+    PetuniaViewScope scope(1);
+    setStatusMessage(QStringLiteral("Câmera / Projeção: %1").arg(preset));
+    if (preset == QStringLiteral("front"))
+        petunia_qt_camera_set_preset(1);
+    else if (preset == QStringLiteral("back"))
+        petunia_qt_camera_set_preset(2);
+    else if (preset == QStringLiteral("right"))
+        petunia_qt_camera_set_preset(3);
+    else if (preset == QStringLiteral("left"))
+        petunia_qt_camera_set_preset(4);
+    else if (preset == QStringLiteral("top"))
+        petunia_qt_camera_set_preset(5);
+    else if (preset == QStringLiteral("iso21")) {
+        petunia_qt_camera_set_preset(8);
+        if (!m_editorState["is_orthographic"].toBool())
+            petuniaRequest("command", {{"id", "view.toggle_projection"}});
+    } else if (preset == QStringLiteral("ortho")) {
+        if (!m_editorState["is_orthographic"].toBool()) {
+            petunia_qt_camera_toggle_projection();
+            petuniaRequest("command", {{"id", "view.toggle_projection"}});
+        }
+    } else { // persp
+        if (m_editorState["is_orthographic"].toBool()) {
+            petunia_qt_camera_toggle_projection();
+            petuniaRequest("command", {{"id", "view.toggle_projection"}});
+        }
+        petunia_qt_camera_set_preset(0);
+    }
+
+    if (m_viewport) {
+        m_viewport->update();
+    }
+    syncFromApplication();
 }
 
 void PetuniaMainWindow::setSecondaryCameraPreset(const QString &preset) {
@@ -2050,6 +2298,14 @@ void PetuniaMainWindow::syncEditorState(const QJsonObject &state) {
         m_secondaryViewport->update();
 }
 
+void PetuniaMainWindow::showEvent(QShowEvent *event) {
+    QMainWindow::showEvent(event);
+    if (m_outlinerDock && m_inspectorDock) {
+        resizeDocks({m_outlinerDock, m_inspectorDock}, {310, 310}, Qt::Horizontal);
+    }
+    repositionFloatingBars();
+}
+
 void PetuniaMainWindow::repositionFloatingBars() {
     if (!m_primaryStack)
         return;
@@ -2079,6 +2335,8 @@ void PetuniaMainWindow::repositionFloatingBars() {
 
 void PetuniaMainWindow::applyPreferences(const QJsonObject &state) {
     const auto colors = state["theme_colors"].toObject();
+    PetuniaTheme::instance().updateFromSnapshot(colors, state["current_theme"].toString());
+    PetuniaIcons::clearCache();
     const auto signature = state["current_theme"].toString() +
                            state["accent_color_hex"].toString() +
                            QString::number(state["ui_scale"].toDouble()) +
@@ -2153,7 +2411,9 @@ void PetuniaMainWindow::applyPreferences(const QJsonObject &state) {
         "QMenuBar#HeaderMenuBar::item:selected { background-color: %5; color: %2; }\n"
         "QMenuBar#HeaderMenuBar::item:pressed { background-color: %6; }\n"
         "QToolBar#ToolRailBar { background-color: %10; border-right: 1px solid %4; border-bottom: none; spacing: 3px; padding: 4px; min-width: 44px; max-width: 44px; }\n"
+        "QToolBar#ToolRailBar[expanded=\"true\"] { min-width: 140px; max-width: 180px; }\n"
         "QToolBar#ToolRailBar QToolButton { background: transparent; color: %2; border: none; border-radius: 6px; font-weight: bold; min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px; padding: 2px; }\n"
+        "QToolBar#ToolRailBar[expanded=\"true\"] QToolButton { min-width: 124px; max-width: 160px; min-height: 28px; max-height: 28px; text-align: left; padding: 4px 8px; font-weight: 500; font-size: 11px; }\n"
         "QToolBar#ToolRailBar QToolButton:hover { background-color: %5; }\n"
         "QToolBar#ToolRailBar QToolButton:checked { background-color: %8; color: %9; }\n"
         "QToolBar#ToolRailBar QToolButton:pressed { background-color: %11; }\n"
@@ -2173,14 +2433,14 @@ void PetuniaMainWindow::applyPreferences(const QJsonObject &state) {
         "QDockWidget { color: %2; font-weight: bold; }\n"
         "QDockWidget::title { background-color: %10; text-align: left; padding: 5px 8px; border-bottom: 1px solid %4; font-size: 11px; }\n"
         "QTabWidget::pane { border: 1px solid %4; background-color: %10; }\n"
-        "QTabBar::tab { background-color: %10; color: %12; border: none; border-bottom: 2px solid transparent; padding: 4px 8px; font-weight: bold; font-size: 11px; }\n"
-        "QTabBar::tab:hover:!selected { background-color: %5; color: %2; }\n"
-        "QTabBar::tab:selected { background-color: %7; color: %2; border-bottom: 2px solid %8; }\n"
-        "QTreeView { background-color: %10; color: %2; border: 1px solid %4; selection-background-color: transparent; outline: none; }\n"
-        "QTreeView::item { height: 22px; padding: 1px 4px; border: none; font-size: 11px; }\n"
-        "QTreeView::item:hover { background-color: %5; }\n"
-        "QTreeView::item:selected { background-color: rgba(233, 106, 0, 50); color: #ffffff; border-left: 3px solid #ffaf29; font-weight: 500; }\n"
-        "QHeaderView::section { background-color: %7; color: %12; border: none; border-bottom: 1px solid %4; border-right: 1px solid %4; padding: 4px 8px; font-weight: bold; font-size: 11px; }\n"
+        "QTabBar::tab { background-color: transparent; color: %12; border: none; border-bottom: 2px solid transparent; padding: 4px 5px; min-width: 22px; min-height: 20px; font-weight: bold; font-size: 11px; margin-right: 1px; }\n"
+        "QTabBar::tab:hover:!selected { background-color: %5; color: %2; border-radius: 4px; }\n"
+        "QTabBar::tab:selected { background-color: %7; color: %8; border-bottom: 2px solid %8; border-radius: 4px; }\n"
+        "QTreeView { background-color: %10; color: %2; border: 1px solid %4; border-radius: 4px; selection-background-color: transparent; outline: none; }\n"
+        "QTreeView::item { height: 26px; padding: 2px 6px; border: none; font-size: 11px; }\n"
+        "QTreeView::item:hover { background-color: %5; border-radius: 4px; }\n"
+        "QTreeView::item:selected { background-color: rgba(181, 140, 255, 0.22); color: #ffffff; border-radius: 4px; font-weight: 500; }\n"
+        "QHeaderView::section { background-color: %7; color: %12; border: none; border-bottom: 1px solid %4; padding: 4px 8px; font-weight: bold; font-size: 11px; }\n"
         "QScrollBar:vertical { background: transparent; width: 8px; margin: 0px; }\n"
         "QScrollBar::handle:vertical { background: %4; border-radius: 4px; min-height: 24px; }\n"
         "QScrollBar::handle:vertical:hover { background: %13; }\n"
@@ -2202,6 +2462,8 @@ void PetuniaMainWindow::applyPreferences(const QJsonObject &state) {
         "QCheckBox::indicator:checked, QRadioButton::indicator:checked { background-color: %8; border-color: %8; }\n"
         "QGroupBox { color: %12; font-weight: bold; font-size: 11px; border: 1px solid %4; border-radius: 5px; margin-top: 12px; padding-top: 10px; }\n"
         "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 8px; padding: 0 4px; background-color: %10; }\n"
+        "QMainWindow::separator { background-color: %4; width: 3px; height: 3px; border: none; margin: 0px; }\n"
+        "QMainWindow::separator:hover { background-color: %8; }\n"
         "QStatusBar { background-color: %3; color: %12; border-top: 1px solid %4; padding: 2px 4px; }\n"
     )
         .arg(bgCanvas, textPrimary, bgHeader, borderSubtle)
@@ -2503,6 +2765,24 @@ void PetuniaMainWindow::updateToolRail(const QString &mode,
             {"rectangle", "paint_rect"},
             {"ellipse", "shape_circle"},
             {"decal", "paint_decal"}};
+        const QHash<QString, QString> shortcuts{
+            {"select", "W"},
+            {"move", "G"},
+            {"rotate", "R"},
+            {"scale", "S"},
+            {"cursor", "Shift+S"},
+            {"measure", "M"},
+            {"lasso_select", "Q"},
+            {"poly_pen", "P"},
+            {"extrude", "E"},
+            {"inset", "I"},
+            {"bevel", "Ctrl+B"},
+            {"cut", "K"},
+            {"loop_cut", "Ctrl+R"},
+            {"brush", "B"},
+            {"eraser", "E"},
+            {"picker", "I"}
+        };
         int i = 0;
         for (const auto &tool : tools) {
             if (tool == "move" || tool == "cursor" || tool == "primitive") {
@@ -2515,7 +2795,11 @@ void PetuniaMainWindow::updateToolRail(const QString &mode,
                 "toolLabel",
                 labels.value(tool,
                              tr(qPrintable(QString(tool).replace('_', ' ')))));
-            action->setToolTip(action->property("toolLabel").toString());
+            QString tip = action->property("toolLabel").toString();
+            if (shortcuts.contains(tool)) {
+                tip += QStringLiteral(" (%1)").arg(shortcuts.value(tool));
+            }
+            action->setToolTip(tip);
             if (icons.contains(tool)) {
                 const auto theme =
                     state["icon_theme"] == "filled" ? "filled" : "outline";
@@ -2573,20 +2857,48 @@ void PetuniaMainWindow::updateToolRail(const QString &mode,
                 });
             }
         }
+        m_toolRailBar->addSeparator();
+        auto *toggleAct = m_toolRailBar->addAction(QString());
+        toggleAct->setProperty("toolId", "toggle_rail_labels");
+        connect(toggleAct, &QAction::triggered, this, [this]() {
+            bool current = petuniaRequest("snapshot")["show_tool_labels"].toBool();
+            petuniaRequest("set_show_tool_labels", {{"enabled", !current}});
+            syncFromApplication();
+        });
+    }
+    const bool expanded = state["show_tool_labels"].toBool();
+    if (m_toolRailBar->property("expanded").toBool() != expanded) {
+        m_toolRailBar->setProperty("expanded", expanded);
+        m_toolRailBar->style()->unpolish(m_toolRailBar);
+        m_toolRailBar->style()->polish(m_toolRailBar);
     }
     for (auto *action : m_toolRailBar->actions()) {
+        const auto toolId = action->property("toolId").toString();
+        if (toolId == "toggle_rail_labels") {
+            action->setIcon(PetuniaIcons::get(expanded ? "chevron_left" : "chevron_right"));
+            action->setText(expanded ? tr("Recolher barra") : QString());
+            action->setToolTip(expanded ? tr("Recolher barra de ferramentas (apenas ícones)")
+                                        : tr("Expandir barra de ferramentas (exibir rótulos)"));
+            if (auto *button = qobject_cast<QToolButton *>(
+                    m_toolRailBar->widgetForAction(action))) {
+                button->setToolButtonStyle(expanded ? Qt::ToolButtonTextBesideIcon
+                                                    : Qt::ToolButtonIconOnly);
+                button->setAccessibleName(action->toolTip());
+            }
+            continue;
+        }
         const QSignalBlocker blocker(action);
-        action->setChecked(action->property("toolId").toString() ==
-                           state["active_tool"].toString());
+        action->setChecked(toolId == state["active_tool"].toString());
         const auto label = action->property("toolLabel").toString();
         action->setText(label);
         if (auto *button = qobject_cast<QToolButton *>(
-                m_toolRailBar->widgetForAction(action)))
-            button->setToolButtonStyle(state["show_tool_labels"].toBool() ||
-                                               action->icon().isNull()
+                m_toolRailBar->widgetForAction(action))) {
+            button->setToolButtonStyle(expanded || action->icon().isNull()
                                            ? Qt::ToolButtonTextBesideIcon
                                            : Qt::ToolButtonIconOnly);
-        action->setToolTip(label);
+            button->setAccessibleName(label);
+            button->setAccessibleDescription(action->toolTip());
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QFile>
+#include <QHash>
 #include <QIcon>
 #include <QPainter>
 #include <QPixmap>
@@ -10,7 +11,23 @@
 
 namespace PetuniaIcons {
 
+inline QHash<QString, QIcon> &iconCache() {
+    static QHash<QString, QIcon> cache;
+    return cache;
+}
+
+inline void clearCache() {
+    iconCache().clear();
+}
+
 inline QIcon get(const QString &name, const QString &colorHex = QStringLiteral("#eeeeee")) {
+    const QString cacheKey = name + QLatin1Char(':') + colorHex;
+    auto &cache = iconCache();
+    auto it = cache.constFind(cacheKey);
+    if (it != cache.constEnd()) {
+        return *it;
+    }
+
     QString foundPath;
     const QString qrcPath = QStringLiteral(":/icons/") + name + QStringLiteral(".svg");
     if (QFile::exists(qrcPath)) {
@@ -46,6 +63,7 @@ inline QIcon get(const QString &name, const QString &colorHex = QStringLiteral("
         return QIcon();
     }
 
+    QIcon result;
     QFile file(foundPath);
     if (file.open(QIODevice::ReadOnly)) {
         QByteArray svgData = file.readAll();
@@ -58,11 +76,15 @@ inline QIcon get(const QString &name, const QString &colorHex = QStringLiteral("
             painter.setRenderHint(QPainter::Antialiasing);
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
             renderer.render(&painter);
-            return QIcon(pix);
+            result = QIcon(pix);
         }
     }
 
-    return QIcon(foundPath);
+    if (result.isNull()) {
+        result = QIcon(foundPath);
+    }
+    cache.insert(cacheKey, result);
+    return result;
 }
 
 } // namespace PetuniaIcons

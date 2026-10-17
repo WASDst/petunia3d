@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QTableWidget>
 #include <QPushButton>
+#include "petunia_number_field.h"
 
 class PetuniaPreferencesDialog : public QDialog {
     Q_OBJECT
@@ -26,13 +27,14 @@ private:
     // Geral
     QComboBox *m_langCombo{nullptr};
     QComboBox *m_themeCombo{nullptr};
+    QComboBox *m_densityCombo{nullptr};
     QSpinBox *m_autosaveMinutes{nullptr};
     QCheckBox *m_recoveryCheck{nullptr};
 
     // Viewport
     QComboBox *m_msaaCombo{nullptr};
     QSpinBox *m_gridDivisions{nullptr};
-    QDoubleSpinBox *m_cameraSpeed{nullptr};
+    PetuniaNumberField *m_cameraSpeed{nullptr};
     QCheckBox *m_invertOrbitY{nullptr};
     QCheckBox *m_showFps{nullptr};
 

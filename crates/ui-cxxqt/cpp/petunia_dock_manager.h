@@ -51,4 +51,6 @@ signals:
 private:
     QMainWindow *m_mainWindow{nullptr};
     QMap<QString, QDockWidget*> m_docks;
+    QString m_currentWorkspace;
+    QMap<QString, QByteArray> m_workspaceStates;
 };

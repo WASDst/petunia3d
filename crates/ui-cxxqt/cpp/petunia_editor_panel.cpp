@@ -1,5 +1,9 @@
 #include "petunia_editor_panel.h"
 #include "petunia_overlay_cards.h"
+#include "petunia_number_field.h"
+#include "petunia_vector3_field.h"
+#include "petunia_theme.h"
+#include "petunia_icons.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -325,13 +329,62 @@ QFormLayout *PetuniaEditorPanel::page(const QString &title) {
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     scroll->setWidget(content);
-    m_tabs->addTab(scroll, title);
+
+    m_tabs->setElideMode(Qt::ElideNone);
+    m_tabs->setUsesScrollButtons(false);
+    if (m_tabs->tabBar()) {
+        m_tabs->tabBar()->setExpanding(false);
+        m_tabs->tabBar()->setUsesScrollButtons(false);
+        m_tabs->tabBar()->setElideMode(Qt::ElideNone);
+    }
+
+    const QHash<QString, QString> iconMap{
+        {tr("Transf"), "tool_transform"},
+        {tr("Transformação"), "tool_transform"},
+        {tr("Material"), "material"},
+        {tr("Modif"), "modifier"},
+        {tr("Modificadores"), "modifier"},
+        {tr("Ações"), "bolt"},
+        {tr("Ações rápidas"), "bolt"},
+        {tr("Ferram"), "tune"},
+        {tr("Ferramenta"), "tune"},
+        {tr("Perfil"), "tool_profile"},
+        {tr("Operações DRAW"), "draw_profile"},
+        {tr("Booleans"), "boolean_join"},
+        {tr("Geral"), "settings"},
+        {tr("Acessibilidade"), "accessibility"},
+        {tr("Viewport"), "camera"},
+        {tr("Atalhos"), "keyboard"},
+        {tr("Criatura"), "hierarchy"},
+        {tr("Motion"), "play"},
+        {tr("Pose"), "bone"},
+        {tr("Timeline"), "timeline"},
+        {tr("UV"), "uv_editor"},
+        {tr("Transformar UV"), "uv_move"}
+    };
+
+    QIcon tabIcon;
+    if (iconMap.contains(title)) {
+        tabIcon = PetuniaIcons::get(iconMap[title]);
+    }
+
+    m_tabs->setIconSize(QSize(18, 18));
+    QString tabText = (m_mode == "MODEL" && !tabIcon.isNull()) ? QString() : title;
+    int idx = m_tabs->addTab(scroll, tabIcon, tabText);
+    m_tabs->setTabToolTip(idx, title);
+    scroll->setProperty("nativeSourceTab", tabText);
+
     if (m_mode == "MODEL") {
         const QHash<QString, QString> sections{
+            {tr("Transf"), "transform"},
             {tr("Transformação"), "transform"},
             {tr("Material"), "material"},
+            {tr("Modif"), "modifiers"},
             {tr("Modificadores"), "modifiers"},
-            {tr("Ações rápidas"), "quick-actions"}};
+            {tr("Ações"), "quick-actions"},
+            {tr("Ações rápidas"), "quick-actions"},
+            {tr("Ferram"), "tools"},
+            {tr("Ferramenta"), "tools"}};
         scroll->setProperty("sectionId", sections.value(title));
     }
     return form;
@@ -359,21 +412,14 @@ void PetuniaEditorPanel::number(QFormLayout *form, const QString &label,
                                 const QString &key, const QString &action,
                                 const QString &arg, qreal min, qreal max,
                                 qreal step, QJsonObject args) {
-    auto *widget = new QDoubleSpinBox(this);
+    auto *widget = new PetuniaNumberField(this);
     widget->setRange(min, max);
     widget->setSingleStep(step);
-    widget->setDecimals(4);
-    widget->setKeyboardTracking(false);
     widget->setAccessibleName(label);
     form->addRow(label, widget);
-    connect(widget, &QDoubleSpinBox::valueChanged, this,
-            [widget](double) { widget->setProperty("inputChanged", true); });
-    connect(widget, &QDoubleSpinBox::editingFinished, this,
-            [=, this]() mutable {
-                if (!widget->property("inputChanged").toBool())
-                    return;
-                widget->setProperty("inputChanged", false);
-                args.insert(arg, widget->value());
+    connect(widget, &PetuniaNumberField::commitRequested, this,
+            [=, this](const QString &, double val, const QString &) mutable {
+                args.insert(arg, val);
                 send(action, args);
             });
     m_bindings.append({widget, key, {}, {}});
@@ -468,37 +514,18 @@ void PetuniaEditorPanel::colorField(QFormLayout *form, const QString &label,
 void PetuniaEditorPanel::xyz(QFormLayout *form, const QString &label,
                              const QString &keyPrefix, const QString &action,
                              const QString &arg, QJsonObject baseArgs) {
-    auto *container = new QWidget(this);
-    auto *layout = new QHBoxLayout(container);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(4);
-
-    const QString axisChars = QStringLiteral("XYZ");
-    const QString axisColors[3] = {QStringLiteral("#ff6e6e"),
-                                   QStringLiteral("#69db7c"),
-                                   QStringLiteral("#4dabf7")};
+    auto *v3 = new PetuniaVector3Field(this);
+    v3->setAccessibleName(label);
+    if (keyPrefix == QStringLiteral("position") || keyPrefix == QStringLiteral("bone_translation")) {
+        v3->setSuffix(QStringLiteral("m"));
+    } else if (keyPrefix == QStringLiteral("rotation") || keyPrefix == QStringLiteral("bone_rotation")) {
+        v3->setSuffix(QStringLiteral("°"));
+        v3->setSingleStep(1.0);
+    } else if (keyPrefix == QStringLiteral("scale") || keyPrefix == QStringLiteral("bone_scale")) {
+        v3->setSingleStep(0.1);
+    }
 
     for (int axis = 0; axis < 3; ++axis) {
-        auto *axisLayout = new QHBoxLayout();
-        axisLayout->setContentsMargins(0, 0, 0, 0);
-        axisLayout->setSpacing(2);
-
-        auto *tag = new QLabel(axisChars.mid(axis, 1), container);
-        tag->setStyleSheet(QStringLiteral(
-            "QLabel { color: %1; font-weight: bold; font-size: 11px; min-width: 10px; }")
-            .arg(axisColors[axis]));
-        axisLayout->addWidget(tag);
-
-        auto *widget = new QLineEdit(container);
-        widget->setAccessibleName(
-            QStringLiteral("%1 %2").arg(label, axisChars.mid(axis, 1)));
-        widget->setStyleSheet(QStringLiteral(
-            "QLineEdit { padding: 2px 4px; font-size: 11px; }"));
-        widget->setMinimumWidth(36);
-        axisLayout->addWidget(widget, 1);
-
-        layout->addLayout(axisLayout, 1);
-
         QJsonObject args = baseArgs;
         if (action == "transform") {
             args.insert("kind", keyPrefix);
@@ -510,24 +537,20 @@ void PetuniaEditorPanel::xyz(QFormLayout *form, const QString &label,
             args.insert("axis", axis);
         }
 
-        connect(widget, &QLineEdit::editingFinished, this, [=, this]() mutable {
+        connect(v3, &PetuniaVector3Field::commitRequested, this, [=, this](int editedAxis, double val, const QString &rawText) mutable {
+            if (editedAxis != axis) return;
             if (arg == "val" || arg == "value") {
-                bool ok = false;
-                const double v = widget->text().toDouble(&ok);
-                if (ok) {
-                    args.insert(arg, v);
-                    send(action, args);
-                }
+                args.insert(arg, val);
+                send(action, args);
             } else {
-                args.insert(arg, widget->text());
+                args.insert(arg, rawText.isEmpty() ? QString::number(val, 'g', 10) : rawText);
                 send(action, args);
             }
         });
-
-        m_bindings.append({widget, keyPrefix + "." + QString::number(axis), {}, {}});
     }
 
-    form->addRow(label, container);
+    m_bindings.append({v3, keyPrefix, {}, {}});
+    form->addRow(label, v3);
 }
 void PetuniaEditorPanel::rows(QFormLayout *form, const QString &label,
                               const QString &key, const QString &action,
@@ -604,7 +627,7 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
                     tr("Comando indisponível nesta versão"));
             }
         }
-        if (binding.key.isEmpty() || binding.widget->hasFocus())
+        if (binding.key.isEmpty() || binding.widget->hasFocus() || binding.widget->isAncestorOf(QApplication::focusWidget()))
             continue;
         const auto value = petuniaValue(state, binding.key);
         if (binding.key.startsWith("primitive_")) {
@@ -617,7 +640,22 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
                     label->setVisible(visible);
         }
 
-        if (auto *w = qobject_cast<QDoubleSpinBox *>(binding.widget))
+        if (auto *w = qobject_cast<PetuniaVector3Field *>(binding.widget)) {
+            const auto array = value.toArray();
+            if (array.size() >= 3) {
+                w->setValues(array.at(0).toDouble(), array.at(1).toDouble(), array.at(2).toDouble());
+            } else if (value.isString() && value.toString() == QStringLiteral("mixed")) {
+                w->setMixed(0, true);
+                w->setMixed(1, true);
+                w->setMixed(2, true);
+            }
+        } else if (auto *w = qobject_cast<PetuniaNumberField *>(binding.widget)) {
+            if (value.isString() && value.toString() == QStringLiteral("—")) {
+                w->setMixed(true);
+            } else {
+                w->setValue(value.toDouble());
+            }
+        } else if (auto *w = qobject_cast<QDoubleSpinBox *>(binding.widget))
             w->setValue(value.toDouble());
         else if (auto *w = qobject_cast<QCheckBox *>(binding.widget))
             w->setChecked(value.toBool());
@@ -690,7 +728,7 @@ PetuniaEditorPanel::missingBindings(const QJsonObject &state) const {
 }
 void PetuniaEditorPanel::setupModel() {
     // 1. Transformação compacta (Posição, Rotação, Escala com XYZ na mesma linha)
-    auto *transform = page(tr("Transformação"));
+    auto *transform = page(tr("Transf"));
     xyz(transform, tr("Posição"), "position", "transform", "text");
     xyz(transform, tr("Rotação"), "rotation", "transform", "text");
     xyz(transform, tr("Escala"), "scale", "transform", "text");
@@ -717,8 +755,9 @@ void PetuniaEditorPanel::setupModel() {
     pivotLayout->addWidget(pivotCombo, 1);
     m_bindings.append({pivotCombo, "pivot_id", {}, {}});
 
-    auto *resetPivotBtn = new QPushButton(tr("Reset Pivô"), pivotContainer);
+    auto *resetPivotBtn = new QPushButton(PetuniaIcons::get("undo"), QString(), pivotContainer);
     resetPivotBtn->setToolTip(tr("Redefinir Origem/Pivô na Geometria"));
+    resetPivotBtn->setFixedSize(26, 24);
     connect(resetPivotBtn, &QPushButton::clicked, this, [this] {
         send("origin_geometry");
     });
@@ -764,7 +803,7 @@ void PetuniaEditorPanel::setupModel() {
     button(material, tr("Smooth"), "command", {{"id", "model.shade_smooth"}});
 
     // 3. Modificadores
-    auto *modifiers = page(tr("Modificadores"));
+    auto *modifiers = page(tr("Modif"));
     button(modifiers, tr("Adicionar Mirror"), "add_modifier",
            {{"kind", "mirror"}});
     button(modifiers, tr("Adicionar Symmetry"), "add_modifier",
@@ -772,14 +811,14 @@ void PetuniaEditorPanel::setupModel() {
     m_dynamic = modifiers;
 
     // 4. Ações rápidas
-    auto *quick = page(tr("Ações rápidas"));
+    auto *quick = page(tr("Ações"));
     rows(quick, tr("Executar"), "quick_actions", "execute_quick_action");
     rows(quick, tr("Adicionar/remover favoritas"), "quick_action_candidates",
          "toggle_quick_action");
     button(quick, tr("Restaurar ações rápidas"), "reset_quick_actions");
 
     // 5. Ferramentas e parâmetros modais
-    auto *tool = page(tr("Ferramenta"));
+    auto *tool = page(tr("Ferram"));
     choice(tool, tr("Ferramenta"), "active_tool", "tool", "id",
            {"select", "lasso_select", "cursor", "measure", "move", "rotate",
             "scale", "transform", "poly_pen", "extrude", "push_pull", "inset",
@@ -2146,9 +2185,10 @@ void petuniaLocalize(QWidget *root) {
                 auto *page = w->widget(i);
                 if (!page->property("nativeSourceTab").isValid())
                     page->setProperty("nativeSourceTab", w->tabText(i));
-                w->setTabText(
-                    i,
-                    nativeText(page->property("nativeSourceTab").toString()));
+                const QString srcTab = page->property("nativeSourceTab").toString();
+                if (!srcTab.isEmpty()) {
+                    w->setTabText(i, nativeText(srcTab));
+                }
             }
         if (!widget->accessibleName().isEmpty())
             widget->setAccessibleName(nativeText(source(

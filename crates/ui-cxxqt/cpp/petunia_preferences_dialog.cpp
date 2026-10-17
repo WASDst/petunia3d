@@ -1,10 +1,13 @@
 #include "petunia_preferences_dialog.h"
+#include "petunia_theme.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QHeaderView>
 #include <QDialogButtonBox>
 #include <QLabel>
+#include <QSettings>
+#include <QMessageBox>
 
 PetuniaPreferencesDialog::PetuniaPreferencesDialog(QWidget *parent)
     : QDialog(parent)
@@ -55,9 +58,50 @@ void PetuniaPreferencesDialog::setupGeneralTab() {
     layout->addRow(QStringLiteral("Idioma da Interface:"), m_langCombo);
 
     m_themeCombo = new QComboBox(page);
-    m_themeCombo->addItem(QStringLiteral("Petunia Dark (Padrão)"));
-    m_themeCombo->addItem(QStringLiteral("High Contrast Dark"));
+    m_themeCombo->addItem(QStringLiteral("Petunia Dark (Padrão)"), QStringLiteral("petunia-dark"));
+    m_themeCombo->addItem(QStringLiteral("Petunia Light"), QStringLiteral("petunia-light"));
+    m_themeCombo->addItem(QStringLiteral("High Contrast Dark"), QStringLiteral("petunia-high-contrast"));
+    connect(m_themeCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        QString themeId = m_themeCombo->itemData(idx).toString();
+        if (!themeId.isEmpty()) {
+            QJsonObject colors;
+            if (themeId == "petunia-light") {
+                colors.insert(QStringLiteral("bg_canvas"), QStringLiteral("#f5f5f5"));
+                colors.insert(QStringLiteral("bg_panel"), QStringLiteral("#ebebeb"));
+                colors.insert(QStringLiteral("bg_surface"), QStringLiteral("#e0e0e0"));
+                colors.insert(QStringLiteral("text_primary"), QStringLiteral("#1a1a1a"));
+                colors.insert(QStringLiteral("accent_blue"), QStringLiteral("#7a38ff"));
+                colors.insert(QStringLiteral("accent_orange"), QStringLiteral("#e05500"));
+            } else if (themeId == "petunia-high-contrast") {
+                colors.insert(QStringLiteral("bg_canvas"), QStringLiteral("#000000"));
+                colors.insert(QStringLiteral("bg_panel"), QStringLiteral("#000000"));
+                colors.insert(QStringLiteral("bg_surface"), QStringLiteral("#1a1a1a"));
+                colors.insert(QStringLiteral("text_primary"), QStringLiteral("#ffffff"));
+                colors.insert(QStringLiteral("accent_blue"), QStringLiteral("#ffff00"));
+                colors.insert(QStringLiteral("accent_orange"), QStringLiteral("#ff6600"));
+            }
+            PetuniaTheme::instance().updateFromSnapshot(colors, themeId);
+        }
+    });
     layout->addRow(QStringLiteral("Tema Visual:"), m_themeCombo);
+
+    m_densityCombo = new QComboBox(page);
+    m_densityCombo->addItem(QStringLiteral("Padrão (28px)"), 1);
+    m_densityCombo->addItem(QStringLiteral("Compacto (24px)"), 0);
+    m_densityCombo->addItem(QStringLiteral("Confortável (36px)"), 2);
+    connect(m_densityCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        PetuniaTheme::instance().setDensity(static_cast<PetuniaTheme::Density>(m_densityCombo->itemData(idx).toInt()));
+    });
+    layout->addRow(QStringLiteral("Densidade da Interface:"), m_densityCombo);
+
+    auto *resetLayoutBtn = new QPushButton(QStringLiteral("Restaurar Layout de Janelas"), page);
+    connect(resetLayoutBtn, &QPushButton::clicked, this, [this]() {
+        QSettings settings("Petunia3D", "QtStudio");
+        settings.remove("workspace");
+        QMessageBox::information(this, QStringLiteral("Layout Redefinido"),
+            QStringLiteral("Os layouts de docas e janelas foram redefinidos para os valores padrão de fábrica."));
+    });
+    layout->addRow(QStringLiteral("Layout de Estúdio:"), resetLayoutBtn);
 
     m_autosaveMinutes = new QSpinBox(page);
     m_autosaveMinutes->setRange(1, 60);
@@ -91,7 +135,7 @@ void PetuniaPreferencesDialog::setupViewportTab() {
     m_gridDivisions->setValue(16);
     layout->addRow(QStringLiteral("Subdivisões da Grade 3D:"), m_gridDivisions);
 
-    m_cameraSpeed = new QDoubleSpinBox(page);
+    m_cameraSpeed = new PetuniaNumberField(QStringLiteral("⚡"), page);
     m_cameraSpeed->setRange(0.1, 10.0);
     m_cameraSpeed->setValue(1.0);
     m_cameraSpeed->setSingleStep(0.1);

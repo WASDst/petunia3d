@@ -3,7 +3,6 @@
 #include <QWidget>
 #include <QSlider>
 #include <QSpinBox>
-#include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QListWidget>
 #include <QPushButton>
@@ -13,6 +12,7 @@
 #include <QColor>
 #include <QPointF>
 #include <QHBoxLayout>
+#include "petunia_number_field.h"
 
 class PetuniaPaintCanvasWidget : public QWidget {
     Q_OBJECT
@@ -127,7 +127,7 @@ private:
     QSlider *m_smoothingSlider{nullptr};
     QLabel *m_smoothingLabel{nullptr};
     class PetuniaAngleDial *m_angleDial{nullptr};
-    QDoubleSpinBox *m_angleSpin{nullptr};
+    PetuniaNumberField *m_angleSpin{nullptr};
     QComboBox *m_blendModeCombo{nullptr};
 
     // Cor & Swatches
