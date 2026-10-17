@@ -99,3 +99,16 @@ Salvar projeto de versão superior em versão antiga nunca é automático. Pacot
 ## Decisões fechadas
 
 Document autoral único; EditorSession separado; serialização e recovery pertencem à Infrastructure; staged load; atomic save; IDs estáveis e migrações explícitas; cache nunca é autoridade; recovery nunca sobrescreve o projeto silenciosamente.
+
+### Status da bateria e evidências de Autosave/Recovery (P03, 2026-10-17)
+
+Todos os gates de Autosave e Crash Recovery foram formalizados e validados:
+- **Separação de política, infraestrutura e locks**: `AutosaveService` atua como política pura sem tocar relógio ou UI; `create_session_lock` e `remove_session_lock` gravam e limpam `session.lock` de forma atômica no encerramento limpo.
+- **Coalescimento e Retenção de 5 gerações**: `AutosaveService::decide` coalesce ciclos sem alteração de revisão (`last_snapshot_revision == revision`); `perform_snapshot` aplica rotação atômica mantendo as 5 gerações mais recentes e expurgando as excedentes. Testado em `crates/core/tests/recovery_autosave_p03_gates_tests.rs::test_p03_gate_five_generations_retention_and_coalescing`.
+- **Isolamento de documentos sem arquivo**: `autosave_dir_for` isola snapshots por `project_id`, garantindo que múltiplos documentos untitled não conflitem nem removam gerações uns dos outros. Testado em `test_p03_gate_untitled_documents_isolated_by_project_id`.
+- **Recover / Inspect / Discard e Preservação do Arquivo Oficial**:
+  - `ProjectService::inspect_recovery` lê a geração sem tocar na sessão aberta nem no documento atual.
+  - `ProjectService::recover_generation` carrega o snapshot como documento sujo (`dirty == true`), mantendo o caminho do arquivo oficial.
+  - O arquivo original em disco nunca é sobrescrito automaticamente pelo Recover; a gravação do estado recuperado exige Save explícito (`ProjectService::save_project`).
+  - `AutosaveService::discard_generation` remove gerações individualmente e `discard_recovery` limpa snapshots e locks.
+  - Testado em `crates/core/tests/recovery_autosave_p03_gates_tests.rs::test_p03_gate_recover_inspect_discard_lifecycle`.
