@@ -5223,6 +5223,147 @@
       "documents": [
         "09-ui/shell-v2-refinement.md"
       ]
+    },
+    {
+      "id": "U31",
+      "phase": "slint-gl",
+      "title": "Shell v2 — Onda A (pequenas e concretas)",
+      "description": "Grupo vazio some, renomear e cor por grupo, pivô não destrutivo e menus de Pivô/3D Cursor, navegação dos nós, wireframe 2D e mover várias ilhas na UV.",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "ADR-C16 aprovado em 2026-10-18; implementação em andamento.",
+      "checkpoints": [
+        {
+          "title": "A1 Grupo vazio some, com Undo e teste.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "A2 Renomear grupo descobrível e cor de seleção por grupo (objeto vence; forçar), com formato retrocompatível e teste.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "A3/A4 Pivô não destrutivo, Editar pivô modal e menus de botão direito de Pivô e 3D Cursor, com comandos, Undo e testes.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "A5 Navegação infinita e Enquadrar tudo nos nós.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "A6/A7 Wireframe sobre a pintura 2D e mover várias ilhas na UV.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-roadmap.md",
+        "09-ui/shell-v2-refinement.md",
+        "09-ui/shell-v2-proposal.md"
+      ]
+    },
+    {
+      "id": "U32",
+      "phase": "slint-gl",
+      "title": "Shell v2 — Onda B (alicerces)",
+      "description": "Seletor de cor único com paletas, cursor do brush 3D/2D, quadro de prévia de ferramentas e registro de propriedades animáveis.",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "ADR-C16; começa depois da Onda A.",
+      "checkpoints": [
+        {
+          "title": "B1 PetuniaColorPanel único com paletas e cor fixa no rail (a opacidade duplicada do Paint sai junto).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B2 Cursor do brush no 3D e no 2D, com posição espelhada.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B3 Quadro de prévia de ferramentas com HUD numérico.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B4 Registro de propriedades animáveis.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-roadmap.md",
+        "09-ui/shell-v2-refinement.md",
+        "09-ui/shell-v2-proposal.md"
+      ]
+    },
+    {
+      "id": "U33",
+      "phase": "slint-gl",
+      "title": "Shell v2 — Onda C (grandes)",
+      "description": "Camadas com efeitos e máscaras, Projeção única, gradiente, grafo DAG, timeline com aba de Curvas e galeria de assets.",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "ADR-C16; começa depois da Onda B.",
+      "checkpoints": [
+        {
+          "title": "C1 Camadas: efeitos como sub-camadas e máscara.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C2 Projeção única, pintar só a seleção e isolar para pintura.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C3 Gradiente como camada de preenchimento.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C4 Nós como DAG com portas tipadas e booleana com operando visível/fantasma.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C5 Animate: módulo de rig, timeline estilo motion design, aba de Curvas e morph targets.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C6 Galeria de assets e salvar grupos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-roadmap.md",
+        "09-ui/shell-v2-refinement.md",
+        "09-ui/shell-v2-proposal.md"
+      ]
     }
   ]
 }

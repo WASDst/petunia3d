@@ -259,6 +259,10 @@
         {
           "path": "09-ui/shell-v2-refinement.md",
           "title": "Shell v2 — refinamento de uso — implementado, visual pendente"
+        },
+        {
+          "path": "09-ui/shell-v2-roadmap.md",
+          "title": "Shell v2 — roteiro de Poly, Paint, UV, Animate, Nós e Assets"
         }
       ]
     },

@@ -162,3 +162,17 @@ Pedido do usuário após uso real do shell v2; detalhes e evidências em [refina
 3. **Estrutura com grupos.** Grupos são as collections do documento (um nível); arrastar e soltar, Ctrl+G/Ctrl+Shift+G e isolamento são comandos com Undo. Hierarquia aninhada com transformação herdada segue em G09.
 4. **Rail mínimo.** Só transformar, 3D Cursor e criação; operações de modelagem são ações contextuais agrupadas na barra flutuante.
 5. **Navegação e gizmos.** Cubo de navegação (faces, arestas, cantos, bússola, início, projeção) no lugar das esferas de eixo; gizmos de transformação reformulados com tamanho e espessura nas Preferências.
+
+## ADR-C16 — Shell v2: roteiro de Poly, Paint, UV, Animate, Nós e Assets (2026-10-18) — APROVADO PELO USUÁRIO
+
+Debate técnico entre o usuário e o assistente (postura definida em `AGENTS.md`, "Postura técnica e processo de decisão"); o usuário aceitou as recomendações do assistente. Roteiro e status em [roteiro do Shell v2](../09-ui/shell-v2-roadmap.md).
+
+1. **Cor de seleção: o mais específico vence** (objeto > grupo > global), com a opção **"forçar cor do grupo"** por grupo. Motivo: com a cor do grupo mandando sempre, o objeto ativo dentro do grupo ficaria igual aos irmãos. A cor do grupo é metadado do documento (campo opcional, sem quebrar arquivos antigos).
+2. **Pivô é um deslocamento não destrutivo** do objeto, não uma regravação da malha (preserva Undo exato e animação). **Editar pivô** é um modo com confirmação (Enter) e cancelamento (Esc). "Aplicar origem" (gravar na malha) é ação separada e futura.
+3. **Uma só ferramenta "Projeção"**, que substitui "projeção" e "decal". A diferença real é o ciclo de vida: **manter editável** (decal) ou **aplicar na textura** (bake).
+4. **Operações animadas só como parâmetros de nós.** Extrude, inset, push/pull por keyframe exigem a operação como nó com parâmetros animáveis (topologia que muda no tempo não interpola). Vértices, arestas e faces editados à mão são animados por morph targets (topologia estável).
+5. **Registro de propriedades animáveis antes da timeline.** A timeline estilo motion design e a **aba de Curvas de animação** (editor de curvas) são visões do mesmo registro tipado (id, tipo, faixa, unidade); nenhuma das duas cria um modelo de dados próprio.
+6. **Seletor de cor único** (`PetuniaColorPanel`) em todo o app: roda maior, outros modos, RGB/HSL com alfa, hex, paletas com criar/editar/apagar. A opacidade do brush passa a viver nele (a duplicata do painel de Paint sai junto, não antes).
+7. **Efeitos como sub-camadas** da camada, ambos com máscara, com cache por camada e invalidação por tile (orçamento de hardware modesto).
+8. **Nós como grafo acíclico (DAG)** com portas tipadas, cache por nó e detecção de ciclos; um nó de objeto pode alimentar várias operações sem nó especial. UV e pintura à mão **não** viram nós.
+9. **`3D-Nav-Viz5.gif`** é só referência visual do usuário: fica fora do repositório para sempre (excluído localmente em `.git/info/exclude`), sem entrada em `ATTRIBUTION.md`.
