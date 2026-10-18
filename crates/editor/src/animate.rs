@@ -33,9 +33,7 @@ use petunia_project::{
     PoseOverride, RootMode,
 };
 
-use crate::{
-    project_preview_segment, project_world_point, PetuniaViewport, SlintUiBridge,
-};
+use crate::{PetuniaViewport, SlintUiBridge, project_preview_segment, project_world_point};
 
 /// Fração máxima de um passo de tempo (evita salto após travada da UI).
 const MAX_TICK_SECONDS: f32 = 0.1;

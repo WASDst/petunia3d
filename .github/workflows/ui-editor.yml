@@ -1,0 +1,95 @@
+name: UI Editor
+
+# Gate do controlador de editor neutro (`petunia_editor`, ADR-C11/Q07).
+#
+# Substitui o antigo gate `ui-slint`: o crate `petunia_ui_slint` foi removido
+# quando o Qt 6 Widgets passou a ser o único frontend, e toda a lógica de
+# interação (intents, gestos, sessões, projeção de estado) mora agora em
+# `petunia_editor`, que não depende de Qt nem de GPU. O adaptador
+# `petunia_ui_cxxqt` exige Qt 6 instalado e continua fora deste job.
+
+on:
+  push:
+    branches:
+      - main
+      - refactor/architecture-foundation
+    paths:
+      - 'crates/editor/**'
+      - 'crates/application/**'
+      - 'crates/config/**'
+      - 'crates/core/**'
+      - 'crates/mesh/**'
+      - 'crates/project/**'
+      - 'crates/render/**'
+      - 'crates/module-model/**'
+      - 'crates/module-paint/**'
+      - 'crates/module-uv/**'
+      - 'assets/locales/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ui-editor.yml'
+  pull_request:
+    paths:
+      - 'crates/editor/**'
+      - 'crates/application/**'
+      - 'crates/config/**'
+      - 'crates/core/**'
+      - 'crates/mesh/**'
+      - 'crates/project/**'
+      - 'crates/render/**'
+      - 'crates/module-model/**'
+      - 'crates/module-paint/**'
+      - 'crates/module-uv/**'
+      - 'assets/locales/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ui-editor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-editor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-editor:
+    runs-on: ubuntu-latest
+    # Sem debuginfo e com paralelismo limitado (AGENTS.md §6) o pico de memória
+    # cabe no runner padrão.
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # A versão efetiva vem de `rust-toolchain.toml`; o rustup a instala.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-ui-editor-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Format
+        run: cargo fmt -p petunia_editor -- --check
+
+      - name: Clippy
+        run: cargo clippy -p petunia_editor --features animation-workspace --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test -p petunia_editor --lib
+
+      - name: Unit tests (animation-workspace)
+        run: cargo test -p petunia_editor --features animation-workspace --lib
