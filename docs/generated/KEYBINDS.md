@@ -41,7 +41,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
 | `global.save_project` | <kbd>Ctrl+S</kbd> |
-| `global.toggle_projection` | <kbd>O</kbd> |
+| `global.toggle_projection` | <kbd>Numpad 5</kbd> |
 | `global.toggle_wireframe` | <kbd>Z</kbd> |
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
@@ -90,8 +90,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -107,7 +117,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (71 atalhos)
+### Perfil: `3ds-max` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -169,8 +179,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -183,7 +203,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender` (70 atalhos)
+### Perfil: `blender` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -212,6 +232,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.duplicate` | <kbd>Shift+D</kbd> |
 | `model.extrude` | <kbd>E</kbd> |
 | `model.extrude_individual` | <kbd>Alt+E</kbd> |
+| `model.frame_selection` | <kbd>Numpad .</kbd> |
 | `model.inset` | <kbd>I</kbd> |
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
@@ -244,8 +265,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -258,7 +289,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender-notebook` (71 atalhos)
+### Perfil: `blender-notebook` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -320,8 +351,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -334,7 +375,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `cinema-4d` (71 atalhos)
+### Perfil: `cinema-4d` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -396,8 +437,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -410,7 +461,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `maya` (71 atalhos)
+### Perfil: `maya` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -472,8 +523,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -486,7 +547,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-notebook` (71 atalhos)
+### Perfil: `petunia-notebook` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -548,8 +609,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -562,7 +633,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-simple` (71 atalhos)
+### Perfil: `petunia-simple` (81 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -624,8 +695,18 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |

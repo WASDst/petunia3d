@@ -14,20 +14,26 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **117**.
+Total de comandos registrados no motor: **152**.
 
 ## Tabela Geral de Comandos
 
 | ID (`CommandId`) | Rótulo | Categoria | Destrutivo | Tópico Docs | Descrição |
 | :--- | :--- | :---: | :---: | :--- | :--- |
+| `app.redo` | **Redo** | `Edit` | Não | — | Redo last undone modification |
+| `app.undo` | **Undo** | `Edit` | Não | — | Undo previous modification |
 | `edit.delete` | **Delete** | `Edit` | Sim | — | Delete selected elements or active object |
+| `edit.delete_selected` | **Delete** | `Edit` | Sim | — | Delete selected elements or active object |
 | `edit.duplicate` | **Duplicate** | `Edit` | Sim | — | Duplicate selected elements or active object |
+| `edit.duplicate_selected` | **Duplicate** | `Edit` | Sim | — | Duplicate selected elements or active object |
 | `edit.redo` | **Redo** | `Edit` | Não | — | Redo last undone modification |
 | `edit.undo` | **Undo** | `Edit` | Não | — | Undo previous modification |
 | `global.redo` | **Redo** | `Edit` | Não | — | Redo last undone modification |
 | `global.undo` | **Undo** | `Edit` | Não | — | Undo previous modification |
 | `model.delete` | **Delete** | `Edit` | Sim | — | Delete selected elements or active object |
+| `model.delete_selected` | **Delete** | `Edit` | Sim | — | Delete selected elements or active object |
 | `model.duplicate` | **Duplicate** | `Edit` | Sim | — | Duplicate selected elements or active object |
+| `model.duplicate_selected` | **Duplicate** | `Edit` | Sim | — | Duplicate selected elements or active object |
 | `file.export_glb` | **Export GLB** | `File` | Não | ImportExport | Export scene to binary glTF format |
 | `file.export_obj` | **Export OBJ** | `File` | Não | ImportExport | Export active mesh to Wavefront OBJ format |
 | `file.import_gltf` | **Import glTF / GLB** | `File` | Não | ImportExport | Import 3D mesh with materials and textures from glTF or GLB file |
@@ -38,6 +44,17 @@ Total de comandos registrados no motor: **117**.
 | `file.save_as` | **Save Project As** | `File` | Não | — | Save active project to a new file |
 | `file.save_asset` | **Save Active Model as Asset** | `File` | Não | Assets | Save active mesh to project asset library |
 | `help.documentation` | **Documentation** | `Help` | Não | GettingStarted | Open official documentation online |
+| `add.capsule` | **Add Capsule** | `Model` | Não | Modeling | Add a capsule primitive |
+| `add.circle` | **Add Circle** | `Model` | Não | Modeling | Add a circle/disc primitive |
+| `add.cone` | **Add Cone** | `Model` | Não | Modeling | Add a cone primitive |
+| `add.cube` | **Add Cube** | `Model` | Não | Modeling | Add a 3D box primitive |
+| `add.cylinder` | **Add Cylinder** | `Model` | Não | Modeling | Add a cylinder primitive |
+| `add.icosphere` | **Add Icosphere** | `Model` | Não | Modeling | Add an icosphere primitive |
+| `add.plane` | **Add Plane** | `Model` | Não | Modeling | Add a flat plane primitive |
+| `add.sphere` | **Add Sphere** | `Model` | Não | Modeling | Add a low-poly sphere primitive |
+| `add.torus` | **Add Torus** | `Model` | Não | Modeling | Add a torus primitive |
+| `add.wedge` | **Add Wedge** | `Model` | Não | Modeling | Add a wedge/ramp primitive |
+| `asset.join_into_active` | **Join Asset Into Active** | `Model` | Sim | Modeling | Merge another asset's mesh into the active asset and remove the source asset |
 | `draw.exclude` | **Exclude** | `Model` | Sim | Modeling | Remove the areas where shapes overlap |
 | `draw.intersect` | **Intersect Shapes** | `Model` | Sim | Modeling | Keep only the area all closed shapes share |
 | `draw.subtract` | **Subtract** | `Model` | Sim | Modeling | Cut the shapes in front out of the shape at the back |
@@ -76,18 +93,23 @@ Total de comandos registrados no motor: **117**.
 | `model.make_face` | **Make Face / Edge** | `Model` | Sim | Modeling | Create a new face or edge connecting selected vertices or edges (F) |
 | `model.mark_sharp` | **Mark Sharp** | `Model` | Sim | Modeling | Mark the selected edges as sharp (limits smooth shading) |
 | `model.merge` | **Merge Center** | `Model` | Sim | Modeling | Merge selected vertices into center point |
+| `model.mirror` | **Mirror Mesh** | `Model` | Sim | Modeling | Mirror the active mesh across an axis and optionally weld the plane |
 | `model.orient_consistently` | **Orient Consistently** | `Model` | Sim | Modeling | Make face winding consistent across connected faces |
 | `model.orient_outward` | **Orient Outward** | `Model` | Sim | Modeling | Orient a closed mesh so faces point outside |
 | `model.push_pull` | **Push/Pull** | `Model` | Não | Modeling | Push or pull selected faces along the surface normal |
+| `model.push_pull_apply` | **Apply Push/Pull** | `Model` | Sim | Modeling | Displace selected faces along their normal by a given distance |
 | `model.revolve` | **Revolve 360** | `Model` | Sim | Modeling | Revolve selected profile 360 degrees around an axis |
 | `model.scale_selection` | **Scale Selection** | `Model` | Sim | Modeling | Scale selected geometry uniformly around its center |
 | `model.separate_selection` | **Separate Selection** | `Model` | Sim | Modeling | Separate selected geometry into a new object |
 | `model.shade_flat` | **Shade Flat** | `Model` | Sim | Modeling | Use faceted normals on the active object |
 | `model.shade_smooth` | **Shade Smooth** | `Model` | Sim | Modeling | Interpolate normals across faces of the active object |
+| `model.slice_plane` | **Slice Plane** | `Model` | Sim | Modeling | Slice the active mesh along a plane through the selection center |
 | `model.smooth_by_angle` | **Smooth by Angle** | `Model` | Sim | Modeling | Shade smooth and mark edges above the angle as sharp |
 | `model.spin` | **Spin** | `Model` | Sim | Modeling | Extrude and spin selected geometry in an arc around axis |
 | `model.subdivide` | **Subdivide** | `Model` | Sim | LoopCut | Subdivide selected geometry |
 | `model.symmetrize` | **Symmetrize** | `Model` | Sim | Modeling | Copy one side to the other across an axis |
+| `model.translate_selection` | **Translate Selection** | `Model` | Sim | Modeling | Translate selected vertices by a delta vector |
+| `model.triangulate` | **Triangulate** | `Model` | Sim | Modeling | Triangulate faces of the active mesh |
 | `model.weld` | **Merge by Distance** | `Model` | Sim | Modeling | Weld duplicate vertices within distance |
 | `model.deselect_all` | **Deselect All** | `Select` | Não | — | Clear current geometry selection |
 | `model.invert_selection` | **Invert Selection** | `Select` | Não | — | Invert geometry selection in active mesh |
@@ -104,17 +126,30 @@ Total de comandos registrados no motor: **117**.
 | `paint.bake_decal` | **Bake Decal to Raster** | `Tools` | Sim | TexturePainting | Bake a live decal layer into a static raster layer |
 | `paint.bake_reference` | **Bake Reference to Texture** | `Tools` | Sim | TexturePainting | Project UVs and bake visible reference image into the active texture |
 | `paint.set_decal_transform` | **Set Decal Transform** | `Tools` | Sim | TexturePainting | Update position, scale and rotation of a decal layer |
+| `tool.toggle_proportional` | **Toggle Proportional Editing** | `Tools` | Não | Modeling | Toggle proportional editing with falloff radius |
+| `tool.toggle_snap` | **Toggle Magnet Snap** | `Tools` | Não | Modeling | Toggle snapping to grid, vertices, edges or faces |
 | `tools.toggle_proportional` | **Toggle Proportional Editing** | `Tools` | Não | Modeling | Toggle proportional editing with falloff radius |
 | `tools.toggle_snap` | **Toggle Magnet Snap** | `Tools` | Não | Modeling | Toggle snapping to grid, vertices, edges or faces |
+| `uv.equalize_texel_density` | **Equalize Texel Density** | `Tools` | Sim | UvUnwrapping | Equalize texel density across UV islands |
+| `uv.normalize_texel_density` | **Normalize Texel Density** | `Tools` | Sim | UvUnwrapping | Normalize texel density to a target value for a given texture width |
 | `uv.pack_islands` | **Pack UV Islands** | `Tools` | Sim | UvUnwrapping | Pack UV islands into 0..1 without overlaps |
+| `uv.project_cube` | **Cube UV Projection** | `Tools` | Sim | UvUnwrapping | Project UVs using box mapping on the active mesh |
+| `uv.project_planar` | **Planar UV Projection** | `Tools` | Sim | UvUnwrapping | Project UVs planarly on the active mesh |
 | `uv.project_reference` | **Project From Reference** | `Tools` | Sim | UvUnwrapping | Project UVs from the active reference image or fallback to camera view |
 | `uv.project_view` | **Project From View** | `Tools` | Sim | UvUnwrapping | Project UVs from the current camera view |
 | `uv.relax` | **Relax UVs** | `Tools` | Sim | UvUnwrapping | Relax UV islands toward the 3D shape (as-rigid-as-possible), keeping pins and seams |
 | `uv.split` | **Split UVs** | `Tools` | Sim | UvUnwrapping | Mark seams around the selected UV faces without duplicating vertices |
 | `uv.stitch` | **Stitch UV Seams** | `Tools` | Sim | UvUnwrapping | Weld and align separated UV seams on shared 3D edges |
 | `uv.unwrap_auto` | **Auto UV** | `Tools` | Sim | UvUnwrapping | Unwrap the active mesh with the generic UV provider |
+| `view.toggle_snap` | **Toggle Magnet Snap** | `Tools` | Não | Modeling | Toggle snapping to grid, vertices, edges or faces |
 | `view.back` | **View Back** | `View` | Não | Navigation | Align camera to Back orthographic view |
 | `view.bottom` | **View Bottom** | `View` | Não | Navigation | Align camera to Bottom orthographic view |
+| `view.camera_back` | **View Back** | `View` | Não | Navigation | Align camera to Back orthographic view |
+| `view.camera_bottom` | **View Bottom** | `View` | Não | Navigation | Align camera to Bottom orthographic view |
+| `view.camera_front` | **View Front** | `View` | Não | Navigation | Align camera to Front orthographic view |
+| `view.camera_left` | **View Left** | `View` | Não | Navigation | Align camera to Left orthographic view |
+| `view.camera_right` | **View Right** | `View` | Não | Navigation | Align camera to Right orthographic view |
+| `view.camera_top` | **View Top** | `View` | Não | Navigation | Align camera to Top orthographic view |
 | `view.frame_all` | **Frame All** | `View` | Não | Navigation | Center 3D camera on all visible scene geometry |
 | `view.frame_selection` | **Frame Selection** | `View` | Não | Navigation | Center 3D camera on selected geometry |
 | `view.front` | **View Front** | `View` | Não | Navigation | Align camera to Front orthographic view |

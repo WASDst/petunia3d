@@ -34,7 +34,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
 | `global.save_project` | <kbd>Ctrl+S</kbd> |
-| `global.toggle_projection` | <kbd>O</kbd> |
+| `global.toggle_projection` | <kbd>Numpad 5</kbd> |
 | `global.toggle_wireframe` | <kbd>Z</kbd> |
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 
@@ -103,8 +103,18 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 
 | Ação | Atalho |
 | :--- | :---: |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
