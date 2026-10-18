@@ -1,6 +1,7 @@
 #pragma once
 
 #include "petunia_editor_api.h"
+#include "petunia_nav_cube.h"
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QOpenGLFunctions>
@@ -48,6 +49,8 @@ class PetuniaGlWidget : public QWidget {
     void tabletStrokeUpdated(float x, float y, float pressure, float tiltX,
                              float tiltY, bool isEraser);
     void selectionChanged();
+    /// Ação do menu de contexto tratada só pela GUI (alvo `ui.*`).
+    void uiActionRequested(const QString &target);
 
   protected:
     void paintEvent(QPaintEvent *) override;
@@ -77,12 +80,15 @@ class PetuniaGlWidget : public QWidget {
     PetuniaNativeGlCanvas *m_gl{nullptr};
     bool m_software{false};
     void drawNavigationGizmo(QPainter &painter);
+    bool syncNavCube();
+    void runNavAction(const PetuniaNavCube::Hit &hit);
     void drawViewportHud(QPainter &painter);
     void drawShadingPill(QPainter &painter);
     void drawTransformGizmo(QPainter &painter);
     void drawSnapIndicator(QPainter &painter);
-    void drawSelectionOutline(QPainter &painter);
     void draw3dCursor(QPainter &painter);
+    /// Pivô de transformação e origem do objeto (distintos do 3D Cursor).
+    void drawPivotMarker(QPainter &painter);
     /// Anel do pincel de pintura: mesmo diâmetro (px de tela) que o carimbo,
     /// com o achatamento e o giro da superfície sob o cursor.
     void drawBrushCursor(QPainter &painter);
@@ -115,6 +121,11 @@ class PetuniaGlWidget : public QWidget {
     bool m_snapEnabled{false};
     bool m_rendererInitialized{false};
 
+    PetuniaNavCube m_navCube;
+    PetuniaNavCube::Hit m_navHover;
+    PetuniaNavCube::Hit m_navPress;
+    QPointF m_navPressPoint;
+    bool m_navPressed{false};
     QPoint m_gizmoCenter{0, 0};
     int m_gizmoRadius{44};
     QRect m_shadingPillRect;

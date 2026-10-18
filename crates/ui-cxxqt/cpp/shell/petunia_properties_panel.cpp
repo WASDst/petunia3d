@@ -63,8 +63,8 @@ void PetuniaPropertiesPanel::buildModeling() {
     auto bound = [this](PetuniaBoundForm *form) { return this->bound(form, QStringLiteral("DRAW")); };
 
     addSection(QStringLiteral("transform"), tr("Transformação"), bound(new PetuniaTransformForm()), true);
-    addSection(QStringLiteral("geometry"), tr("Geometria"), bound(new PetuniaGeometryForm()), true);
-    addSection(QStringLiteral("profile"), tr("Perfil e volume"), bound(new PetuniaProfileForm()), true);
+    addSection(QStringLiteral("geometry"), tr("Sombreamento"), bound(new PetuniaGeometryForm()), true);
+    addSection(QStringLiteral("profile"), tr("Perfil e volume"), bound(new PetuniaProfileForm()), false);
 
     m_operations = new PetuniaOperationsPanel(m_controller);
     auto *operations = addSection(QStringLiteral("operations"), tr("Operações"), m_operations, true);
@@ -94,7 +94,6 @@ void PetuniaPropertiesPanel::buildModeling() {
         operations->setSummary(count > 0 ? QObject::tr("%1 ativa(s)").arg(count) : QString());
     });
 
-    addSection(QStringLiteral("boolean"), tr("Booleana (direta)"), bound(new PetuniaBooleanForm()), false);
     auto *material = new PetuniaMaterialForm();
     connect(material, &PetuniaMaterialForm::nodeEditorRequested, this, &PetuniaPropertiesPanel::materialNodesRequested);
     addSection(QStringLiteral("material"), tr("Material"), bound(material), false);

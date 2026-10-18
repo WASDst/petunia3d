@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1977**.
+Total de chaves de localização cadastradas: **2031**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -66,20 +66,33 @@ Total de chaves de localização cadastradas: **1977**.
 | `actions.triangulate` | Triangulate | Triangular |
 | `actions.weld_eps` | Weld | Solda |
 | `animate.add_creature` | Add creature | Adicionar criatura |
+| `animate.add_layer` | Add Layer | Adicionar Camada |
+| `animate.add_tweak` | Add Tweak | Adicionar Ajuste |
 | `animate.advanced` | Advanced | Avançado |
 | `animate.apply_now` | Apply Now | Aplicar agora |
 | `animate.apply_now_tip` | Turn this Motion into an editable clip and remove the live Motion | Transforma o Movimento em um clipe editável e remove o Movimento vivo |
 | `animate.auto_rig` | Auto-Rig | Auto-Rig |
+| `animate.blend_additive` | Additive | Aditivo |
+| `animate.blend_override` | Override | Substituir |
+| `animate.channel_rot_x` | Rot X | Rot X |
+| `animate.channel_rot_y` | Rot Y | Rot Y |
+| `animate.channel_rot_z` | Rot Z | Rot Z |
+| `animate.channel_scale` | Scale | Escala |
+| `animate.channel_trans_x` | Pos X | Pos X |
+| `animate.channel_trans_y` | Pos Y | Pos Y |
+| `animate.channel_trans_z` | Pos Z | Pos Z |
 | `animate.choice.pattern_alternate` | Alternate | Alternado |
 | `animate.choice.pattern_auto` | Automatic | Automático |
 | `animate.choice.pattern_lateral` | Side by side | Lado a lado |
 | `animate.choice.pattern_wave` | Wave | Onda |
+| `animate.clear_track` | Clear Track | Limpar Trilha |
 | `animate.creature.bird` | Bird | Pássaro |
 | `animate.creature.fish` | Fish | Peixe |
 | `animate.creature.humanoid` | Humanoid | Humanoide |
 | `animate.creature.multi_leg` | Many legs | Muitas pernas |
 | `animate.creature.quadruped` | Four legs | Quadrúpede |
 | `animate.creature.serpent` | Serpent | Serpente |
+| `animate.delete_keyframe` | Delete Key | Excluir Chave |
 | `animate.duplicate` | Duplicate Motion | Duplicar Movimento |
 | `animate.empty_creature` | Start by adding a creature. It comes with bones ready to animate. | Comece adicionando uma criatura. Ela já vem com ossos prontos para animar. |
 | `animate.empty_motion` | Pick a Motion on the left to bring your creature to life. | Escolha um Movimento à esquerda para dar vida à criatura. |
@@ -90,9 +103,15 @@ Total de chaves de localização cadastradas: **1977**.
 | `animate.fit_needs_model` | Select a model with points first | Selecione antes um modelo com pontos |
 | `animate.frame` | Frame | Frame |
 | `animate.humanoid` | Humanoid | Humanoide |
+| `animate.ik_mode` | IK Mode | Modo IK |
+| `animate.insert_keyframe` | Add Key | Adicionar Chave |
+| `animate.interp_cubic` | Smooth | Suave |
+| `animate.interp_linear` | Linear | Linear |
+| `animate.interp_step` | Step | Step |
 | `animate.keep_live` | Bake a copy | Gerar cópia |
 | `animate.keep_live_tip` | Add an editable clip but keep the live Motion too | Adiciona um clipe editável e mantém também o Movimento vivo |
 | `animate.last_frame` | Last frame | Último frame |
+| `animate.layer_weight` | Weight | Peso |
 | `animate.linked_model` | Linked model | Modelo ligado |
 | `animate.motion.biped_cycle` | Walk / Run | Andar / Correr |
 | `animate.motion.gait` | Walk (legs) | Andar (pernas) |
@@ -102,9 +121,11 @@ Total de chaves de localização cadastradas: **1977**.
 | `animate.motion_tip.gait` | Walk, trot or crawl on four or more legs | Andar, trotar ou rastejar com quatro ou mais pernas |
 | `animate.motion_tip.idle_breath` | Breathe and sway in place | Respirar e balançar no lugar |
 | `animate.motion_tip.serpentine` | Slither, swim or sway a tail | Deslizar, nadar ou balançar uma cauda |
+| `animate.motion_trails` | Trails | Rastro |
 | `animate.needs_body` | Needs a body bone | Precisa de um osso de corpo |
 | `animate.needs_chain` | Needs a longer spine or tail | Precisa de coluna ou cauda mais longa |
 | `animate.needs_legs` | Needs at least two legs | Precisa de pelo menos duas pernas |
+| `animate.onion_skin` | Ghosts | Fantasmas |
 | `animate.param.arm_swing` | Arm swing | Balanço dos braços |
 | `animate.param.duty` | Foot contact | Contato do pé |
 | `animate.param.energy` | Energy | Energia |
@@ -145,6 +166,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `animate.play` | Play | Reproduzir |
 | `animate.playhead` | Playhead | Cabeça de reprodução |
 | `animate.remove` | Remove Motion | Remover Movimento |
+| `animate.reset_bone` | Reset Pose | Resetar Pose |
 | `animate.rig_error` | This creature cannot do this Motion. Check its bones. | Esta criatura não consegue fazer este Movimento. Confira os ossos dela. |
 | `animate.root_motion` | Move forward | Avançar |
 | `animate.root_motion_tip` | The whole body travels instead of walking in place | O corpo todo se desloca em vez de andar no lugar |
@@ -161,10 +183,15 @@ Total de chaves de localização cadastradas: **1977**.
 | `animate.tip_next` | Step 1 Frame Forward · Right | Avançar 1 Frame · Right |
 | `animate.tip_play` | Play / Pause Animation · Space | Reproduzir / Pausar Animação · Space |
 | `animate.tip_prev` | Step 1 Frame Backward · Left | Voltar 1 Frame · Left |
+| `animate.title_bone` | Selected Bone | Osso Selecionado |
 | `animate.title_creature` | Creature | Criatura |
+| `animate.title_curves` | Curves | Curvas |
+| `animate.title_dope_sheet` | Dope Sheet | Dope Sheet |
+| `animate.title_layers` | Motion Layers | Camadas de Movimento |
 | `animate.title_motion` | Motion | Movimento |
 | `animate.title_picker` | Motions | Movimentos |
 | `animate.title_style` | Style | Estilo |
+| `animate.title_timeline` | Timeline & Keyframes | Linha do Tempo e Chaves |
 | `animate.unavailable_no_rig` | Add a creature first | Adicione uma criatura primeiro |
 | `animate.workspace_tip` | Bring creatures to life with ready-made Motions | Dê vida a criaturas com Movimentos prontos |
 | `app.title` | Petunia3D | Petunia3D |
@@ -184,6 +211,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `camera.perspective` | Perspective | Perspectiva |
 | `camera.projection` | Projection | Projeção |
 | `camera.projection_hint` | Change projection while keeping the same framing at the view center. Orbit works in both modes. | Alterar a projeção mantendo o enquadramento no centro da vista. É possível orbitar nos dois modos. |
+| `camera.pseudo_iso_2to1` | Pseudo-Isometric 2:1 | Pseudo-Isométrica 2:1 |
 | `camera.reset` | Reset view | Redefinir vista |
 | `camera.reset_hint` | Restore the origin and default zoom while keeping this view and projection (Home). | Voltar à origem e ao zoom inicial mantendo esta vista e projeção (Home). |
 | `camera.right` | Right | Direita |
@@ -771,6 +799,10 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.base_cap_on` | Base Cap: on | Tampa da base: ligada |
 | `sl.bevel` | Round Edge | Round Edge |
 | `sl.bevel_round_edge_bevel` | Bevel (Round Edge / Bevel) | Bisel (Round Edge / Bevel) |
+| `sl.blend_add` | Add | Adicionar |
+| `sl.blend_multiply` | Multiply | Multiplicar |
+| `sl.blend_normal` | Normal | Normal |
+| `sl.blend_screen` | Screen | Tela |
 | `sl.blender_official` | Blender (Official) | Blender (Oficial) |
 | `sl.bottom_cap_off` | Bottom Cap: off | Tampa inferior: desligada |
 | `sl.bottom_cap_on` | Bottom Cap: on | Tampa inferior: ligada |
@@ -856,6 +888,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.click_to_unpin_section` | Click to unpin section | Clique para desafixar a seção |
 | `sl.click_vertices_or_edges_to_draw_cut_path` | Click vertices or edges to draw cut path | Clique em vértices ou arestas para desenhar o caminho do corte |
 | `sl.close_asset_library` | Close asset library | Fechar biblioteca de Assets |
+| `sl.close_color_picker` | Close color picker | Fechar seletor de cor |
 | `sl.close_command_search` | Close command search | Fechar busca de comandos |
 | `sl.close_reference_manager` | Close reference manager | Fechar gerenciador de referências |
 | `sl.close_scene_drawer` | Close scene drawer | Fechar gaveta da cena |
@@ -864,10 +897,11 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.collapse` | Collapse | Recolher |
 | `sl.collapse_and_merge_all_selected_vertices_to_` | Collapse and merge all selected vertices to their median center | Colapsa e mescla todos os vértices selecionados no centro mediano |
 | `sl.collapse_inspector` | Collapse Inspector | Recolher Inspector |
-| `sl.collapse_inspector_hint` | Close every section and return to the pill rail. Hover a pill to peek again. | Fecha todas as seções e volta ao trilho de pílulas. Passe o mouse numa pílula para espiar de novo. |
+| `sl.collapse_inspector_hint` | Hide the whole right column. Bring it back with N or the button at the viewport edge. | Esconde a coluna direita inteira. Traga de volta com N ou pelo botão na borda da viewport. |
 | `sl.color_palette` | Color Palette | Paleta de cores |
 | `sl.color_picker` | Color Picker | Conta-gotas |
 | `sl.color_swatch` | Color Swatch | Amostra de cor |
+| `sl.color_wheel` | Color wheel | Círculo cromático |
 | `sl.combine` | Combine | Combinar |
 | `sl.combine_the_active_part_with_the_operand` | Combine the active part with the operand | Combina a parte ativa com o operando |
 | `sl.command_search` | Command search | Busca de comandos |
@@ -888,6 +922,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.cube` | Cube | Cubo |
 | `sl.cursor` | Cursor | Cursor |
 | `sl.curve` | Curve | Curva |
+| `sl.custom_color` | Custom color | Cor personalizada |
 | `sl.cut` | Cut | Cut |
 | `sl.cut_mesh_along_an_infinite_cutting_plane_thr` | Cut mesh along an infinite cutting plane through selection | Corta a malha por um plano de corte infinito através da seleção |
 | `sl.cuts` | Cuts | Cortes |
@@ -960,6 +995,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.frame_and_center_camera_view_on_currently_se` | Frame and center camera view on currently selected geometry | Enquadra e centraliza a câmera na geometria selecionada |
 | `sl.frame_selection` | Frame Selection | Enquadrar seleção |
 | `sl.free_mode` | FREE MODE | MODO LIVRE |
+| `sl.free_view` | Free | Livre |
 | `sl.freehand_polygon_loop_lasso_selection` | Freehand polygon loop lasso selection | Seleção livre por laço de polígono |
 | `sl.freehand_raster_texture_painting_with_adjust` | Freehand raster texture painting with adjustable size and softness | Pintura raster livre de textura com tamanho e suavidade ajustáveis |
 | `sl.fuse` | Fuse | Fuse |
@@ -1017,6 +1053,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.keyboard_shortcut_profile` | Keyboard Shortcut Profile | Perfil de Atalhos de Teclado |
 | `sl.keyboard_shortcuts` | Keyboard & Shortcuts | Teclado & Atalhos |
 | `sl.keymap_custom_badge` | custom | personalizado |
+| `sl.keymap_default` | Default | Padrão |
 | `sl.keymap_delete_profile` | Delete profile | Apagar perfil |
 | `sl.keymap_editor_hint` | Click a shortcut, then press the new keys (Esc cancels). Editing a built-in profile creates your own copy. | Clique num atalho e pressione as novas teclas (Esc cancela). Editar um perfil embutido cria uma cópia sua. |
 | `sl.keymap_new_profile` | New profile from current | Novo perfil a partir do atual |
@@ -1024,7 +1061,9 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.keymap_reset_binding` | Restore default | Restaurar padrão |
 | `sl.knife` | Knife | Knife |
 | `sl.language_region` | Language & Region | Idioma & Região |
+| `sl.layer_blend` | Blend mode | Modo de mesclagem |
 | `sl.layer_locked` | Layer locked | Camada bloqueada |
+| `sl.layer_options` | Layer options | Opções da camada |
 | `sl.layer_visible` | Layer visible | Camada visível |
 | `sl.layers` | Layers | Camadas |
 | `sl.layout_truncated_only_the_first_2000_faces_a` | Layout truncated: only the first 2000 faces are drawn. | Layout truncado: apenas as primeiras 2000 faces são desenhadas. |
@@ -1135,6 +1174,17 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.perspective` | Perspective | Perspectiva |
 | `sl.petunia3d` | Petunia3D | Petunia3D |
 | `sl.petunia_default` | Petunia Default | Petunia Padrão |
+| `sl.picker_hex` | Hexadecimal color | Cor hexadecimal |
+| `sl.picker_hex_hint` | Enter #RGB or #RRGGBB and press Enter | Digite #RGB ou #RRGGBB e pressione Enter |
+| `sl.picker_hex_invalid` | Invalid color. Enter #RGB or #RRGGBB | Cor inválida. Digite #RGB ou #RRGGBB |
+| `sl.picker_hex_short` | HEX | HEX |
+| `sl.picker_hue` | Hue (degrees) | Matiz (graus) |
+| `sl.picker_hue_short` | H | H |
+| `sl.picker_rgb_short` | RGB | RGB |
+| `sl.picker_saturation` | Saturation (%) | Saturação (%) |
+| `sl.picker_saturation_short` | S | S |
+| `sl.picker_value` | Brightness / value (%) | Brilho / valor (%) |
+| `sl.picker_value_short` | V | V |
 | `sl.pin_or_unpin_uv_vertices_of_the_selected_fac` | Pin or unpin UV vertices of the selected faces | Fixa ou solta os vértices UV das faces selecionadas |
 | `sl.pin_parts` | Pin Parts | Fixar peças |
 | `sl.pin_section` | Pin section | Fixar seção |
@@ -1145,6 +1195,11 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.pipe_segments` | Pipe Segments | Segmentos do tubo |
 | `sl.pivot` | Pivot | Pivô |
 | `sl.place_3d_cursor_as_origin_for_new_objects_an` | Place 3D cursor as origin for new objects and transformations | Posiciona o cursor 3D como origem de novos objetos e transformações |
+| `sl.planar_navigation` | Planar navigation | Navegação planar |
+| `sl.planar_navigation_hint` | DRAW: orthographic view facing the workplane, pan and zoom only. Turn off for the free camera; geometry and workplane never move. | DRAW: vista ortográfica de frente para o plano de trabalho, só pan e zoom. Desligue para a câmera livre; geometria e plano nunca se movem. |
+| `sl.planar_view` | Planar | Planar |
+| `sl.planar_view_off` | Free view: previous camera restored | Vista livre: câmera anterior restaurada |
+| `sl.planar_view_on` | Planar view: facing the workplane (orbit drag pans) | Vista planar: de frente para o plano de trabalho (arrastar de órbita faz pan) |
 | `sl.plane` | Plane: | Plano: |
 | `sl.plane_2` | Plane | Plano |
 | `sl.plugins` | Plugins | Plugins |
@@ -1174,6 +1229,8 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.project_uv_coordinates_from_active_camera_pe` | Project UV coordinates from active camera perspective | Projeta coordenadas UV a partir da perspectiva da câmera ativa |
 | `sl.projection` | Projection | Projeção |
 | `sl.prop` | Prop | Prop |
+| `sl.pseudo_isometric_2to1` | Pseudo-Isometric 2:1 | Pseudo-Isométrica 2:1 |
+| `sl.pseudo_isometric_2to1_hint` | Align camera to classic 2:1 pseudo-isometric game view (26.565°) | Alinha a câmera com a visão pseudo-isométrica clássica 2:1 de games (26,565°) |
 | `sl.pull_new_vertices_and_faces_outward_from_sel` | Pull new vertices and faces outward from selected edges or faces | Puxa novos vértices e faces para fora a partir de arestas ou faces selecionadas |
 | `sl.push_or_pull_faces_along_surface_normals_dir` | Push or pull faces along surface normals directly | Empurra ou puxa faces diretamente ao longo das normais da superfície |
 | `sl.quick_actions_and_modeling_tools` | Quick actions and modeling tools | Ações rápidas e ferramentas de modelagem |
@@ -1245,6 +1302,7 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.screen_reader_labels_and_roles_exist_only_on` | Screen reader: labels and roles exist only on some controls; WCAG compliance has not been audited yet. | Leitor de tela: rótulos e papéis existem só em parte dos controles; conformidade WCAG ainda não foi auditada. |
 | `sl.search_command_placeholder` | Search commands… | Buscar comandos… |
 | `sl.search_commands` | Search commands | Buscar comandos |
+| `sl.search_shortcuts` | Search shortcuts | Pesquisar atalhos |
 | `sl.segments` | Segments | Segmentos |
 | `sl.select` | Select | Selecionar |
 | `sl.select_all` | Select All | Selecionar Tudo |
@@ -1287,6 +1345,8 @@ Total de chaves de localização cadastradas: **1977**.
 | `sl.shift_a_add_primitive` | Shift+A: Add Primitive | Shift+A: Adicionar Primitiva |
 | `sl.shift_precision_0_1` | Shift: Precision 0.1× | Shift: precisão 0,1× |
 | `sl.show` | Show | Mostrar |
+| `sl.show_inspector` | Show Inspector | Mostrar Inspector |
+| `sl.show_inspector_hint` | Show the right column again (N). | Mostra a coluna direita de novo (N). |
 | `sl.show_texture` | ✓ Show Texture | ✓ Mostrar textura |
 | `sl.show_texture_2` | Show Texture | Mostrar textura |
 | `sl.sides` | Sides | Lados |
@@ -1417,8 +1477,6 @@ Total de chaves de localização cadastradas: **1977**.
 | `status.active_tool` | Active tool: {tool} | Ferramenta ativa: {tool} |
 | `status.added` | Added {0} | {0} adicionado |
 | `status.asset_not_found_in_project_library` | Asset not found in project library | Ativo não encontrado na biblioteca do projeto |
-| `status.boolean_operand_cleared` | Boolean operand cleared | Operando booleano removido |
-| `status.boolean_operand_set_fuse_cut_or_intersect` | Boolean operand set: Fuse, Cut or Intersect now applies | Operando booleano definido: Fuse, Cut ou Intersect agora se aplica |
 | `status.brush` | Brush: {name} | Pincel: {name} |
 | `status.brush_hardness` | Brush hardness: {0}% | Dureza do pincel: {0}% |
 | `status.brush_lock` | Brush lock: {lock} | Trava do pincel: {lock} |
@@ -1551,7 +1609,6 @@ Total de chaves de localização cadastradas: **1977**.
 | `status.selection_cleared` | Selection cleared. | Seleção limpa. |
 | `status.selection_inverted` | Selection inverted. | Seleção invertida. |
 | `status.selection_mode` | Selection mode: {0} | Modo de seleção: {0} |
-| `status.set_as_boolean_operand` | Set as boolean operand | Definido como operando booleano |
 | `status.shading` | Shading: {0} | Sombreamento: {0} |
 | `status.shape_anchored_release_to_commit` | Shape anchored: release to commit | Forma ancorada: solte para confirmar |
 | `status.shape_builder_cancelled` | Shape Builder cancelled | Shape Builder cancelado |
@@ -1741,9 +1798,6 @@ Total de chaves de localização cadastradas: **1977**.
 | `transform.unlink` | Unlink axes | Desligar eixos |
 | `ui.accent_color` | Interface accent color | Cor de destaque da interface |
 | `ui.accent_color_hint` | Active buttons, tools and focus. The selection in the viewport has its own color below. | Botões e ferramentas ativos e foco. A seleção na viewport tem a própria cor, abaixo. |
-| `ui.action_cut` | Cut | Cortar |
-| `ui.action_fuse` | Fuse | Fundir |
-| `ui.action_intersect` | Intersect | Interseção |
 | `ui.action_join` | Join | Juntar |
 | `ui.action_loop_cut` | Loop Cut | Loop Cut |
 | `ui.action_merge` | Merge | Mesclar |

@@ -13,14 +13,16 @@
 #include <QSignalBlocker>
 
 namespace {
-QFormLayout *makeForm(QWidget *owner) {
+/// Formulário denso das seções: rótulo à esquerda quando cabe, margens e
+/// espaçamentos mínimos. O painel é estreito: cada linha economizada conta.
+QFormLayout *makeForm(QWidget *owner, bool labelsAbove = false) {
     auto *form = new QFormLayout(owner);
     const auto &theme = PetuniaTheme::instance();
-    form->setContentsMargins(theme.space(3), theme.space(2), theme.space(3), theme.space(3));
+    form->setContentsMargins(theme.space(3), theme.space(2), theme.space(3), theme.space(2));
     form->setHorizontalSpacing(theme.space(2));
-    form->setVerticalSpacing(theme.space(2));
-    // Rótulo acima do campo: nunca corta o conteúdo em painéis estreitos.
-    form->setRowWrapPolicy(QFormLayout::WrapAllRows);
+    form->setVerticalSpacing(theme.space(1) + 1);
+    form->setRowWrapPolicy(labelsAbove ? QFormLayout::WrapAllRows : QFormLayout::WrapLongRows);
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     return form;
 }
@@ -29,17 +31,20 @@ QFormLayout *makeForm(QWidget *owner) {
 // ── Transform ───────────────────────────────────────────────────────────────
 
 PetuniaTransformForm::PetuniaTransformForm(QWidget *parent) : PetuniaBoundForm(parent) {
-    auto *form = makeForm(this);
+    auto *form = makeForm(this, true);
     xyz(form, tr("Posição"), "position", "transform", "text");
     xyz(form, tr("Rotação"), "rotation", "transform", "text");
     xyz(form, tr("Escala"), "scale", "transform", "text");
 
+    // Pivô numa só linha: ponto de transformação, editar o pivô e redefinir a
+    // origem. O marcador do pivô aparece na vista; o botão liga o modo de edição.
     auto *pivotRow = new QWidget(this);
     auto *pivotLayout = new QHBoxLayout(pivotRow);
     pivotLayout->setContentsMargins(0, 0, 0, 0);
     pivotLayout->setSpacing(PetuniaTheme::instance().space(1));
     auto *pivot = new QComboBox(pivotRow);
     pivot->setAccessibleName(tr("Origem do pivô"));
+    pivot->setMinimumHeight(PetuniaTheme::instance().compactControlHeight());
     const QStringList ids{"median", "bounds", "individual", "origin_geometry", "origin_bottom", "origin_selection"};
     const QStringList labels{tr("Ponto médio"), tr("Caixa delimitadora"), tr("Origens individuais"),
                              tr("Origem na geometria"), tr("Origem na base"), tr("Origem na seleção")};
@@ -54,31 +59,18 @@ PetuniaTransformForm::PetuniaTransformForm(QWidget *parent) : PetuniaBoundForm(p
     });
     pivotLayout->addWidget(pivot, 1);
     m_bindings.append({pivot, QStringLiteral("pivot_id"), {}, {}});
-
-    auto *reset = new QPushButton(PetuniaIcons::get(QStringLiteral("undo")), QString(), pivotRow);
-    reset->setToolTip(tr("Redefinir a origem na geometria"));
-    reset->setAccessibleName(tr("Redefinir a origem na geometria"));
-    connect(reset, &QPushButton::clicked, this, [this] { send(QStringLiteral("origin_geometry")); });
-    pivotLayout->addWidget(reset);
+    iconToggle(pivotLayout, QStringLiteral("pivot_median"),
+               tr("Editar pivô: arraste o gizmo para mover só a origem  (Insert)"), QStringLiteral("edit_pivot"),
+               QStringLiteral("edit_pivot"), {});
+    iconButton(pivotLayout, QStringLiteral("undo"), tr("Redefinir a origem na geometria"),
+               QStringLiteral("origin_geometry"));
     form->addRow(tr("Pivô"), pivotRow);
-
-    check(form, tr("Editar pivô"), "edit_pivot", "edit_pivot", {});
 }
 
-// ── Geometria ───────────────────────────────────────────────────────────────
+// ── Sombreamento ────────────────────────────────────────────────────────────
 
 PetuniaGeometryForm::PetuniaGeometryForm(QWidget *parent) : PetuniaBoundForm(parent) {
     auto *form = makeForm(this);
-    m_selection = new QLabel(this);
-    m_selection->setProperty("role", QStringLiteral("caption"));
-    m_selection->setWordWrap(true);
-    m_selection->setAccessibleName(tr("Seleção"));
-    form->addRow(m_selection);
-    m_stats = new QLabel(this);
-    m_stats->setProperty("role", QStringLiteral("muted"));
-    m_stats->setAccessibleName(tr("Estatísticas da cena"));
-    form->addRow(m_stats);
-
     auto *shading = new PetuniaSegmented(this);
     shading->setItems({{"flat", tr("Facetado"), tr("Sombreamento plano"), QStringLiteral("shade_flat")},
                        {"smooth", tr("Suave"), tr("Sombreamento suave"), QStringLiteral("shade_smooth")}});
@@ -88,12 +80,7 @@ PetuniaGeometryForm::PetuniaGeometryForm(QWidget *parent) : PetuniaBoundForm(par
              {{"id", id == QLatin1String("flat") ? QStringLiteral("model.shade_flat")
                                                   : QStringLiteral("model.shade_smooth")}});
     });
-    form->addRow(tr("Sombreamento"), shading);
-}
-
-void PetuniaGeometryForm::afterSync(const QJsonObject &state) {
-    m_selection->setText(state["selection_summary"].toString());
-    m_stats->setText(state["scene_stats"].toString());
+    form->addRow(shading);
 }
 
 // ── Material ────────────────────────────────────────────────────────────────
@@ -101,13 +88,16 @@ void PetuniaGeometryForm::afterSync(const QJsonObject &state) {
 PetuniaMaterialForm::PetuniaMaterialForm(QWidget *parent) : PetuniaBoundForm(parent) {
     auto *form = makeForm(this);
     rows(form, tr("Materiais"), "material_options", "material_slot", "index");
-    button(form, tr("Novo material"), "create_material");
-    button(form, tr("Duplicar material"), "material_duplicate");
-    button(form, tr("Remover material"), "material_remove");
-    button(form, tr("Atribuir às faces/objeto"), "material_assign");
+    buttonRow(form,
+              {{tr("Novo"), "create_material", {}, {}, "plus", tr("Novo material")},
+               {tr("Duplicar"), "material_duplicate", {}, {}, "duplicate", tr("Duplicar material")},
+               {tr("Remover"), "material_remove", {}, {}, "trash", tr("Remover material")},
+               {tr("Atribuir"), "material_assign", {}, {}, "check", tr("Atribuir às faces/objeto")}},
+              2);
 
     auto *color = new QPushButton(tr("Cor base…"), this);
     color->setAccessibleName(tr("Cor base do material"));
+    color->setMinimumHeight(PetuniaTheme::instance().compactControlHeight());
     form->addRow(color);
     connect(color, &QPushButton::clicked, this, [this] {
         PetuniaColorPickerPopover picker(this);
@@ -121,7 +111,7 @@ PetuniaMaterialForm::PetuniaMaterialForm(QWidget *parent) : PetuniaBoundForm(par
     struct Scalar { const char *field; const char *label; double max; };
     const Scalar scalars[] = {{"roughness", "Rugosidade", 1},
                               {"metallic", "Metálico", 1},
-                              {"normal_scale", "Intensidade do normal", 1},
+                              {"normal_scale", "Normal", 1},
                               {"emission_strength", "Emissão", 1000},
                               {"alpha_cutoff", "Corte alfa", 1}};
     for (const auto &s : scalars)
@@ -132,41 +122,33 @@ PetuniaMaterialForm::PetuniaMaterialForm(QWidget *parent) : PetuniaBoundForm(par
            {tr("PBR"), tr("Sem luz"), tr("Toon"), tr("Vidro"), tr("Emissivo")});
     choice(form, tr("Transparência"), "material_alpha_mode", "material_alpha", "index",
            {"opaque", "mask", "blend"}, {tr("Opaco"), tr("Recorte"), tr("Mistura")});
-    auto *nodes = new QPushButton(tr("Editar nós do material…"), this);
+    auto *nodes = new QPushButton(PetuniaIcons::get(QStringLiteral("hierarchy")), tr("Editar nós do material…"), this);
     nodes->setToolTip(tr("Abre o editor de nós com a receita de texturas deste material"));
     nodes->setAccessibleName(tr("Editar nós do material"));
+    nodes->setMinimumHeight(PetuniaTheme::instance().compactControlHeight());
     form->addRow(nodes);
     connect(nodes, &QPushButton::clicked, this, &PetuniaMaterialForm::nodeEditorRequested);
-    button(form, tr("Criar textura albedo"), "create_albedo_texture");
-    button(form, tr("Remover textura albedo"), "clear_albedo_texture");
-}
-
-// ── Booleana (modo direto, interino) ────────────────────────────────────────
-
-PetuniaBooleanForm::PetuniaBooleanForm(QWidget *parent) : PetuniaBoundForm(parent) {
-    auto *form = makeForm(this);
-    rows(form, tr("Operando"), "scene_items", "set_boolean_operand");
-    check(form, tr("Limpar topologia"), "boolean_cleanup", "set_boolean_cleanup", "cleanup");
-    check(form, tr("Manter partes"), "boolean_keep_parts", "set_boolean_keep_parts", "keep");
-    struct Op { const char *id; const char *label; };
-    for (const auto &op : {Op{"model.fuse", "União"}, Op{"model.cut", "Diferença"}, Op{"model.intersect", "Interseção"}})
-        button(form, tr(op.label), "boolean_op", {{"id", QLatin1String(op.id)}}, "boolean_ready");
-    button(form, tr("Juntar"), "join_operand");
-    button(form, tr("Limpar operando"), "clear_boolean_operand");
+    buttonRow(form,
+              {{tr("Criar albedo"), "create_albedo_texture", {}, {}, {}, tr("Criar textura albedo")},
+               {tr("Remover albedo"), "clear_albedo_texture", {}, {}, {}, tr("Remover textura albedo")}},
+              2);
 }
 
 // ── Perfil (DRAW) ───────────────────────────────────────────────────────────
 
 PetuniaProfileForm::PetuniaProfileForm(QWidget *parent) : PetuniaBoundForm(parent) {
     auto *form = makeForm(this);
+    // Desenhar: formas prontas, SVG e fechar, numa grade de 2 colunas.
+    buttonRow(form,
+              {{tr("Retângulo"), "profile_rectangle", {{"width", 1.}, {"height", 1.}}, {}, "shape_square_dashed", {}},
+               {tr("Círculo"), "profile_circle", {{"radius", 0.5}, {"segments", 32}}, {}, "shape_circle", {}},
+               {tr("Fechar"), "close_profile", {}, {}, "profile_closed", tr("Fechar perfil")}},
+              3);
     fileButton(form, tr("Importar SVG…"), "import_svg", tr("SVG (*.svg)"));
-    button(form, tr("Retângulo"), "profile_rectangle", {{"width", 1.}, {"height", 1.}});
-    button(form, tr("Círculo"), "profile_circle", {{"radius", 0.5}, {"segments", 32}});
-    button(form, tr("Fechar perfil"), "close_profile");
-    choice(form, tr("Plano de trabalho"), "profile_workplane", "profile_workplane", "id",
+    choice(form, tr("Plano"), "profile_workplane", "profile_workplane", "id",
            {"auto", "ground", "face", "view", "selection"},
            {tr("Automático"), tr("Chão"), tr("Face"), tr("Vista"), tr("Seleção")});
-    button(form, tr("Olhar para o plano"), "workplane_look");
+    buttonRow(form, {{tr("Olhar para o plano"), "workplane_look", {}, {}, "view_perspective", {}}});
     number(form, tr("Largura"), "profile_width", "profile_dimension", "value", 0.001, 10000, 0.01, {{"field", "width"}});
     number(form, tr("Altura"), "profile_height", "profile_dimension", "value", 0.001, 10000, 0.01, {{"field", "height"}});
     number(form, tr("Segmentos"), "profile_segments", "profile_dimension", "value", 3, 4096, 1, {{"field", "segments"}});
@@ -174,13 +156,20 @@ PetuniaProfileForm::PetuniaProfileForm(QWidget *parent) : PetuniaBoundForm(paren
     number(form, tr("Parede"), "profile_wall_thickness", "set_profile_wall_thickness", "thickness", 0, 10000);
     number(form, tr("Revolução"), "profile_revolve_angle", "set_profile_revolve_angle", "angle_deg", -360, 360, 1);
     number(form, tr("Suavidade"), "profile_smoothness", "set_profile_smoothness", "smoothness", 0, 1);
-    button(form, tr("Suavizar curvas"), "profile_smooth_curves");
-    button(form, tr("Remover curvas"), "profile_clear_curves");
-    button(form, tr("Volume por extrusão"), "generate_profile_extrude");
-    button(form, tr("Volume por revolução"), "generate_profile_revolve");
-    button(form, tr("Volume por sweep"), "generate_profile_sweep");
-    button(form, tr("Confirmar volume"), "commit_profile_volume");
-    button(form, tr("Cancelar volume"), "cancel_profile_volume");
+    buttonRow(form,
+              {{tr("Suavizar"), "profile_smooth_curves", {}, {}, {}, tr("Suavizar curvas")},
+               {tr("Remover curvas"), "profile_clear_curves", {}, {}, {}, {}}},
+              2);
+    // Gerar o volume: três caminhos e confirmar/cancelar, cada grupo numa linha.
+    buttonRow(form,
+              {{tr("Extrusão"), "generate_profile_extrude", {}, {}, "extrude", tr("Volume por extrusão")},
+               {tr("Revolução"), "generate_profile_revolve", {}, {}, "revolve", tr("Volume por revolução")},
+               {tr("Sweep"), "generate_profile_sweep", {}, {}, "spin", tr("Volume por sweep")}},
+              3);
+    buttonRow(form,
+              {{tr("Confirmar"), "commit_profile_volume", {}, {}, "check", tr("Confirmar volume")},
+               {tr("Cancelar"), "cancel_profile_volume", {}, {}, "close", tr("Cancelar volume")}},
+              2);
 }
 
 // ── Pilha de operações ──────────────────────────────────────────────────────

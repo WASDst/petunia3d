@@ -354,11 +354,12 @@ mod tests {
         out
     }
 
-    /// O nó Boolean produz a mesma geometria que o `BooleanOpCmd` destrutivo para
-    /// as três operações, com e sem limpeza de topologia (O02).
+    /// O nó Boolean produz a mesma geometria que o kernel chamado direto, para as
+    /// três operações, com e sem limpeza de topologia (O02). Booleanas existem
+    /// só como nós: não há comando destrutivo equivalente.
     #[test]
-    fn boolean_node_matches_destructive_boolean_command() {
-        use petunia_mesh::boolean::BooleanOp;
+    fn boolean_node_matches_the_kernel() {
+        use petunia_mesh::boolean::{BooleanOp, boolean_meshes, boolean_meshes_clean};
         for (name, op) in [
             ("union", BooleanOp::Union),
             ("difference", BooleanOp::Difference),
@@ -395,24 +396,26 @@ mod tests {
                 );
                 let from_graph = graph_state.project.project.assets[0].evaluated_mesh();
 
-                let (mut command_state, _, cutter) = state_with_two_cubes();
-                command_state.session.tools.boolean_operand = Some(cutter);
-                command_state.session.tools.boolean_cleanup = cleanup;
-                command_state
-                    .dispatch(&crate::BooleanOpCmd::new(op))
-                    .unwrap();
-                let from_command = command_state.project.project.assets[0]
-                    .mesh
-                    .to_owned_value();
+                let assets = &graph_state.project.project.assets;
+                let a = assets[0].mesh.to_owned_value();
+                let b = assets[1].mesh_in_frame_of(&assets[0]);
+                let from_kernel = if cleanup {
+                    boolean_meshes_clean(&a, &b, op).unwrap().0
+                } else {
+                    let (mut ta, mut tb) = (a, b);
+                    ta.triangulate();
+                    tb.triangulate();
+                    boolean_meshes(&ta, &tb, op).unwrap()
+                };
 
                 assert_eq!(
                     from_graph.faces.len(),
-                    from_command.faces.len(),
+                    from_kernel.faces.len(),
                     "{name}/{cleanup}: faces"
                 );
                 assert_eq!(
                     sorted_positions(&from_graph),
-                    sorted_positions(&from_command),
+                    sorted_positions(&from_kernel),
                     "{name}/{cleanup}: posições"
                 );
             }

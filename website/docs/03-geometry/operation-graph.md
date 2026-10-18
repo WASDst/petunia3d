@@ -5,7 +5,7 @@
 ## 1. Intent e fontes
 
 - **Intent:** dar uma casa persistente e re-editável às operações paramétricas hoje apresentadas como botões one-shot (booleana, modifiers, geradores, projeção) e aos materiais/texturas, sem criar um "Blender dentro do Petunia".
-- **Fontes:** [object-geometry-source](object-geometry-source.md), [modifiers-evaluation](modifiers-evaluation.md), `crates/project/src/surface_recipe.rs`, `crates/project/src/lib.rs` (`ModifierKind`, `ModifierInstance`), `crates/core/src/modifier_commands.rs`, `crates/core/src/command.rs` (`BooleanOpCmd`), `crates/mesh/src/boolean.rs`, [dossiê da GUI](../09-ui/gui-audit-dossier.md).
+- **Fontes:** [object-geometry-source](object-geometry-source.md), [modifiers-evaluation](modifiers-evaluation.md), `crates/project/src/surface_recipe.rs`, `crates/project/src/lib.rs` (`ModifierKind`, `ModifierInstance`), `crates/core/src/modifier_commands.rs`, `crates/mesh/src/boolean.rs` (o antigo `BooleanOpCmd` foi removido em 2026-10-18, ADR-C15), [dossiê da GUI](../09-ui/gui-audit-dossier.md).
 
 ## 2. Estado atual (evidência de leitura)
 
@@ -41,7 +41,7 @@
 1. **Extrair** o núcleo genérico do `surface_recipe.rs` (grafo tipado, validação, ordem topológica, detecção de ciclo, cache) para um módulo/crate neutro (nome proposto `petunia_graph`, sem Qt/GPU). `SurfaceRecipe` continua funcionando, com seus testes verdes e o formato `.petunia` retrocompatível.
 2. **Fonte de geometria:** nova variante `Graph(output)`, **avaliada e não editável** até *Make Editable/Bake* (mesma regra dos geradores vivos). Material, UV automático, render e export seguem permitidos; sculpt, paint, UV manual e rig exigem Bake.
 3. **Modifiers atuais:** `ModifierKind::{Mirror, Symmetry}` viram uma cadeia linear de nós (migração sem perda; arquivos antigos carregam).
-4. **Booleana:** o comando destrutivo `BooleanOpCmd` permanece como **Aplicar/Bake** (avaliar + Make Editable). O estado de sessão `boolean_operand` deixa de existir.
+4. **Booleana:** o comando destrutivo `BooleanOpCmd` e o estado de sessão `boolean_operand` foram **removidos** (2026-10-18, ADR-C15): o nó Boolean é o único caminho e **Make Editable** (`graph_bake`) grava o resultado na malha.
 
 ### 4.3 Nó Boolean (escopo inicial)
 
@@ -104,7 +104,7 @@ Cada tarefa fecha com testes de regressão, evidência com SHA e `not run / pass
 **Estado verificado (2026-10-17):**
 
 - O01: `NodeDescriptor`, grafo tipado e comandos `OpGraphCmd` com Undo estão implementados e testados (`crates/project/src/op_graph.rs`, `crates/core/src/op_graph_commands.rs`). **Pendente:** o núcleo é um módulo novo; `SurfaceRecipe` mantém seu próprio grafo (extração comum não feita) e não há fuzz de `.petunia` hostil específico do grafo.
-- O02: paridade nó Boolean × `BooleanOpCmd` testada (3 operações × limpeza ligada/desligada, mesmas faces e posições). Diferença conhecida: o comando destrutivo transfere textura/UV (`boolean_texture::transfer`) e o nó não. A pilha legada `Asset.modifiers` migra ao carregar (`Project::migrate_legacy_modifiers`): mesma ordem, estado, parâmetros e UUID; parâmetro fora da faixa mantém o legado. Os comandos `AddModifier` (MCP/Lua) ainda escrevem a pilha legada, que migra no próximo carregamento.
+- O02: paridade nó Boolean × `BooleanOpCmd` testada (3 operações × limpeza ligada/desligada, mesmas faces e posições). Em 2026-10-18 o comando foi removido (ADR-C15) e o teste passou a comparar o nó com o kernel `petunia_mesh::boolean` chamado direto. Diferença conhecida: o comando destrutivo transfere textura/UV (`boolean_texture::transfer`) e o nó não. A pilha legada `Asset.modifiers` migra ao carregar (`Project::migrate_legacy_modifiers`): mesma ordem, estado, parâmetros e UUID; parâmetro fora da faixa mantém o legado. Os comandos `AddModifier` (MCP/Lua) ainda escrevem a pilha legada, que migra no próximo carregamento.
 - O05: `Material.recipe` (`crates/project/src/material_recipe.rs`) guarda o grafo de textura do material; `MaterialRecipeCmd` cria, adiciona, liga (substituindo a entrada ocupada), edita, remove e torna estático com Undo; só os nós que alimentam uma Saída ligada são avaliados (nós soltos não quebram o material). Na GUI: gaveta **Nós → Material** (ou "Editar nós do material…" na seção Material), Shift+A com o catálogo (Imagem, Xadrez, Gradiente, Ruído, Tingir, Misturar, Multiplicar, Inverter, Posterizar, Saída), arrasto saída→entrada ou Enter "Ligar a…", parâmetros (inclusive cor) no painel lateral. Fora do catálogo: nós `PbrMaterial`/`AssignMaterial` do O04 (aparecem, sem controles).
 - Fan-out: "ligar a mais de um objeto" é inerente (uma saída de operação alimenta N objetos; cada um avalia a operação no próprio frame). Não existe nó "Distribuir" separado.
 

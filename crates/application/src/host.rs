@@ -95,6 +95,8 @@ impl DesktopHost {
         state.ui.multiselection_measure_tag = preferences.multiselection_measure_tag;
         state.ui.selection_rgb = preferences.selection_rgb;
         state.ui.selection_thickness = preferences.selection_thickness.clamp(1.0, 6.0);
+        state.ui.gizmo_size = preferences.gizmo_size.clamp(48.0, 160.0);
+        state.ui.gizmo_thickness = preferences.gizmo_thickness.clamp(1.0, 6.0);
         state.ui.model_quick_actions = preferences.model_quick_actions.clone();
         if !preferences.theme_id.is_empty() {
             state.ui.active_theme_id = preferences.theme_id.clone();

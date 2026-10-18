@@ -152,3 +152,13 @@ Direção aprovada pelo usuário em 2026-10-17; detalhes em [Shell v2](../09-ui/
 4. **Uma fonte por responsabilidade:** tokens, ações, ferramentas, seções de propriedade e strings por id; ponte tipada e seccionada por revisão.
 5. **Mapeamento de ids:** UI-001…015 do pacote `newdocs` passam a ser rastreados por este ADR, sem aprovação retroativa de UI-011…015 (guardrails).
 6. **Supera** os trechos dependentes de Slint em `09-ui` e nas rotas de `AGENTS.md`, cuja reescrita é pendência (U10).
+
+## ADR-C15 — Shell v2: refinamento de uso (2026-10-18) — APROVADO PELO USUÁRIO
+
+Pedido do usuário após uso real do shell v2; detalhes e evidências em [refinamento do Shell v2](../09-ui/shell-v2-refinement.md). Verificação visual e de plataforma continuam abertas.
+
+1. **Booleanas só por nós.** Fuse/Cut/Intersect diretos, o operando global e Keep Parts foram removidos; o nó Boolean do Operation Graph é o único caminho e **Make Editable** (`graph_bake`) substitui o "Aplicar". **Supera** o item 3 do [ADR-C13](#adr-c13--operation-graph-operacoes-persistentes-e-re-editaveis-2026-10-17--proposto) (`BooleanOpCmd` como Aplicar/Bake). Join passa a fundir a seleção no objeto ativo.
+2. **Um só contorno de seleção, no passe GL.** O contorno 2D projetado em Rust e pintado por QPainter foi removido (ficava para trás ao arrastar); o passe GL usa a cor de seleção de cada parte e o hover do objeto.
+3. **Estrutura com grupos.** Grupos são as collections do documento (um nível); arrastar e soltar, Ctrl+G/Ctrl+Shift+G e isolamento são comandos com Undo. Hierarquia aninhada com transformação herdada segue em G09.
+4. **Rail mínimo.** Só transformar, 3D Cursor e criação; operações de modelagem são ações contextuais agrupadas na barra flutuante.
+5. **Navegação e gizmos.** Cubo de navegação (faces, arestas, cantos, bússola, início, projeção) no lugar das esferas de eixo; gizmos de transformação reformulados com tamanho e espessura nas Preferências.

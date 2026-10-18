@@ -32,6 +32,11 @@ class PetuniaContextActions : public QFrame {
     /// Oculta a barra enquanto uma operação (HUD) está em curso.
     void setSuppressed(bool suppressed) { m_suppressed = suppressed; }
 
+  signals:
+    /// Ação tratada só pela GUI (alvo `ui.*`), por exemplo o painel de alinhar.
+    /// `anchor` é o botão de origem, para posicionar o painel.
+    void uiActionRequested(const QString &target, QWidget *anchor);
+
   private:
     void rebuild(const QJsonArray &actions);
     void refreshStates();

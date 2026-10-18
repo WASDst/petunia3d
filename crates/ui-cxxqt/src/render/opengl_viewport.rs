@@ -630,6 +630,64 @@ pub extern "C" fn petunia_qt_camera_set_preset(preset: i32) {
         .unwrap_or(())
 }
 
+/// Aponta a câmera para o objeto a partir da direção `(x, y, z)` (do alvo até o
+/// olho), mantendo a projeção atual. Usado pelas arestas e cantos do cubo de
+/// navegação. Direção nula ou não finita é recusada.
+#[unsafe(no_mangle)]
+pub extern "C" fn petunia_qt_camera_set_view_direction(x: f32, y: f32, z: f32) -> bool {
+    let direction = glam::Vec3::new(x, y, z);
+    if !direction.is_finite() || direction.length_squared() < 1.0e-8 {
+        return false;
+    }
+    let direction = direction.normalize();
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            if let Ok(mut guard) = renderer.try_borrow_mut() {
+                let camera = &mut guard.app.state.session.camera;
+                // Olhando de cima ou de baixo o azimute é indefinido: mantém o atual.
+                if direction.x.abs() > 1.0e-4 || direction.z.abs() > 1.0e-4 {
+                    camera.yaw = direction.x.atan2(direction.z);
+                }
+                camera.pitch = direction.y.clamp(-1.0, 1.0).asin();
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
+}
+
+/// Gira a câmera até o azimute `yaw_degrees`, mantendo a elevação (anel de
+/// bússola do cubo de navegação).
+#[unsafe(no_mangle)]
+pub extern "C" fn petunia_qt_camera_set_yaw(yaw_degrees: f32) -> bool {
+    if !yaw_degrees.is_finite() {
+        return false;
+    }
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            if let Ok(mut guard) = renderer.try_borrow_mut() {
+                guard.app.state.session.camera.yaw = yaw_degrees.to_radians();
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
+}
+
+/// `true` quando a projeção atual é ortográfica.
+#[unsafe(no_mangle)]
+pub extern "C" fn petunia_qt_camera_is_ortho() -> bool {
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            renderer.try_borrow_mut().is_ok_and(|guard| {
+                guard.app.state.session.camera.proj == petunia_core::Projection::Ortho
+            })
+        })
+        .unwrap_or(false)
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn petunia_qt_camera_toggle_projection() {
     crate::render::opengl_viewport::VIEWPORT_RENDERER

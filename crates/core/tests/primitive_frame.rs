@@ -17,14 +17,25 @@ fn box_desc(width: f32) -> PrimitiveDescriptor {
 fn snapshot(s: &AppState) -> serde_json::Value {
     serde_json::to_value(&s.project.project).unwrap()
 }
+/// Os conjuntos da malha (`sharp_edges`, `selected_edges`, `uv_seams`,
+/// `uv_pinned`) são `HashSet`s: a ordem de serialização muda a cada instância.
+/// Para comparar malhas por conteúdo, ordena esses arrays.
+fn normalized(mut mesh: serde_json::Value) -> serde_json::Value {
+    for key in ["sharp_edges", "selected_edges", "uv_seams", "uv_pinned"] {
+        if let Some(items) = mesh.get_mut(key).and_then(serde_json::Value::as_array_mut) {
+            items.sort_by_key(|item| item.to_string());
+        }
+    }
+    mesh
+}
 fn assert_local(s: &AppState, desc: PrimitiveDescriptor) {
     let a = s.project.active().unwrap();
     assert_eq!(a.origin, None);
     assert!(!a.has_legacy_baked_transform());
     assert_eq!(a.parametric, Some(desc));
     assert_eq!(
-        serde_json::to_value(&*a.mesh).unwrap(),
-        serde_json::to_value(desc.build()).unwrap()
+        normalized(serde_json::to_value(&*a.mesh).unwrap()),
+        normalized(serde_json::to_value(desc.build()).unwrap())
     );
 }
 

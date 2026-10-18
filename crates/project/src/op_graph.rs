@@ -1022,7 +1022,7 @@ impl OpGraph {
                     "intersection" => BooleanOp::Intersection,
                     _ => BooleanOp::Difference,
                 };
-                // Mesmo kernel do `BooleanOpCmd`: com limpeza, `boolean_meshes_clean`;
+                // Kernel booleano do `petunia_mesh`: com limpeza, `boolean_meshes_clean`;
                 // sem limpeza, o resultado triangulado bruto do kernel.
                 if bool_param(operation, "cleanup", true) {
                     let (result, _report) = boolean_meshes_clean(mesh, &tool_mesh, op)

@@ -5,7 +5,9 @@
 
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QLabel>
 #include <QMenu>
+#include <QWidgetAction>
 
 PetuniaContextActions::PetuniaContextActions(PetuniaShellController *controller, QWidget *parent)
     : QFrame(parent), m_controller(controller) {
@@ -30,9 +32,52 @@ QStringList PetuniaContextActions::primaryIds() const {
     return ids;
 }
 
+namespace {
+/// Título de grupo do menu "Mais": rótulo não selecionável com o estilo do tema.
+void addGroupHeader(QMenu *menu, const QString &text) {
+    auto *label = new QLabel(text, menu);
+    label->setProperty("role", QStringLiteral("muted"));
+    const auto &theme = PetuniaTheme::instance();
+    label->setContentsMargins(theme.space(2), theme.space(2), theme.space(2), theme.space(1));
+    label->setAccessibleName(text);
+    auto *holder = new QWidgetAction(menu);
+    holder->setDefaultWidget(label);
+    holder->setEnabled(false);
+    menu->addAction(holder);
+}
+
+QString groupTitle(const QString &id) {
+    if (id == QLatin1String("object"))
+        return PetuniaContextActions::tr("Objeto");
+    if (id == QLatin1String("scene"))
+        return PetuniaContextActions::tr("Cena");
+    if (id == QLatin1String("form"))
+        return PetuniaContextActions::tr("Forma");
+    if (id == QLatin1String("topology"))
+        return PetuniaContextActions::tr("Topologia");
+    if (id == QLatin1String("shape"))
+        return PetuniaContextActions::tr("Perfil e formas");
+    if (id == QLatin1String("uv"))
+        return PetuniaContextActions::tr("UV");
+    if (id == QLatin1String("utility"))
+        return PetuniaContextActions::tr("Utilitários");
+    return PetuniaContextActions::tr("Remover");
+}
+} // namespace
+
 void PetuniaContextActions::run(const QJsonObject &action) {
     const QString kind = action["kind"].toString();
     const QString target = action["target"].toString();
+    if (target.startsWith(QLatin1String("ui."))) {
+        QWidget *anchor = nullptr;
+        for (auto *button : std::as_const(m_primary))
+            if (button->property("actionId").toString() == action["id"].toString())
+                anchor = button;
+        if (!anchor)
+            anchor = m_more;
+        emit uiActionRequested(target, anchor ? anchor : static_cast<QWidget *>(this));
+        return;
+    }
     if (kind == QLatin1String("command"))
         m_controller->command(target);
     else if (kind == QLatin1String("tool"))
@@ -63,7 +108,7 @@ void PetuniaContextActions::rebuild(const QJsonArray &actions) {
         button->setIconSize(QSize(theme.iconPx(), theme.iconPx()));
         button->setText(petuniaTr(action["label"].toString()));
         button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        button->setMinimumHeight(theme.controlHeight());
+        button->setMinimumHeight(theme.compactControlHeight());
         button->setAccessibleName(petuniaTr(action["label"].toString()));
         connect(button, &QToolButton::clicked, this, [this, action] { run(action); });
         m_layout->addWidget(button);
@@ -77,14 +122,28 @@ void PetuniaContextActions::rebuild(const QJsonArray &actions) {
         m_more->setIconSize(QSize(theme.iconPx(), theme.iconPx()));
         m_more->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         m_more->setPopupMode(QToolButton::InstantPopup);
-        m_more->setMinimumHeight(theme.controlHeight());
+        m_more->setMinimumHeight(theme.compactControlHeight());
         m_more->setAccessibleName(tr("Mais ações"));
         auto *menu = new QMenu(m_more);
-        for (const auto &action : overflow) {
-            auto *item = menu->addAction(PetuniaIcons::get(action["icon"].toString()),
-                                         petuniaTr(action["label"].toString()));
-            item->setProperty("actionId", action["id"].toString());
-            connect(item, &QAction::triggered, this, [this, action] { run(action); });
+        // O "Mais" é organizado por grupo (objeto, cena, forma, topologia…), na
+        // ordem publicada pelo editor, em vez de uma lista única e longa.
+        static const QStringList order{"object", "scene", "form", "topology", "shape", "uv", "utility", "danger"};
+        for (const auto &group : order) {
+            bool headerShown = false;
+            for (const auto &action : overflow) {
+                if (action["group"].toString(QStringLiteral("object")) != group)
+                    continue;
+                if (!headerShown) {
+                    if (!menu->actions().isEmpty())
+                        menu->addSeparator();
+                    addGroupHeader(menu, groupTitle(group));
+                    headerShown = true;
+                }
+                auto *item = menu->addAction(PetuniaIcons::get(action["icon"].toString()),
+                                             petuniaTr(action["label"].toString()));
+                item->setProperty("actionId", action["id"].toString());
+                connect(item, &QAction::triggered, this, [this, action] { run(action); });
+            }
         }
         m_more->setMenu(menu);
         m_layout->addWidget(m_more);
@@ -151,18 +210,19 @@ void PetuniaContextActions::refreshStates() {
         ++index;
     }
     if (m_more && m_more->menu()) {
-        auto items = m_more->menu()->actions();
-        int i = 0;
+        const auto items = m_more->menu()->actions();
         for (const auto &value : m_actions) {
             const auto action = value.toObject();
             if (action["primary"].toBool())
                 continue;
-            if (i >= items.size())
-                break;
-            bool enabled = true;
-            describe(action, &enabled);
-            items[i]->setEnabled(enabled);
-            ++i;
+            for (auto *item : items) {
+                if (item->property("actionId").toString() != action["id"].toString())
+                    continue;
+                bool enabled = true;
+                const QString tip = describe(action, &enabled);
+                item->setEnabled(enabled);
+                item->setToolTip(tip);
+            }
         }
     }
 }

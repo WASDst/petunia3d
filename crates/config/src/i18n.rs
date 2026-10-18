@@ -234,9 +234,6 @@ pub mod text_id {
     pub const UI_QUICK_ACTION_RESET: TextId = TextId::new("ui.quick_action_reset");
     pub const UI_QUICK_ACTION_DONE: TextId = TextId::new("ui.quick_action_done");
     pub const UI_ACTION_SUBDIVIDE: TextId = TextId::new("ui.action_subdivide");
-    pub const UI_ACTION_FUSE: TextId = TextId::new("ui.action_fuse");
-    pub const UI_ACTION_CUT: TextId = TextId::new("ui.action_cut");
-    pub const UI_ACTION_INTERSECT: TextId = TextId::new("ui.action_intersect");
     pub const UI_ACTION_JOIN: TextId = TextId::new("ui.action_join");
     pub const UI_ACTION_MERGE: TextId = TextId::new("ui.action_merge");
     pub const UI_ACTION_SLICE: TextId = TextId::new("ui.action_slice");
@@ -895,10 +892,6 @@ pub mod text_id {
     pub const STATUS_CUT_CANCELLED: TextId = TextId::new("status.cut_cancelled");
     pub const STATUS_ASSET_NOT_FOUND_IN_PROJECT_LIBRARY: TextId =
         TextId::new("status.asset_not_found_in_project_library");
-    pub const STATUS_BOOLEAN_OPERAND_SET_FUSE_CUT_OR_INTERSECT: TextId =
-        TextId::new("status.boolean_operand_set_fuse_cut_or_intersect");
-    pub const STATUS_BOOLEAN_OPERAND_CLEARED: TextId =
-        TextId::new("status.boolean_operand_cleared");
     pub const STATUS_RIGHT_CLICK_ON_AN_EDGE_TO_SELECT: TextId =
         TextId::new("status.right_click_on_an_edge_to_select");
     pub const STATUS_SELECTED_EDGE_EDGES: TextId = TextId::new("status.selected_edge_edges");
@@ -906,7 +899,6 @@ pub mod text_id {
         TextId::new("status.right_click_on_a_face_to_select");
     pub const STATUS_SELECTED_FACE_LOOP_FACES: TextId =
         TextId::new("status.selected_face_loop_faces");
-    pub const STATUS_SET_AS_BOOLEAN_OPERAND: TextId = TextId::new("status.set_as_boolean_operand");
     pub const STATUS_FILLED: TextId = TextId::new("status.filled");
     pub const STATUS_PAINTING: TextId = TextId::new("status.painting");
     pub const STATUS_FACE_SELECTED: TextId = TextId::new("status.face_selected");
@@ -1084,9 +1076,6 @@ pub mod text_id {
         UI_QUICK_ACTION_RESET,
         UI_QUICK_ACTION_DONE,
         UI_ACTION_SUBDIVIDE,
-        UI_ACTION_FUSE,
-        UI_ACTION_CUT,
-        UI_ACTION_INTERSECT,
         UI_ACTION_JOIN,
         UI_ACTION_MERGE,
         UI_ACTION_SLICE,
@@ -1628,13 +1617,10 @@ pub mod text_id {
         STATUS_CUT_APPLIED,
         STATUS_CUT_CANCELLED,
         STATUS_ASSET_NOT_FOUND_IN_PROJECT_LIBRARY,
-        STATUS_BOOLEAN_OPERAND_SET_FUSE_CUT_OR_INTERSECT,
-        STATUS_BOOLEAN_OPERAND_CLEARED,
         STATUS_RIGHT_CLICK_ON_AN_EDGE_TO_SELECT,
         STATUS_SELECTED_EDGE_EDGES,
         STATUS_RIGHT_CLICK_ON_A_FACE_TO_SELECT,
         STATUS_SELECTED_FACE_LOOP_FACES,
-        STATUS_SET_AS_BOOLEAN_OPERAND,
         STATUS_FILLED,
         STATUS_PAINTING,
         STATUS_FACE_SELECTED,

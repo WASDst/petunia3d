@@ -3,7 +3,9 @@
 #include "../petunia_color_picker.h"
 #include "../petunia_placeholder_message.h"
 #include "../petunia_theme.h"
+#include "petunia_i18n.h"
 
+#include <QDropEvent>
 #include <QHBoxLayout>
 #include <QHash>
 #include <QHeaderView>
@@ -15,6 +17,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
 
 namespace {
 /// A lista mostra as camadas do topo para a base (`paint_layers` vem invertido),
@@ -23,6 +26,11 @@ int paintStackDelta(int listDelta) {
     return -listDelta;
 }
 
+QString groupItemId(const QString &name) {
+    return QStringLiteral("group:") + name;
+}
+
+/// Filtro "só selecionadas": grupos ficam (a busca recursiva decide pelos filhos).
 class SelectedOnlyProxy : public QSortFilterProxyModel {
   public:
     using QSortFilterProxyModel::QSortFilterProxyModel;
@@ -37,8 +45,9 @@ class SelectedOnlyProxy : public QSortFilterProxyModel {
     bool filterAcceptsRow(int row, const QModelIndex &parent) const override {
         if (m_selectedOnly) {
             const auto *model = qobject_cast<QStandardItemModel *>(sourceModel());
-            const auto *item = model ? model->item(row, 0) : nullptr;
-            if (item && !item->data(Qt::UserRole + 1).toBool())
+            const auto *item = model ? model->itemFromIndex(model->index(row, 0, parent)) : nullptr;
+            if (item && item->data(Qt::UserRole + 2).toString() != QLatin1String("group") &&
+                !item->data(Qt::UserRole + 1).toBool())
                 return false;
         }
         return QSortFilterProxyModel::filterAcceptsRow(row, parent);
@@ -46,6 +55,46 @@ class SelectedOnlyProxy : public QSortFilterProxyModel {
 
   private:
     bool m_selectedOnly{false};
+};
+
+/// Árvore com arrastar e soltar controlado: o Qt nunca move linhas do modelo;
+/// o painel traduz o gesto num pedido ao editor (`scene_drop`) e o estado novo
+/// redesenha a lista. Mesma regra com o mouse e, via `dropOn`, nos testes.
+class SceneTreeView : public QTreeView {
+  public:
+    using QTreeView::QTreeView;
+    std::function<void(const QModelIndex &, PetuniaStructurePanel::DropPosition)> onDrop;
+
+  protected:
+    void dropEvent(QDropEvent *event) override {
+        if (!onDrop) {
+            QTreeView::dropEvent(event);
+            return;
+        }
+        const QModelIndex target = indexAt(event->position().toPoint());
+        using Where = PetuniaStructurePanel::DropPosition;
+        Where where = Where::OnViewport;
+        switch (dropIndicatorPosition()) {
+        case QAbstractItemView::OnItem:
+            where = Where::OnItem;
+            break;
+        case QAbstractItemView::AboveItem:
+            where = Where::AboveItem;
+            break;
+        case QAbstractItemView::BelowItem:
+            where = Where::BelowItem;
+            break;
+        case QAbstractItemView::OnViewport:
+            where = Where::OnViewport;
+            break;
+        }
+        onDrop(target, where);
+        event->setDropAction(Qt::IgnoreAction);
+        event->accept();
+        stopAutoScroll();
+        setState(QAbstractItemView::NoState);
+        viewport()->update();
+    }
 };
 } // namespace
 
@@ -65,6 +114,7 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
     m_search->setPlaceholderText(tr("Buscar partes"));
     m_search->setAccessibleName(tr("Buscar partes"));
     m_search->setClearButtonEnabled(true);
+    m_search->setMinimumHeight(theme.compactControlHeight());
     toolbar->addWidget(m_search, 1);
 
     auto iconButton = [&](const QString &icon, const QString &tip, bool checkable) {
@@ -73,42 +123,55 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
         button->setCheckable(checkable);
         button->setToolTip(tip);
         button->setAccessibleName(tip);
-        button->setFixedWidth(theme.controlHeight());
+        button->setFixedSize(theme.compactControlHeight(), theme.compactControlHeight());
         return button;
     };
     m_filterSelected = iconButton(QStringLiteral("filter"), tr("Mostrar só partes selecionadas"), true);
     m_sort = iconButton(QStringLiteral("sort_az"), tr("Ordenar por nome (A–Z)"), true);
+    m_group = iconButton(QStringLiteral("collection"), tr("Agrupar seleção  (Ctrl+G)"), false);
+    m_align = iconButton(QStringLiteral("bounding_box"), tr("Alinhar e distribuir…"), false);
     m_primary = iconButton(QStringLiteral("separate"), tr("Separar seleção em nova parte"), false);
     toolbar->addWidget(m_filterSelected);
     toolbar->addWidget(m_sort);
+    toolbar->addWidget(m_group);
+    toolbar->addWidget(m_align);
     toolbar->addWidget(m_primary);
     root->addLayout(toolbar);
 
     m_model = new QStandardItemModel(this);
-    m_model->setHorizontalHeaderLabels({tr("Nome"), tr("Visível"), tr("Bloqueio")});
+    m_model->setColumnCount(4);
+    m_model->setHorizontalHeaderLabels({tr("Nome"), tr("Visível"), tr("Bloqueio"), tr("Isolar")});
+    m_model->invisibleRootItem()->setFlags(Qt::ItemIsEnabled | Qt::ItemIsDropEnabled);
     auto *proxy = new SelectedOnlyProxy(this);
     proxy->setSourceModel(m_model);
     proxy->setFilterCaseSensitivity(Qt::CaseInsensitive);
     proxy->setFilterKeyColumn(Name);
+    proxy->setRecursiveFilteringEnabled(true);
     m_proxy = proxy;
 
-    m_tree = new QTreeView(this);
+    auto *tree = new SceneTreeView(this);
+    m_tree = tree;
     m_tree->setModel(m_proxy);
     m_tree->setAccessibleName(tr("Partes da cena"));
     m_tree->setHeaderHidden(true);
-    m_tree->setRootIsDecorated(false);
-    m_tree->setIndentation(0);
+    m_tree->setProperty("dense", true);
     m_tree->setUniformRowHeights(true);
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setIconSize(QSize(theme.iconPx(), theme.iconPx()));
+    m_tree->setExpandsOnDoubleClick(false);
+    m_tree->setAnimated(!theme.reducedMotion());
     m_tree->header()->setStretchLastSection(false);
     m_tree->header()->setSectionResizeMode(Name, QHeaderView::Stretch);
-    m_tree->header()->setSectionResizeMode(Visible, QHeaderView::Fixed);
-    m_tree->header()->setSectionResizeMode(Locked, QHeaderView::Fixed);
-    m_tree->header()->resizeSection(Visible, theme.controlHeight());
-    m_tree->header()->resizeSection(Locked, theme.controlHeight());
+    for (const int column : {int(Visible), int(Locked), int(Isolate)}) {
+        m_tree->header()->setSectionResizeMode(column, QHeaderView::Fixed);
+        m_tree->header()->resizeSection(column, theme.compactControlHeight());
+    }
+    tree->onDrop = [this](const QModelIndex &target, DropPosition position) {
+        dropOn(target, position);
+    };
+    configureTree(true);
     root->addWidget(m_tree, 1);
 
     m_empty = new PetuniaPlaceholderMessage(this);
@@ -128,6 +191,8 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
         else
             m_proxy->sort(-1);
     });
+    connect(m_group, &QPushButton::clicked, this, [this] { m_controller->request(QStringLiteral("scene_group")); });
+    connect(m_align, &QPushButton::clicked, this, [this] { emit alignRequested(m_align); });
     connect(m_primary, &QPushButton::clicked, this, [this] {
         const QString ws = m_controller->workspaceId();
         if (ws == QLatin1String("PAINT"))
@@ -143,17 +208,56 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
     connect(m_tree, &QTreeView::customContextMenuRequested, this, &PetuniaStructurePanel::onContextMenu);
     connect(m_tree->selectionModel(), &QItemSelectionModel::selectionChanged, this,
             &PetuniaStructurePanel::onSelectionChanged);
+    connect(m_tree, &QTreeView::collapsed, this, [this](const QModelIndex &index) {
+        if (!m_syncing && kindAt(index) == QLatin1String("group"))
+            m_collapsed.insert(groupAt(index));
+    });
+    connect(m_tree, &QTreeView::expanded, this, [this](const QModelIndex &index) {
+        if (!m_syncing && kindAt(index) == QLatin1String("group"))
+            m_collapsed.remove(groupAt(index));
+    });
+    connect(m_tree, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
+        // Duplo clique num grupo recolhe/expande; numa parte, renomeia (F2).
+        if (m_sceneMode && kindAt(index) == QLatin1String("group"))
+            m_tree->setExpanded(index.siblingAtColumn(Name), !m_tree->isExpanded(index.siblingAtColumn(Name)));
+    });
     connect(m_model, &QStandardItemModel::itemChanged, this, [this](QStandardItem *item) {
         if (m_syncing || item->column() != Name)
             return;
         const QString ws = m_controller->workspaceId();
-        if (ws != QLatin1String("PAINT") && ws != QLatin1String("ANIMATE")) {
-            m_controller->request(QStringLiteral("rename"),
-                                  {{"id", item->data(IdRole).toString()}, {"name", item->text()}});
+        if (ws == QLatin1String("PAINT") || ws == QLatin1String("ANIMATE") || ws == QLatin1String("UV"))
+            return;
+        if (item->data(KindRole).toString() == QLatin1String("group")) {
+            m_controller->request(QStringLiteral("group_rename"),
+                                  {{"from", item->data(GroupRole).toString()}, {"to", item->text()}});
+            return;
         }
+        m_controller->request(QStringLiteral("rename"),
+                              {{"id", item->data(IdRole).toString()}, {"name", item->text()}});
     });
     connect(&PetuniaTheme::instance(), &PetuniaTheme::changed, this, &PetuniaStructurePanel::refreshIcons);
     buildShortcuts();
+}
+
+void PetuniaStructurePanel::configureTree(bool scene) {
+    m_sceneMode = scene;
+    const auto &theme = PetuniaTheme::instance();
+    m_tree->setRootIsDecorated(scene);
+    m_tree->setIndentation(scene ? theme.space(4) : 0);
+    m_tree->setColumnHidden(Isolate, !scene);
+    m_tree->setDragEnabled(scene);
+    m_tree->setAcceptDrops(scene);
+    m_tree->setDropIndicatorShown(scene);
+    m_tree->setDragDropMode(scene ? QAbstractItemView::InternalMove : QAbstractItemView::NoDragDrop);
+    m_tree->setDefaultDropAction(Qt::MoveAction);
+    m_group->setVisible(scene);
+    m_align->setVisible(scene);
+}
+
+QIcon PetuniaStructurePanel::stateIcon(const QString &name, bool active, bool dim) const {
+    const auto &theme = PetuniaTheme::instance();
+    const QColor color = active ? theme.accentPrimary() : (dim ? theme.textMuted() : theme.textSecondary());
+    return PetuniaIcons::get(name, color.name());
 }
 
 void PetuniaStructurePanel::buildShortcuts() {
@@ -203,6 +307,15 @@ void PetuniaStructurePanel::buildShortcuts() {
         else
             actOnCurrent(QStringLiteral("lock"));
     });
+    // Agrupar e desagrupar a seleção (também funciona com a vista em foco).
+    bind(QKeySequence(Qt::CTRL | Qt::Key_G), [this, modeling] {
+        if (modeling())
+            m_controller->request(QStringLiteral("scene_group"));
+    });
+    bind(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G), [this, modeling] {
+        if (modeling())
+            m_controller->request(QStringLiteral("scene_ungroup"));
+    });
     // Reordenar sem arrastar (alternativa de teclado ao drag-and-drop).
     bind(QKeySequence(Qt::ALT | Qt::Key_Up), [this] { actOnCurrent(QStringLiteral("move"), -1); });
     bind(QKeySequence(Qt::ALT | Qt::Key_Down), [this] { actOnCurrent(QStringLiteral("move"), 1); });
@@ -232,7 +345,8 @@ void PetuniaStructurePanel::actOnCurrent(const QString &verb, int delta) {
     } else if (ws == QLatin1String("ANIMATE")) {
         if (verb == QLatin1String("visibility"))
             m_controller->request(QStringLiteral("animate"), {{"id", "toggle-bones"}});
-    } else if (ws != QLatin1String("UV") && verb == QLatin1String("move")) {
+    } else if (ws != QLatin1String("UV") && verb == QLatin1String("move") &&
+               kindAt(m_tree->currentIndex()) != QLatin1String("group")) {
         m_controller->request(QStringLiteral("scene_move"), {{"id", id}, {"delta", delta}});
     }
 }
@@ -280,20 +394,55 @@ void PetuniaStructurePanel::updateChrome(const QString &workspace) {
     m_filterSelected->setAccessibleName(filter);
     m_tree->setAccessibleName(list);
     setAccessibleName(tr("Estrutura: %1").arg(list));
+    const bool scene = workspace != QLatin1String("PAINT") && workspace != QLatin1String("ANIMATE") &&
+                       workspace != QLatin1String("UV");
+    configureTree(scene);
+}
+
+QStandardItem *PetuniaStructurePanel::itemAt(const QModelIndex &proxyIndex, int column) const {
+    const auto source = m_proxy->mapToSource(proxyIndex);
+    if (!source.isValid())
+        return nullptr;
+    return m_model->itemFromIndex(source.siblingAtColumn(column));
 }
 
 QString PetuniaStructurePanel::idAt(const QModelIndex &proxyIndex) const {
-    const auto source = m_proxy->mapToSource(proxyIndex);
-    if (!source.isValid())
-        return {};
-    const auto *item = m_model->item(source.row(), Name);
+    const auto *item = itemAt(proxyIndex);
     return item ? item->data(IdRole).toString() : QString();
+}
+
+QString PetuniaStructurePanel::kindAt(const QModelIndex &proxyIndex) const {
+    const auto *item = itemAt(proxyIndex);
+    return item ? item->data(KindRole).toString() : QString();
+}
+
+QString PetuniaStructurePanel::groupAt(const QModelIndex &proxyIndex) const {
+    const auto *item = itemAt(proxyIndex);
+    return item ? item->data(GroupRole).toString() : QString();
+}
+
+QModelIndex PetuniaStructurePanel::indexOfId(const QString &id) const {
+    QStandardItem *item = m_rowItems.value(id);
+    if (!item)
+        return {};
+    return m_proxy->mapFromSource(item->index());
 }
 
 QStringList PetuniaStructurePanel::selectedIds() const {
     QStringList ids;
-    for (const auto &row : m_tree->selectionModel()->selectedRows(Name))
-        ids << idAt(row);
+    auto add = [&ids](const QString &id) {
+        if (!id.isEmpty() && !ids.contains(id))
+            ids << id;
+    };
+    for (const auto &row : m_tree->selectionModel()->selectedRows(Name)) {
+        if (kindAt(row) == QLatin1String("group")) {
+            // Um grupo selecionado vale por todos os seus membros.
+            for (int child = 0; child < m_proxy->rowCount(row); ++child)
+                add(idAt(m_proxy->index(child, Name, row)));
+        } else {
+            add(idAt(row));
+        }
+    }
     return ids;
 }
 
@@ -301,7 +450,7 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
     if (m_syncing)
         return;
     const auto source = m_proxy->mapToSource(proxyIndex);
-    if (source.column() != Visible && source.column() != Locked)
+    if (source.column() != Visible && source.column() != Locked && source.column() != Isolate)
         return;
 
     const QString ws = m_controller->workspaceId();
@@ -309,7 +458,7 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
         const QString id = idAt(proxyIndex);
         if (source.column() == Visible)
             m_controller->request(QStringLiteral("toggle_paint_layer_visibility"), {{"id", id}});
-        else
+        else if (source.column() == Locked)
             m_controller->request(QStringLiteral("toggle_paint_layer_lock"), {{"id", id}});
         return;
     }
@@ -321,12 +470,30 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
     if (ws == QLatin1String("UV"))
         return;
 
+    // Linha de grupo: as três colunas agem no grupo inteiro.
+    if (kindAt(proxyIndex) == QLatin1String("group")) {
+        const QString group = groupAt(proxyIndex);
+        if (source.column() == Visible) {
+            m_controller->request(QStringLiteral("group_visibility"), {{"name", group}});
+        } else if (source.column() == Locked) {
+            m_controller->request(QStringLiteral("group_lock"), {{"name", group}});
+        } else {
+            m_controller->request(QStringLiteral("group_select"), {{"name", group}});
+            m_controller->request(QStringLiteral("isolate"));
+        }
+        return;
+    }
+
+    if (source.column() == Isolate) {
+        m_controller->request(QStringLiteral("isolate_part"), {{"id", idAt(proxyIndex)}});
+        return;
+    }
     const QString action = source.column() == Visible ? QStringLiteral("visibility") : QStringLiteral("lock");
     const auto rows = m_tree->selectionModel()->selectedRows(Name);
     // Clicar o ícone de uma linha dentro da seleção aplica a toda a seleção.
     if (rows.size() > 1 && rows.contains(proxyIndex.siblingAtColumn(Name))) {
-        for (const auto &row : rows)
-            m_controller->request(action, {{"id", idAt(row)}});
+        for (const auto &id : selectedIds())
+            m_controller->request(action, {{"id", id}});
     } else {
         m_controller->request(action, {{"id", idAt(proxyIndex)}});
     }
@@ -365,18 +532,56 @@ void PetuniaStructurePanel::onSelectionChanged() {
     QJsonArray ids;
     for (const auto &id : selectedIds())
         ids.append(id);
-    const QString active = idAt(m_tree->currentIndex());
+    QString active = idAt(m_tree->currentIndex());
+    if (kindAt(m_tree->currentIndex()) == QLatin1String("group"))
+        active = ids.isEmpty() ? QString() : ids.first().toString();
     m_controller->request(QStringLiteral("scene_selection"), {{"ids", ids}, {"active", active}});
+}
+
+void PetuniaStructurePanel::dropOn(const QModelIndex &proxyTarget, DropPosition position) {
+    if (!m_sceneMode)
+        return;
+    const QStringList dragged = selectedIds();
+    if (dragged.isEmpty())
+        return;
+    QJsonArray ids;
+    for (const auto &id : dragged)
+        ids.append(id);
+    QJsonObject args{{"ids", ids}, {"before", QJsonValue()}, {"collection", QJsonValue()}};
+
+    if (!proxyTarget.isValid() || position == DropPosition::OnViewport) {
+        // Soltar no vazio: sai dos grupos e vai para o fim da lista.
+    } else if (kindAt(proxyTarget) == QLatin1String("group")) {
+        // Sobre o grupo: entra nele. Acima/abaixo do cabeçalho: sai dos grupos.
+        if (position == DropPosition::OnItem)
+            args["collection"] = groupAt(proxyTarget);
+    } else {
+        const QString targetId = idAt(proxyTarget);
+        if (dragged.contains(targetId))
+            return;
+        QString before = targetId;
+        if (position == DropPosition::BelowItem) {
+            const auto next = m_proxy->index(proxyTarget.row() + 1, Name, proxyTarget.parent());
+            before = next.isValid() ? idAt(next) : QString();
+        }
+        args["before"] = before.isEmpty() ? QJsonValue() : QJsonValue(before);
+        // A parte adota o grupo do vizinho: soltar entre filhos de um grupo a inclui nele.
+        const QString group = groupAt(proxyTarget);
+        args["collection"] = group.isEmpty() ? QJsonValue() : QJsonValue(group);
+    }
+    m_controller->request(QStringLiteral("scene_drop"), args);
 }
 
 void PetuniaStructurePanel::refreshIcons() {
     m_tree->setIconSize(QSize(PetuniaTheme::instance().iconPx(), PetuniaTheme::instance().iconPx()));
+    m_sceneSignature.clear();
     sync(m_controller->state());
 }
 
 void PetuniaStructurePanel::sync(const QJsonObject &state) {
     const QString ws = m_controller->workspaceId();
     updateChrome(ws);
+    m_isolated = state["isolate_active"].toBool();
     if (ws == QLatin1String("PAINT"))
         syncPaint(state);
     else if (ws == QLatin1String("ANIMATE"))
@@ -386,6 +591,21 @@ void PetuniaStructurePanel::sync(const QJsonObject &state) {
     else
         syncScene(state);
 }
+
+namespace {
+/// Itens de uma linha com as quatro colunas; só o nome é editável.
+QList<QStandardItem *> makeRow(QStandardItem *name) {
+    auto *eye = new QStandardItem;
+    eye->setEditable(false);
+    auto *lock = new QStandardItem;
+    lock->setEditable(false);
+    auto *isolate = new QStandardItem;
+    isolate->setEditable(false);
+    for (auto *item : {eye, lock, isolate})
+        item->setFlags(Qt::ItemIsEnabled);
+    return {name, eye, lock, isolate};
+}
+} // namespace
 
 void PetuniaStructurePanel::syncUv(const QJsonObject &state) {
     const auto islands = state["uv_editor"].toObject()["islands"].toArray();
@@ -399,22 +619,21 @@ void PetuniaStructurePanel::syncUv(const QJsonObject &state) {
     const auto &theme = PetuniaTheme::instance();
 
     m_syncing = true;
+    m_sceneSignature.clear();
     // Ilhas não têm id persistente: a identidade é a posição + o tamanho.
     bool rebuild = m_model->rowCount() != islands.size();
     for (int i = 0; !rebuild && i < islands.size(); ++i)
         rebuild = m_model->item(i, Name)->data(IdRole).toString() != QStringLiteral("island:%1").arg(i);
     if (rebuild) {
+        m_rowItems.clear();
         m_model->removeRows(0, m_model->rowCount());
         for (int i = 0; i < islands.size(); ++i) {
             auto *name = new QStandardItem;
             name->setData(QStringLiteral("island:%1").arg(i), IdRole);
+            name->setData(QStringLiteral("island"), KindRole);
             name->setEditable(false);
             name->setIcon(PetuniaIcons::get(QStringLiteral("uv_island"), theme.accentPrimary().name()));
-            auto *eye = new QStandardItem;
-            eye->setEditable(false);
-            auto *lock = new QStandardItem;
-            lock->setEditable(false);
-            m_model->appendRow({name, eye, lock});
+            m_model->appendRow(makeRow(name));
         }
     }
     const QSignalBlocker block(m_tree->selectionModel());
@@ -450,23 +669,22 @@ void PetuniaStructurePanel::syncPaint(const QJsonObject &state) {
     const auto &theme = PetuniaTheme::instance();
 
     m_syncing = true;
+    m_sceneSignature.clear();
     bool rebuild = m_model->rowCount() != layers.size();
     for (int i = 0; !rebuild && i < layers.size(); ++i) {
         const auto o = layers[i].toObject();
         rebuild = m_model->item(i, Name)->data(IdRole).toString() != o["id"].toString();
     }
     if (rebuild) {
+        m_rowItems.clear();
         m_model->removeRows(0, m_model->rowCount());
         for (const auto &value : layers) {
             const auto o = value.toObject();
             auto *name = new QStandardItem(o["name"].toString());
             name->setData(o["id"].toString(), IdRole);
+            name->setData(QStringLiteral("layer"), KindRole);
             name->setEditable(false);
-            auto *eye = new QStandardItem;
-            eye->setEditable(false);
-            auto *lock = new QStandardItem;
-            lock->setEditable(false);
-            m_model->appendRow({name, eye, lock});
+            m_model->appendRow(makeRow(name));
         }
     }
     const QSignalBlocker block(m_tree->selectionModel());
@@ -541,23 +759,22 @@ void PetuniaStructurePanel::syncAnimate(const QJsonObject &state) {
     const auto &theme = PetuniaTheme::instance();
 
     m_syncing = true;
+    m_sceneSignature.clear();
     bool rebuild = m_model->rowCount() != tracks.size();
     for (int i = 0; !rebuild && i < tracks.size(); ++i) {
         const auto o = tracks[i].toObject();
         rebuild = m_model->item(i, Name)->data(IdRole).toString() != o["bone_id"].toString();
     }
     if (rebuild) {
+        m_rowItems.clear();
         m_model->removeRows(0, m_model->rowCount());
         for (const auto &value : tracks) {
             const auto o = value.toObject();
             auto *name = new QStandardItem(o["bone_name"].toString());
             name->setData(o["bone_id"].toString(), IdRole);
+            name->setData(QStringLiteral("bone"), KindRole);
             name->setEditable(false);
-            auto *eye = new QStandardItem;
-            eye->setEditable(false);
-            auto *lock = new QStandardItem;
-            lock->setEditable(false);
-            m_model->appendRow({name, eye, lock});
+            m_model->appendRow(makeRow(name));
         }
     }
     const QSignalBlocker block(m_tree->selectionModel());
@@ -596,6 +813,7 @@ void PetuniaStructurePanel::syncAnimate(const QJsonObject &state) {
 
 void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
     const auto items = state["scene_items"].toArray();
+    const auto groups = state["scene_groups"].toArray();
     const bool isEmpty = items.isEmpty();
     m_empty->setTitle(tr("Cena vazia"));
     m_empty->setExplanation(tr("Nenhum objeto na cena. Crie uma primitiva para começar a modelar."));
@@ -605,61 +823,179 @@ void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
     m_search->setPlaceholderText(tr("Buscar partes"));
     const auto &theme = PetuniaTheme::instance();
 
+    // Estrutura da árvore: grupos na ordem do projeto, com seus membros na ordem
+    // da cena; depois as partes soltas. A assinatura decide entre reconstruir e
+    // só atualizar as linhas.
+    QStringList groupOrder;
+    for (const auto &value : groups)
+        groupOrder << value.toObject()["name"].toString();
+    QString signature;
+    for (const auto &name : groupOrder)
+        signature += QStringLiteral("g:") + name + QLatin1Char(';');
+    for (const auto &value : items) {
+        const auto o = value.toObject();
+        signature += o["id"].toString() + QLatin1Char('@') + o["collection"].toString() + QLatin1Char(';');
+    }
+
     m_syncing = true;
-    bool rebuild = m_model->rowCount() != items.size();
-    for (int i = 0; !rebuild && i < items.size(); ++i)
-        rebuild = m_model->item(i, Name)->data(IdRole).toString() != items[i].toObject()["id"].toString();
-    if (rebuild) {
+    if (signature != m_sceneSignature) {
+        m_sceneSignature = signature;
+        m_rowItems.clear();
         m_model->removeRows(0, m_model->rowCount());
+        QHash<QString, QStandardItem *> groupItems;
+        for (const auto &name : groupOrder) {
+            auto *item = new QStandardItem(name);
+            item->setData(groupItemId(name), IdRole);
+            item->setData(QStringLiteral("group"), KindRole);
+            item->setData(name, GroupRole);
+            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDropEnabled);
+            auto row = makeRow(item);
+            m_model->appendRow(row);
+            groupItems.insert(name, item);
+            m_rowItems.insert(groupItemId(name), item);
+        }
         for (const auto &value : items) {
-            auto *name = new QStandardItem(value.toObject()["name"].toString());
-            name->setData(value.toObject()["id"].toString(), IdRole);
-            auto *eye = new QStandardItem;
-            eye->setEditable(false);
-            auto *lock = new QStandardItem;
-            lock->setEditable(false);
-            m_model->appendRow({name, eye, lock});
+            const auto o = value.toObject();
+            auto *name = new QStandardItem(o["name"].toString());
+            const QString group = o["collection"].toString();
+            name->setData(o["id"].toString(), IdRole);
+            name->setData(QStringLiteral("asset"), KindRole);
+            name->setData(group, GroupRole);
+            // Partes se arrastam; só grupos aceitam soltar "sobre" a linha.
+            name->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
+            auto row = makeRow(name);
+            if (auto *parent = groupItems.value(group))
+                parent->appendRow(row);
+            else
+                m_model->appendRow(row);
+            m_rowItems.insert(o["id"].toString(), name);
+        }
+        m_tree->expandAll();
+        for (const auto &collapsed : std::as_const(m_collapsed)) {
+            if (auto *item = m_rowItems.value(groupItemId(collapsed)))
+                m_tree->setExpanded(m_proxy->mapFromSource(item->index()), false);
         }
     }
+
     const QSignalBlocker block(m_tree->selectionModel());
     m_tree->selectionModel()->clearSelection();
-    for (int i = 0; i < items.size(); ++i) {
-        const auto o = items[i].toObject();
-        auto *name = m_model->item(i, Name);
+    QModelIndex current;
+    for (const auto &value : items) {
+        const auto o = value.toObject();
+        auto *name = m_rowItems.value(o["id"].toString());
+        if (!name)
+            continue;
+        const QModelIndex sourceName = name->index();
+        auto *eye = m_model->itemFromIndex(sourceName.siblingAtColumn(Visible));
+        auto *lock = m_model->itemFromIndex(sourceName.siblingAtColumn(Locked));
+        auto *isolate = m_model->itemFromIndex(sourceName.siblingAtColumn(Isolate));
         if (name->text() != o["name"].toString())
             name->setText(o["name"].toString());
         name->setData(o["selected"].toBool(), SelectedRole);
         name->setEditable(!o["locked"].toBool());
         name->setToolTip(o["active"].toBool() ? tr("Objeto ativo") : tr("Parte da cena"));
+        // O ícone leva a cor de seleção da parte: é a mesma do contorno na vista.
         QColor tint = theme.accentPrimary();
         const auto custom = o["custom_color_rgb"].toArray();
         if (o["has_custom_color"].toBool() && custom.size() == 3)
             tint = QColor(custom[0].toInt(), custom[1].toInt(), custom[2].toInt());
         name->setIcon(PetuniaIcons::get(QStringLiteral("cube"), tint.name()));
 
-        auto *eye = m_model->item(i, Visible);
         const bool visible = o["visible"].toBool();
-        eye->setIcon(PetuniaIcons::get(visible ? QStringLiteral("eye") : QStringLiteral("eye_hidden"),
-                                       (visible ? theme.textSecondary() : theme.textMuted()).name()));
+        eye->setIcon(stateIcon(visible ? QStringLiteral("eye") : QStringLiteral("eye_hidden"), false, !visible));
         eye->setTextAlignment(Qt::AlignCenter);
         eye->setToolTip(visible ? tr("Visível — clique para ocultar") : tr("Oculto — clique para exibir"));
         eye->setData(visible ? tr("Visível") : tr("Oculto"), Qt::AccessibleTextRole);
 
-        auto *lock = m_model->item(i, Locked);
         const bool locked = o["locked"].toBool();
-        lock->setIcon(PetuniaIcons::get(locked ? QStringLiteral("lock") : QStringLiteral("unlock"),
-                                        (locked ? theme.textSecondary() : theme.textMuted()).name()));
+        lock->setIcon(stateIcon(locked ? QStringLiteral("lock") : QStringLiteral("unlock"), false, !locked));
         lock->setTextAlignment(Qt::AlignCenter);
         lock->setToolTip(locked ? tr("Bloqueado — clique para liberar") : tr("Livre — clique para bloquear"));
         lock->setData(locked ? tr("Bloqueado") : tr("Livre"), Qt::AccessibleTextRole);
 
-        const auto proxy = m_proxy->mapFromSource(m_model->index(i, Name));
+        // Isolamento: mostra só esta parte (e a seleção). Ligado, as partes que
+        // ficaram na cena levam o ícone em destaque.
+        const bool isolated = m_isolated && visible;
+        isolate->setIcon(stateIcon(QStringLiteral("isolate"), isolated, !isolated));
+        isolate->setTextAlignment(Qt::AlignCenter);
+        isolate->setToolTip(m_isolated ? tr("Sair do isolamento  (Shift+H)")
+                                       : tr("Isolar: mostrar só esta parte  (Shift+H)"));
+        isolate->setData(isolated ? tr("Isolado") : tr("Não isolado"), Qt::AccessibleTextRole);
+
+        const auto proxy = m_proxy->mapFromSource(sourceName);
         if (o["selected"].toBool())
             m_tree->selectionModel()->select(proxy, QItemSelectionModel::Select | QItemSelectionModel::Rows);
         if (o["active"].toBool())
-            m_tree->selectionModel()->setCurrentIndex(proxy, QItemSelectionModel::NoUpdate);
+            current = proxy;
     }
+    for (const auto &value : groups) {
+        const auto g = value.toObject();
+        auto *name = m_rowItems.value(groupItemId(g["name"].toString()));
+        if (!name)
+            continue;
+        const QModelIndex sourceName = name->index();
+        auto *eye = m_model->itemFromIndex(sourceName.siblingAtColumn(Visible));
+        auto *lock = m_model->itemFromIndex(sourceName.siblingAtColumn(Locked));
+        auto *isolate = m_model->itemFromIndex(sourceName.siblingAtColumn(Isolate));
+        const QString label = g["name"].toString();
+        if (name->text() != label)
+            name->setText(label);
+        name->setData(g["selected"].toBool(), SelectedRole);
+        name->setIcon(PetuniaIcons::get(QStringLiteral("collection"), theme.accentPrimary().name()));
+        name->setToolTip(tr("Grupo com %1 parte(s)").arg(g["count"].toInt()));
+
+        const bool visible = g["visible"].toBool();
+        eye->setIcon(stateIcon(visible ? QStringLiteral("eye") : QStringLiteral("eye_hidden"), false, !visible));
+        eye->setTextAlignment(Qt::AlignCenter);
+        eye->setToolTip(visible ? tr("Grupo visível — clique para ocultar") : tr("Grupo oculto — clique para exibir"));
+        eye->setData(visible ? tr("Visível") : tr("Oculto"), Qt::AccessibleTextRole);
+        const bool locked = g["locked"].toBool();
+        lock->setIcon(stateIcon(locked ? QStringLiteral("lock") : QStringLiteral("unlock"), false, !locked));
+        lock->setTextAlignment(Qt::AlignCenter);
+        lock->setToolTip(locked ? tr("Grupo bloqueado — clique para liberar") : tr("Grupo livre — clique para bloquear"));
+        lock->setData(locked ? tr("Bloqueado") : tr("Livre"), Qt::AccessibleTextRole);
+        isolate->setIcon(stateIcon(QStringLiteral("isolate"), false, true));
+        isolate->setTextAlignment(Qt::AlignCenter);
+        isolate->setToolTip(tr("Isolar o grupo"));
+        isolate->setData(tr("Não isolado"), Qt::AccessibleTextRole);
+
+        if (g["selected"].toBool())
+            m_tree->selectionModel()->select(m_proxy->mapFromSource(sourceName),
+                                             QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    }
+    if (current.isValid())
+        m_tree->selectionModel()->setCurrentIndex(current, QItemSelectionModel::NoUpdate);
     m_syncing = false;
+}
+
+void PetuniaStructurePanel::showGroupMenu(const QString &group, const QPoint &globalPos) {
+    QMenu menu(this);
+    auto *select = menu.addAction(PetuniaIcons::get(QStringLiteral("select_all")), tr("Selecionar os membros"));
+    auto *rename = menu.addAction(tr("Renomear grupo\tF2"));
+    menu.addSeparator();
+    auto *visibility = menu.addAction(tr("Alternar visibilidade do grupo"));
+    auto *lock = menu.addAction(tr("Bloquear / desbloquear o grupo"));
+    auto *isolate = menu.addAction(PetuniaIcons::get(QStringLiteral("isolate")), tr("Isolar o grupo"));
+    menu.addSeparator();
+    auto *ungroup = menu.addAction(tr("Desagrupar\tCtrl+Shift+G"));
+    auto *picked = menu.exec(globalPos);
+    if (!picked)
+        return;
+    if (picked == select)
+        m_controller->request(QStringLiteral("group_select"), {{"name", group}});
+    else if (picked == rename) {
+        const auto index = indexOfId(groupItemId(group));
+        if (index.isValid())
+            m_tree->edit(index.siblingAtColumn(Name));
+    } else if (picked == visibility)
+        m_controller->request(QStringLiteral("group_visibility"), {{"name", group}});
+    else if (picked == lock)
+        m_controller->request(QStringLiteral("group_lock"), {{"name", group}});
+    else if (picked == isolate) {
+        m_controller->request(QStringLiteral("group_select"), {{"name", group}});
+        m_controller->request(QStringLiteral("isolate"));
+    } else if (picked == ungroup)
+        m_controller->request(QStringLiteral("scene_ungroup"), {{"name", group}});
 }
 
 void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
@@ -746,11 +1082,23 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
         return;
     }
 
-    if (!proxy.isValid())
+    // Cena: linha de grupo, de parte ou área vazia.
+    if (proxy.isValid() && kindAt(proxy) == QLatin1String("group")) {
+        showGroupMenu(groupAt(proxy), m_tree->viewport()->mapToGlobal(pos));
         return;
+    }
+    if (!proxy.isValid()) {
+        QMenu menu(this);
+        auto *create = menu.addAction(PetuniaIcons::get(QStringLiteral("plus")), tr("Criar primitiva"));
+        auto *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (picked == create)
+            emit createRequested();
+        return;
+    }
     const QString id = idAt(proxy);
     if (!selectedIds().contains(id))
         m_controller->request(QStringLiteral("select"), {{"id", id}});
+    const int selectedCount = int(selectedIds().size());
     QMenu menu(this);
     auto *rename = menu.addAction(tr("Renomear\tF2"));
     auto *duplicate = menu.addAction(tr("Duplicar\tCtrl+D"));
@@ -758,7 +1106,17 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
     menu.addSeparator();
     auto *visibility = menu.addAction(tr("Alternar visibilidade\tH"));
     auto *lock = menu.addAction(tr("Bloquear / desbloquear\tL"));
-    auto *isolate = menu.addAction(tr("Isolar\tShift+H"));
+    auto *isolate = menu.addAction(PetuniaIcons::get(QStringLiteral("isolate")),
+                                   m_isolated ? tr("Sair do isolamento\tShift+H") : tr("Isolar\tShift+H"));
+    menu.addSeparator();
+    auto *group = menu.addAction(PetuniaIcons::get(QStringLiteral("collection")), tr("Agrupar\tCtrl+G"));
+    auto *ungroup = menu.addAction(tr("Desagrupar\tCtrl+Shift+G"));
+    ungroup->setEnabled(!groupAt(proxy).isEmpty());
+    menu.addSeparator();
+    auto *align = menu.addAction(PetuniaIcons::get(QStringLiteral("bounding_box")), tr("Alinhar e distribuir…"));
+    align->setEnabled(selectedCount >= 2);
+    if (selectedCount < 2)
+        align->setToolTip(tr("Selecione 2 ou mais partes"));
     menu.addSeparator();
     auto *saveAsset = menu.addAction(tr("Salvar como asset"));
     auto *selectionColor = menu.addAction(tr("Cor de seleção da parte…"));
@@ -766,26 +1124,6 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
     menu.addSeparator();
     auto *up = menu.addAction(tr("Mover para cima\tAlt+↑"));
     auto *down = menu.addAction(tr("Mover para baixo\tAlt+↓"));
-    menu.addSeparator();
-    auto *alignMenu = menu.addMenu(tr("Alinhar e distribuir"));
-    struct Entry { const char *label; const char *command; };
-    const Entry entries[] = {
-        {"Centralizar em X", "model.align_center_x"}, {"Centralizar em Y", "model.align_center_y"},
-        {"Centralizar em Z", "model.align_center_z"}, {nullptr, nullptr},
-        {"Esquerda (mín. X)", "model.align_min_x"}, {"Direita (máx. X)", "model.align_max_x"},
-        {"Base (mín. Y)", "model.align_min_y"}, {"Topo (máx. Y)", "model.align_max_y"},
-        {"Fundo (mín. Z)", "model.align_min_z"}, {"Frente (máx. Z)", "model.align_max_z"}, {nullptr, nullptr},
-        {"Distribuir em X", "model.distribute_objects_x"}, {"Distribuir em Y", "model.distribute_objects_y"},
-        {"Distribuir em Z", "model.distribute_objects_z"},
-    };
-    QHash<QAction *, QString> commands;
-    for (const auto &entry : entries) {
-        if (!entry.label) {
-            alignMenu->addSeparator();
-            continue;
-        }
-        commands.insert(alignMenu->addAction(tr(entry.label)), QLatin1String(entry.command));
-    }
 
     auto *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
     if (!picked)
@@ -802,12 +1140,29 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
         m_controller->request(QStringLiteral("lock"), {{"id", id}});
     else if (picked == isolate)
         m_controller->request(QStringLiteral("isolate"));
+    else if (picked == group)
+        m_controller->request(QStringLiteral("scene_group"));
+    else if (picked == ungroup)
+        m_controller->request(QStringLiteral("scene_ungroup"));
+    else if (picked == align)
+        emit alignRequested(m_align);
     else if (picked == saveAsset)
         m_controller->request(QStringLiteral("save_asset"));
     else if (picked == selectionColor) {
         PetuniaColorPickerPopover picker(this);
         picker.setTitle(tr("Cor de seleção"));
-        picker.setColor(PetuniaTheme::instance().accentSelection());
+        const auto *item = itemAt(proxy);
+        // O seletor abre na cor atual da parte (a mesma do contorno na vista).
+        QColor start = PetuniaTheme::instance().accentSelection();
+        for (const auto &value : m_controller->state()["scene_items"].toArray()) {
+            const auto o = value.toObject();
+            if (item && o["id"].toString() == item->data(IdRole).toString()) {
+                const auto rgb = o["custom_color_rgb"].toArray();
+                if (rgb.size() == 3)
+                    start = QColor(rgb[0].toInt(), rgb[1].toInt(), rgb[2].toInt());
+            }
+        }
+        picker.setColor(start);
         if (picker.exec() == QDialog::Accepted) {
             const auto c = picker.color();
             m_controller->request(QStringLiteral("part_selection_color"),
@@ -817,6 +1172,4 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
         m_controller->request(QStringLiteral("part_selection_color"), {{"id", id}, {"color", QJsonValue()}});
     else if (picked == up || picked == down)
         m_controller->request(QStringLiteral("scene_move"), {{"id", id}, {"delta", picked == up ? -1 : 1}});
-    else if (commands.contains(picked))
-        m_controller->command(commands.value(picked));
 }

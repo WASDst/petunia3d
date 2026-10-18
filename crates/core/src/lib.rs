@@ -107,13 +107,13 @@ pub use schema_contracts::{
 
 pub use command::{
     AddPrimitiveCmd, AddSplinePointCmd, AttachSplinePointCmd, BakeDecalCmd, BakePathGeneratorCmd,
-    BevelCmd, BooleanOpCmd, BoxSelectCmd, ClearAllTransformsCmd, ClearLocationCmd,
-    ClearRotationCmd, ClearScaleCmd, ClearSelectionCmd, ClearSharpCmd, Command, CommandCategory,
-    CommandContext, CommandDispatcher, CommandError, CommandExecutionReport, CommandMetadata,
-    CommandPaletteItem, ConnectLoopsCmd, ConvertSplineToPolylineCmd, CreatePathGeneratorCmd,
-    CreateProfileCmd, CreateSplineCmd, CycleSelectionDomainCmd, DeleteAssetCmd,
-    DeleteOrDissolveSelectionCmd, DeletePathGeneratorCmd, DeleteProfileCmd, DeleteSelectionCmd,
-    DeleteSplineCmd, DeleteSplinePointCmd, DetachSplinePointCmd, DissolveCmd, DuplicateAssetCmd,
+    BevelCmd, BoxSelectCmd, ClearAllTransformsCmd, ClearLocationCmd, ClearRotationCmd,
+    ClearScaleCmd, ClearSelectionCmd, ClearSharpCmd, Command, CommandCategory, CommandContext,
+    CommandDispatcher, CommandError, CommandExecutionReport, CommandMetadata, CommandPaletteItem,
+    ConnectLoopsCmd, ConvertSplineToPolylineCmd, CreatePathGeneratorCmd, CreateProfileCmd,
+    CreateSplineCmd, CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd,
+    DeletePathGeneratorCmd, DeleteProfileCmd, DeleteSelectionCmd, DeleteSplineCmd,
+    DeleteSplinePointCmd, DetachSplinePointCmd, DissolveCmd, DuplicateAssetCmd,
     DuplicateSelectionCmd, ExportGlbCmd, ExportObjCmd, ExtrudeIndividualCmd, ExtrudeSelectedCmd,
     FlipDiagonalCmd, FlipNormalsCmd, FrameSelectionCmd, ImportGltfCmd, ImportObjCmd, InsetFacesCmd,
     InstantiateAssetCmd, InvertSelectionCmd, JoinAssetIntoActiveCmd, JoinObjectsCmd, KnifeToolCmd,
@@ -201,7 +201,9 @@ pub use selection::{
 pub use shape_builder::{
     PathfinderOp, ShapeEdit, ShapeEditCmd, ShapeEditError, ShapeEditReport, ShapePlane,
 };
+pub mod scene_commands;
 pub mod solid_commands;
+pub use scene_commands::{GroupSelectionCmd, MoveAssetsCmd, RenameGroupCmd, UngroupCmd};
 pub use snap::{
     SnapElement, SnapQuery, SnapResult, SnapSettings, SnapTarget, snap_point, snap_point_to_edges,
     snap_point_to_faces, snap_point_to_grid, snap_point_to_increment, snap_point_to_vertices,
@@ -258,5 +260,3 @@ mod preview_tests;
 
 mod draw_batch;
 pub use draw_batch::DrawBatchCmd;
-
-mod boolean_texture;

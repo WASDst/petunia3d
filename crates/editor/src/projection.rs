@@ -221,11 +221,11 @@ pub(crate) fn parse_lasso_path(path: &str) -> Option<Vec<[f32; 2]>> {
     (polygon.len() >= 3).then_some(polygon)
 }
 
-/// Comprimento das hastes do gizmo de transformação, em px lógicos.
+/// Comprimento padrão das hastes do gizmo de transformação, em px lógicos.
+/// O valor efetivo vem da preferência `gizmo_size`.
 pub(crate) const GIZMO_ROD_LENGTH: f32 = 72.0;
-/// Raio do anel externo de View Roll da ferramenta Rotate, em px lógicos.
-/// Desenho e hit-test usam a mesma constante.
-pub(crate) const GIZMO_VIEW_ROLL_RADIUS: f32 = GIZMO_ROD_LENGTH * 1.18;
+/// Razão entre o raio do anel de View Roll da ferramenta Rotate e a haste.
+pub(crate) const GIZMO_VIEW_ROLL_RATIO: f32 = 1.18;
 /// Meia-largura da faixa clicável de anéis: 24 px lógicos no total (WCAG 2.5.8).
 pub(crate) const GIZMO_RING_HIT_HALF_WIDTH: f32 = 12.0;
 
@@ -237,11 +237,59 @@ pub(crate) const PARAMETRIC_HANDLE_RADIUS_PX: f32 = 12.0;
 /// Raio do alvo da alça: 32 px de diâmetro, folga sobre o mínimo de 24 px.
 pub(crate) const PARAMETRIC_HANDLE_HIT_RADIUS_PX: f32 = 16.0;
 
+/// Comprimento efetivo das hastes (preferência `gizmo_size`), em px lógicos.
+pub(crate) fn gizmo_rod_length(state: &AppState) -> f32 {
+    let size = state.ui.gizmo_size;
+    if size.is_finite() {
+        size.clamp(48.0, 160.0)
+    } else {
+        GIZMO_ROD_LENGTH
+    }
+}
+
+/// Raio do anel externo de View Roll da ferramenta Rotate, em px lógicos.
+/// Desenho e hit-test usam a mesma função.
+pub(crate) fn gizmo_view_roll_radius(state: &AppState) -> f32 {
+    gizmo_rod_length(state) * GIZMO_VIEW_ROLL_RATIO
+}
+
+/// Subcaminho de `M/L` com os pontos de um anel que voltam-se para a câmera.
+/// `depths[i] > 0` = ponto do lado da câmera; trechos consecutivos viram
+/// subcaminhos separados.
+fn front_arc_commands(points: &[[f32; 2]], depths: &[f32]) -> String {
+    let mut out = String::new();
+    let mut open = false;
+    for (point, depth) in points.iter().zip(depths) {
+        if *depth > 0.0 {
+            out.push_str(&format!(
+                "{} {:.2} {:.2} ",
+                if open { "L" } else { "M" },
+                point[0],
+                point[1]
+            ));
+            open = true;
+        } else {
+            open = false;
+        }
+    }
+    out
+}
+
 pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoModel {
-    const ROD_LENGTH: f32 = GIZMO_ROD_LENGTH;
-    /// Tamanho da seta: recuo da ponta e meia-largura da base.
-    const ARROW_BACK: f32 = 13.0;
-    const ARROW_HALF: f32 = 5.5;
+    let rod_length = gizmo_rod_length(state);
+    let thickness = if state.ui.gizmo_thickness.is_finite() {
+        state.ui.gizmo_thickness.clamp(1.0, 6.0)
+    } else {
+        2.0
+    };
+    // Proporções do desenho derivadas do comprimento da haste (72 px = padrão).
+    let arrow_back = (rod_length * 0.2).max(10.0);
+    let arrow_half = (rod_length * 0.07).max(4.0) + (thickness - 2.0) * 0.5;
+    let scale_center_at = rod_length * 0.6;
+    let scale_box_half = (rod_length * 0.07).max(4.0) + (thickness - 2.0) * 0.5;
+    let ring_radius = rod_length * 1.26;
+    let plane_near = rod_length * 0.25;
+    let plane_far = rod_length * 0.44;
     /// Tripé de navegação: no alto à direita, abaixo dos controles da viewport.
     const VIEW_MARGIN: f32 = 54.0;
     const VIEW_TOP: f32 = 108.0;
@@ -326,6 +374,31 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         }
     }
 
+    model.thickness = thickness;
+    model.size = rod_length;
+    model.pivot_editing = state.session.edit_pivot;
+
+    // Marcadores de pivô e de origem: aparecem com um objeto ativo no Model,
+    // mesmo sem gizmo (Select, Extrude...). Pivô ≠ 3D Cursor ≠ origem.
+    if state.workspace == Workspace::Model
+        && state.session.show_overlays
+        && let Some(asset) = state.project.active()
+        && !asset.mesh.verts.is_empty()
+    {
+        let pivot_world = state.session.tools.modal.as_ref().map_or_else(
+            || state.calculate_pivot(state.session.pivot_point),
+            |modal| modal.pivot,
+        );
+        if let Some(point) = project(pivot_world) {
+            model.pivot_visible = true;
+            model.pivot_screen = point;
+        }
+        if let Some(point) = project(asset.origin_world()) {
+            model.origin_marker_visible = true;
+            model.origin_marker_screen = point;
+        }
+    }
+
     // Hastes de transformação: tamanho fixo em tela. O modo combinado mantém
     // três famílias de handle simultâneas e selecionáveis.
     let is_animate_bone =
@@ -369,7 +442,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
     model.origin_x = origin[0];
     model.origin_y = origin[1];
 
-    for (axis_idx, axis, rod, arrow, scale, rotate) in [
+    for (axis_idx, axis, rod, arrow, scale, rotate, ring_front) in [
         (
             0,
             frame.x_axis,
@@ -377,6 +450,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             &mut model.x_arrow_commands,
             &mut model.x_scale_commands,
             &mut model.x_rotate_commands,
+            &mut model.x_ring_front,
         ),
         (
             1,
@@ -385,6 +459,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             &mut model.y_arrow_commands,
             &mut model.y_scale_commands,
             &mut model.y_rotate_commands,
+            &mut model.y_ring_front,
         ),
         (
             2,
@@ -393,16 +468,17 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             &mut model.z_arrow_commands,
             &mut model.z_scale_commands,
             &mut model.z_rotate_commands,
+            &mut model.z_ring_front,
         ),
     ] {
         let direction = screen_direction(axis);
         let end = [
-            origin[0] + direction[0] * ROD_LENGTH,
-            origin[1] + direction[1] * ROD_LENGTH,
+            origin[0] + direction[0] * rod_length,
+            origin[1] + direction[1] * rod_length,
         ];
         let label_pos = [
-            origin[0] + direction[0] * (ROD_LENGTH + 14.0),
-            origin[1] + direction[1] * (ROD_LENGTH + 14.0),
+            origin[0] + direction[0] * (rod_length + 14.0),
+            origin[1] + direction[1] * (rod_length + 14.0),
         ];
         if axis_idx == 0 {
             model.x_end = end;
@@ -421,16 +497,27 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
                 1 => (frame.z_axis, frame.x_axis),
                 _ => (frame.x_axis, frame.y_axis),
             };
+            let mut points = Vec::with_capacity(65);
+            let mut depths = Vec::with_capacity(65);
             for segment in 0..=64 {
                 let angle = segment as f32 * std::f32::consts::TAU / 64.0;
-                let direction = screen_direction(tangent * angle.cos() + bitangent * angle.sin());
+                let ring_point = tangent * angle.cos() + bitangent * angle.sin();
+                let direction = screen_direction(ring_point);
+                let point = [
+                    origin[0] + direction[0] * rod_length,
+                    origin[1] + direction[1] * rod_length,
+                ];
                 rod.push_str(&format!(
                     "{} {:.2} {:.2} ",
                     if segment == 0 { "M" } else { "L" },
-                    origin[0] + direction[0] * ROD_LENGTH,
-                    origin[1] + direction[1] * ROD_LENGTH
+                    point[0],
+                    point[1]
                 ));
+                points.push(point);
+                // Sentido do olho: o ponto do anel voltado para a câmera.
+                depths.push(-ring_point.dot(state.session.camera.forward()));
             }
+            *ring_front = front_arc_commands(&points, &depths);
             continue;
         }
         *rod = format!(
@@ -442,10 +529,10 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             "select" | "transform"
         ) {
             let scale_center = [
-                origin[0] + direction[0] * 43.0,
-                origin[1] + direction[1] * 43.0,
+                origin[0] + direction[0] * scale_center_at,
+                origin[1] + direction[1] * scale_center_at,
             ];
-            let r = 5.0;
+            let r = scale_box_half;
             *scale = format!(
                 "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
                 scale_center[0] - r,
@@ -462,20 +549,29 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
                 1 => (frame.z_axis, frame.x_axis),
                 _ => (frame.x_axis, frame.y_axis),
             };
+            let mut points = Vec::with_capacity(65);
+            let mut depths = Vec::with_capacity(65);
             for segment in 0..=64 {
                 let angle = segment as f32 * std::f32::consts::TAU / 64.0;
-                let ring_direction =
-                    screen_direction(tangent * angle.cos() + bitangent * angle.sin());
+                let ring_point = tangent * angle.cos() + bitangent * angle.sin();
+                let ring_direction = screen_direction(ring_point);
+                let point = [
+                    origin[0] + ring_direction[0] * ring_radius,
+                    origin[1] + ring_direction[1] * ring_radius,
+                ];
                 rotate.push_str(&format!(
                     "{} {:.2} {:.2} ",
                     if segment == 0 { "M" } else { "L" },
-                    origin[0] + ring_direction[0] * 91.0,
-                    origin[1] + ring_direction[1] * 91.0
+                    point[0],
+                    point[1]
                 ));
+                points.push(point);
+                depths.push(-ring_point.dot(state.session.camera.forward()));
             }
+            *ring_front = front_arc_commands(&points, &depths);
         }
         if state.session.tools.active_tool == "scale" {
-            let r = ARROW_HALF;
+            let r = arrow_half;
             *arrow = format!(
                 "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
                 end[0] - r,
@@ -491,17 +587,17 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         }
         // Seta: ponta em `end`, base recuada ao longo da haste.
         let base = [
-            end[0] - direction[0] * ARROW_BACK,
-            end[1] - direction[1] * ARROW_BACK,
+            end[0] - direction[0] * arrow_back,
+            end[1] - direction[1] * arrow_back,
         ];
         let perpendicular = [-direction[1], direction[0]];
         let left = [
-            base[0] + perpendicular[0] * ARROW_HALF,
-            base[1] + perpendicular[1] * ARROW_HALF,
+            base[0] + perpendicular[0] * arrow_half,
+            base[1] + perpendicular[1] * arrow_half,
         ];
         let right = [
-            base[0] - perpendicular[0] * ARROW_HALF,
-            base[1] - perpendicular[1] * ARROW_HALF,
+            base[0] - perpendicular[0] * arrow_half,
+            base[1] - perpendicular[1] * arrow_half,
         ];
         *arrow = format!(
             "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
@@ -517,20 +613,20 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
         // Plane 0: YZ (normal X)
         let p1 = [
-            origin[0] + (dir_y[0] + dir_z[0]) * 18.0,
-            origin[1] + (dir_y[1] + dir_z[1]) * 18.0,
+            origin[0] + (dir_y[0] + dir_z[0]) * plane_near,
+            origin[1] + (dir_y[1] + dir_z[1]) * plane_near,
         ];
         let p2 = [
-            origin[0] + dir_y[0] * 32.0 + dir_z[0] * 18.0,
-            origin[1] + dir_y[1] * 32.0 + dir_z[1] * 18.0,
+            origin[0] + dir_y[0] * plane_far + dir_z[0] * plane_near,
+            origin[1] + dir_y[1] * plane_far + dir_z[1] * plane_near,
         ];
         let p3 = [
-            origin[0] + (dir_y[0] + dir_z[0]) * 32.0,
-            origin[1] + (dir_y[1] + dir_z[1]) * 32.0,
+            origin[0] + (dir_y[0] + dir_z[0]) * plane_far,
+            origin[1] + (dir_y[1] + dir_z[1]) * plane_far,
         ];
         let p4 = [
-            origin[0] + dir_y[0] * 18.0 + dir_z[0] * 32.0,
-            origin[1] + dir_y[1] * 18.0 + dir_z[1] * 32.0,
+            origin[0] + dir_y[0] * plane_near + dir_z[0] * plane_far,
+            origin[1] + dir_y[1] * plane_near + dir_z[1] * plane_far,
         ];
         model.plane_yz_commands = format!(
             "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
@@ -539,20 +635,20 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
         // Plane 1: XZ (normal Y)
         let p1 = [
-            origin[0] + (dir_x[0] + dir_z[0]) * 18.0,
-            origin[1] + (dir_x[1] + dir_z[1]) * 18.0,
+            origin[0] + (dir_x[0] + dir_z[0]) * plane_near,
+            origin[1] + (dir_x[1] + dir_z[1]) * plane_near,
         ];
         let p2 = [
-            origin[0] + dir_x[0] * 32.0 + dir_z[0] * 18.0,
-            origin[1] + dir_x[1] * 32.0 + dir_z[1] * 18.0,
+            origin[0] + dir_x[0] * plane_far + dir_z[0] * plane_near,
+            origin[1] + dir_x[1] * plane_far + dir_z[1] * plane_near,
         ];
         let p3 = [
-            origin[0] + (dir_x[0] + dir_z[0]) * 32.0,
-            origin[1] + (dir_x[1] + dir_z[1]) * 32.0,
+            origin[0] + (dir_x[0] + dir_z[0]) * plane_far,
+            origin[1] + (dir_x[1] + dir_z[1]) * plane_far,
         ];
         let p4 = [
-            origin[0] + dir_x[0] * 18.0 + dir_z[0] * 32.0,
-            origin[1] + dir_x[1] * 18.0 + dir_z[1] * 32.0,
+            origin[0] + dir_x[0] * plane_near + dir_z[0] * plane_far,
+            origin[1] + dir_x[1] * plane_near + dir_z[1] * plane_far,
         ];
         model.plane_xz_commands = format!(
             "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
@@ -561,20 +657,20 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
         // Plane 2: XY (normal Z)
         let p1 = [
-            origin[0] + (dir_x[0] + dir_y[0]) * 18.0,
-            origin[1] + (dir_x[1] + dir_y[1]) * 18.0,
+            origin[0] + (dir_x[0] + dir_y[0]) * plane_near,
+            origin[1] + (dir_x[1] + dir_y[1]) * plane_near,
         ];
         let p2 = [
-            origin[0] + dir_x[0] * 32.0 + dir_y[0] * 18.0,
-            origin[1] + dir_x[1] * 32.0 + dir_y[1] * 18.0,
+            origin[0] + dir_x[0] * plane_far + dir_y[0] * plane_near,
+            origin[1] + dir_x[1] * plane_far + dir_y[1] * plane_near,
         ];
         let p3 = [
-            origin[0] + (dir_x[0] + dir_y[0]) * 32.0,
-            origin[1] + (dir_x[1] + dir_y[1]) * 32.0,
+            origin[0] + (dir_x[0] + dir_y[0]) * plane_far,
+            origin[1] + (dir_x[1] + dir_y[1]) * plane_far,
         ];
         let p4 = [
-            origin[0] + dir_x[0] * 18.0 + dir_y[0] * 32.0,
-            origin[1] + dir_x[1] * 18.0 + dir_y[1] * 32.0,
+            origin[0] + dir_x[0] * plane_near + dir_y[0] * plane_far,
+            origin[1] + dir_x[1] * plane_near + dir_y[1] * plane_far,
         ];
         model.plane_xy_commands = format!(
             "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
@@ -584,7 +680,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
     // Anel externo de rotação da visão (View Roll) para Rotate
     if state.session.tools.active_tool == "rotate" {
-        let roll_r = GIZMO_VIEW_ROLL_RADIUS;
+        let roll_r = gizmo_view_roll_radius(state);
         let mut roll = String::new();
         for segment in 0..=64 {
             let angle = segment as f32 * std::f32::consts::TAU / 64.0;
@@ -1529,248 +1625,6 @@ pub(crate) fn format_selection_summary(state: &AppState) -> String {
         "No selection".to_string()
     } else {
         format!("Selected: {}", parts.join(" · "))
-    }
-}
-
-pub(crate) fn compute_selection_overlay(
-    state: &AppState,
-    width: f32,
-    height: f32,
-    backend_draws_guides: bool,
-) -> SelectionOverlayModel {
-    if state.selection_domain() != SelectionDomain::Object {
-        return compute_asset_overlay(
-            state,
-            width,
-            height,
-            backend_draws_guides,
-            state.project.active,
-        );
-    }
-    let mut overlay = SelectionOverlayModel::default();
-    for (index, asset) in state.project.assets.iter().enumerate() {
-        if !asset.visible {
-            continue;
-        }
-        let is_active = index == state.project.active;
-        let selected = state.session.selection.assets.contains(&asset.id) || is_active;
-        let hovered = state.session.tools.hover == petunia_core::HoverTarget::Object(index);
-        if !selected && !hovered {
-            continue;
-        }
-        let part = compute_asset_overlay(state, width, height, backend_draws_guides, index);
-        if is_active {
-            overlay
-                .active_outline_commands
-                .push_str(&part.outline_commands);
-        } else if selected {
-            overlay.outline_commands.push_str(&part.outline_commands);
-        } else {
-            overlay
-                .unselected_outline_commands
-                .push_str(&part.outline_commands);
-        }
-    }
-    overlay.visible = !overlay.outline_commands.is_empty()
-        || !overlay.active_outline_commands.is_empty()
-        || !overlay.unselected_outline_commands.is_empty();
-    overlay
-}
-
-pub(crate) fn compute_asset_overlay(
-    state: &AppState,
-    width: f32,
-    height: f32,
-    backend_draws_guides: bool,
-    index: usize,
-) -> SelectionOverlayModel {
-    /// Teto de segmentos por frame: malhas grandes não podem gerar uma string
-    /// gigante a cada sync de propriedades.
-    const MAX_SEGMENTS: usize = 4_000;
-
-    if width <= 1.0 || height <= 1.0 {
-        return SelectionOverlayModel::default();
-    }
-    if state.workspace == Workspace::Paint {
-        return SelectionOverlayModel::default();
-    }
-    let Some(asset) = state.project.assets.get(index) else {
-        return SelectionOverlayModel::default();
-    };
-    // Contorno e faces do objeto na tela: posições no mundo.
-    // A malha avaliada já reflete as posições da prévia modal em tempo real.
-    let evaluated = asset.world_mesh();
-    let mesh = &*evaluated;
-    if mesh.verts.is_empty() {
-        return SelectionOverlayModel::default();
-    }
-
-    let view_proj = state.session.camera.view_proj();
-    let project = |point: glam::Vec3| -> Option<[f32; 2]> {
-        let clip = view_proj * glam::Vec4::new(point.x, point.y, point.z, 1.0);
-        if clip.w <= 0.05 || clip.z < 0.0 || clip.z > clip.w {
-            return None;
-        }
-        let inv_w = 1.0 / clip.w;
-        Some([
-            (clip.x * inv_w * 0.5 + 0.5) * width,
-            (1.0 - (clip.y * inv_w * 0.5 + 0.5)) * height,
-        ])
-    };
-
-    let mut outline = String::new();
-    let mut points = String::new();
-    let mut unselected_outline = String::new();
-    let mut unselected_points = String::new();
-    let mut segments = 0usize;
-    let push_segment = |commands: &mut String, a: [f32; 2], b: [f32; 2]| {
-        commands.push_str(&format!(
-            "M {:.2} {:.2} L {:.2} {:.2} ",
-            a[0], a[1], b[0], b[1]
-        ));
-    };
-    let push_disc = |commands: &mut String, center: [f32; 2], radius: f32| {
-        use std::fmt::Write as _;
-        for step in 0..12 {
-            let angle = step as f32 * std::f32::consts::TAU / 12.0;
-            let action = if step == 0 { 'M' } else { 'L' };
-            let _ = write!(
-                commands,
-                "{action} {:.2} {:.2} ",
-                center[0] + radius * angle.cos(),
-                center[1] + radius * angle.sin()
-            );
-        }
-        commands.push_str("Z ");
-    };
-
-    let domain = state.selection_domain();
-    let mut truncated = false;
-
-    match domain {
-        SelectionDomain::Object => {
-            // Silhueta: aresta entre face frontal e traseira (ou borda aberta
-            // frontal). Não desenhar todas as arestas de faces frontais, o que
-            // faria um objeto selecionado parecer uma caixa de arame gigante.
-            let mut adjacent = std::collections::HashMap::<(u32, u32), (usize, usize)>::new();
-            let eye = state.session.camera.eye();
-            for (fi, face) in mesh.faces.iter().enumerate() {
-                if face.verts.len() < 3 {
-                    continue;
-                }
-                let face_center = face
-                    .verts
-                    .iter()
-                    .filter_map(|&vi| mesh.verts.get(vi as usize))
-                    .map(|vertex| vertex.vec())
-                    .sum::<glam::Vec3>()
-                    / face.verts.len() as f32;
-                let front = mesh.face_normal(fi).dot(eye - face_center) > 0.0;
-                for index in 0..face.verts.len() {
-                    let a = face.verts[index];
-                    let b = face.verts[(index + 1) % face.verts.len()];
-                    let entry = adjacent.entry((a.min(b), a.max(b))).or_default();
-                    if front {
-                        entry.0 += 1;
-                    } else {
-                        entry.1 += 1;
-                    }
-                }
-            }
-            for ((a, b), (front, back)) in adjacent {
-                if front == 0 || (back == 0 && front > 1) {
-                    continue;
-                }
-                if segments >= MAX_SEGMENTS {
-                    truncated = true;
-                    break;
-                }
-                let (Some(va), Some(vb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize))
-                else {
-                    continue;
-                };
-                if let (Some(pa), Some(pb)) = (project(va.vec()), project(vb.vec())) {
-                    push_segment(&mut outline, pa, pb);
-                    segments += 1;
-                }
-            }
-        }
-        SelectionDomain::Vertex => {
-            if backend_draws_guides {
-                return SelectionOverlayModel::default();
-            }
-            for (index, vertex) in mesh.verts.iter().enumerate() {
-                if segments >= MAX_SEGMENTS {
-                    truncated = true;
-                    break;
-                }
-                let Some(sp) = project(vertex.vec()) else {
-                    continue;
-                };
-                let hovered =
-                    state.session.tools.hover == petunia_core::HoverTarget::Vertex(index as u32);
-                let radius = if hovered {
-                    (state.ui.selection_thickness * 2.5).clamp(6.5, 8.5)
-                } else if vertex.selected {
-                    (state.ui.selection_thickness * 2.0).clamp(5.0, 7.0)
-                } else {
-                    (state.ui.selection_thickness * 1.5).clamp(3.5, 5.5)
-                };
-                let target = if hovered || vertex.selected {
-                    &mut points
-                } else {
-                    &mut unselected_points
-                };
-                push_disc(target, sp, radius);
-                segments += 1;
-            }
-        }
-        SelectionDomain::Edge => {
-            if backend_draws_guides {
-                return SelectionOverlayModel::default();
-            }
-            for (a, b) in mesh.edges_unique() {
-                if segments >= MAX_SEGMENTS {
-                    truncated = true;
-                    break;
-                }
-                let selected =
-                    mesh.selected_edges.contains(&(a, b)) || mesh.selected_edges.contains(&(b, a));
-                if selected {
-                    // O GPU desenha a aresta selecionada com depth test.
-                    continue;
-                }
-                let (Some(va), Some(vb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize))
-                else {
-                    continue;
-                };
-                if let (Some(pa), Some(pb)) = (project(va.vec()), project(vb.vec())) {
-                    push_segment(&mut unselected_outline, pa, pb);
-                    segments += 1;
-                }
-            }
-        }
-        SelectionDomain::Face => {
-            // A seleção e o hover de faces são preenchidos pelo renderer.
-            // Marcadores centrais em todas as faces poluíam a malha.
-        }
-    }
-
-    let _ = truncated;
-    let visible = !outline.is_empty()
-        || !points.is_empty()
-        || !unselected_outline.is_empty()
-        || !unselected_points.is_empty();
-    SelectionOverlayModel {
-        visible,
-        outline_commands: outline,
-        // O roteamento ativo × selecionado acontece no chamador
-        // (compute_selection_overlay); aqui nasce sempre vazio.
-        active_outline_commands: String::new(),
-        point_commands: points,
-        unselected_outline_commands: unselected_outline,
-        unselected_point_commands: unselected_points,
-        accent: domain != SelectionDomain::Object,
     }
 }
 

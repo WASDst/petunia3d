@@ -460,6 +460,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if text == "F4" && !ctrl && !alt && !shift {
             return self.toggle_reference_manager();
         }
+        if ctrl
+            && !alt
+            && text.eq_ignore_ascii_case("g")
+            && self.state.workspace == Workspace::Model
+        {
+            return if shift {
+                self.ungroup(None)
+            } else {
+                self.group_selection()
+            };
+        }
         if ctrl && !shift && !alt && text.eq_ignore_ascii_case("c") {
             return self.copy_selection();
         }

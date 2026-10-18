@@ -34,7 +34,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
 | `global.save_project` | <kbd>Ctrl+S</kbd> |
-| `global.toggle_projection` | <kbd>O</kbd> |
+| `global.toggle_projection` | <kbd>Numpad 5</kbd> |
 | `global.toggle_wireframe` | <kbd>Z</kbd> |
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 
@@ -60,7 +60,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
@@ -75,6 +75,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
 
@@ -87,24 +88,41 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
 
 ## UV
 
 | Ação | Atalho |
 | :--- | :---: |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 
 ## Visualização & Câmera
 
 | Ação | Atalho |
 | :--- | :---: |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |

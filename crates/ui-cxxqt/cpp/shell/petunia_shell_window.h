@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QTimer>
 
+class PetuniaAlignPopover;
 class PetuniaAppBar;
 class PetuniaContextActions;
 class PetuniaDrawer;
@@ -73,6 +74,9 @@ class PetuniaShellWindow : public QMainWindow {
     void openPreferences();
     void openReferences();
     PetuniaDrawer *drawerRegion() const { return m_drawer; }
+    /// Painel de alinhar e distribuir (criado sob demanda), aberto sob `anchor`.
+    void openAlign(QWidget *anchor = nullptr);
+    PetuniaAlignPopover *alignPopover() const { return m_align; }
 
   protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -135,6 +139,7 @@ class PetuniaShellWindow : public QMainWindow {
     PetuniaStatusBar *m_status{nullptr};
     PetuniaRegionNavigator *m_navigator{nullptr};
     PetuniaCommandPalette *m_palette{nullptr};
+    PetuniaAlignPopover *m_align{nullptr};
 
     /// Superfícies 2D dos workspaces (canvas de pintura, editor UV).
     QHash<QString, PetuniaEditorCanvas *> m_canvases;

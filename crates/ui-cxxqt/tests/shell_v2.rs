@@ -66,6 +66,28 @@ fn shell_v2_regions_layout_focus_and_theme() {
         "uv:ctrl-arrow-pans-without-editing",
         "uv:arrow-nudges-selection",
         "uv:home-frames",
+        // Refinamento de uso (ADR-C15).
+        "rail:only-transform-cursor-and-create",
+        "header:icon-only-with-tooltips",
+        "structure:ctrl-g-groups-the-selection",
+        "structure:drop-on-group-joins-it",
+        "structure:drop-on-empty-area-leaves-the-group",
+        "structure:drop-above-reorders",
+        "structure:isolate-keeps-only-the-selection",
+        "structure:leaving-isolation-restores-visibility",
+        "structure:ctrl-shift-g-ungroups",
+        "align:popover-has-grid-and-distribute",
+        "align:enabled-with-three-objects",
+        "align:disabled-with-one-object",
+        "pivot:marker-published",
+        "pivot:edit-mode-reflected",
+        "gizmo:size-and-thickness-preferences",
+        "navcube:face-hits-map-to-presets",
+        "navcube:corner-hit-gives-its-direction",
+        "navcube:edge-hit-gives-the-two-faces",
+        "navcube:coincident-corner-prefers-the-nearer-one",
+        "navcube:home-and-menu-hit",
+        "navcube:paints-pixels",
     ]
     .into_iter()
     .filter(|name| !names.contains(name))

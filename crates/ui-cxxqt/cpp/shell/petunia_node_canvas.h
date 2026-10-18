@@ -74,6 +74,7 @@ class PetuniaNodeCanvas : public QGraphicsView {
     void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
     void drawBackground(QPainter *painter, const QRectF &rect) override;
+    void drawForeground(QPainter *painter, const QRectF &rect) override;
 
   private:
     friend class PetuniaNodeItem;

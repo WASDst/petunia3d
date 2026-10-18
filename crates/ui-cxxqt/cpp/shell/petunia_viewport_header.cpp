@@ -37,12 +37,12 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     m_domainSeparator->setFixedWidth(1);
     m_layout->addWidget(m_domainSeparator);
 
-    m_snap = makeToggle(QStringLiteral("snap_magnet"), tr("Snap"), tr("Ativar snap"));
+    m_snap = makeToggle(QStringLiteral("snap_magnet"), tr("Ativar snap"));
     connect(m_snap, &QToolButton::clicked, this, [this] {
         if (!m_syncing)
             m_controller->request(QStringLiteral("toggle_snap_enabled"));
     });
-    m_proportional = makeToggle(QStringLiteral("proportional_editing"), tr("Proporcional"), tr("Edição proporcional"));
+    m_proportional = makeToggle(QStringLiteral("proportional_editing"), tr("Edição proporcional"));
     connect(m_proportional, &QToolButton::clicked, this, [this] {
         if (!m_syncing)
             m_controller->request(QStringLiteral("toggle_proportional_editing"));
@@ -50,10 +50,9 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     m_layout->addWidget(m_snap);
     m_layout->addWidget(m_proportional);
     m_surfaceMode = new PetuniaSegmented(this);
-    m_surfaceMode->setItems({{"3d", tr("3D"), tr("Só a vista 3D"), QStringLiteral("view_perspective")},
-                             {"split", tr("Dividido"), tr("Vista 3D e superfície 2D lado a lado"),
-                              QStringLiteral("split_view")},
-                             {"2d", tr("2D"), tr("Só a superfície 2D (maximizada)"), QStringLiteral("frame_all")}});
+    m_surfaceMode->setItems({{"3d", {}, tr("Só a vista 3D"), QStringLiteral("view_perspective")},
+                             {"split", {}, tr("Vista 3D e superfície 2D lado a lado"), QStringLiteral("split_view")},
+                             {"2d", {}, tr("Só a superfície 2D (maximizada)"), QStringLiteral("frame_all")}});
     m_surfaceMode->setGroupLabel(tr("Superfície de trabalho"));
     m_surfaceMode->setCurrent(QStringLiteral("split"));
     connect(m_surfaceMode, &PetuniaSegmented::activated, this, &PetuniaViewportHeader::surfaceModeRequested);
@@ -61,11 +60,9 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     m_layout->addStretch(1);
 
     m_projection = new PetuniaSegmented(this);
-    m_projection->setItems({{"persp", tr("Persp."), tr("Projeção em perspectiva"), QStringLiteral("view_perspective")},
-                            {"ortho", tr("Orto"), tr("Projeção ortográfica"), QStringLiteral("view_orthographic")}});
+    m_projection->setItems({{"persp", {}, tr("Projeção em perspectiva"), QStringLiteral("view_perspective")},
+                            {"ortho", {}, tr("Projeção ortográfica"), QStringLiteral("view_orthographic")}});
     m_projection->setGroupLabel(tr("Projeção"));
-    m_projection->button(QStringLiteral("persp"))->setProperty("fullText", tr("Persp."));
-    m_projection->button(QStringLiteral("ortho"))->setProperty("fullText", tr("Orto"));
     connect(m_projection, &PetuniaSegmented::activated, this, [this](const QString &id) {
         const bool ortho = m_controller->flag(QStringLiteral("is_orthographic"));
         if ((id == QLatin1String("ortho")) != ortho)
@@ -73,10 +70,10 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     });
     m_layout->addWidget(m_projection);
 
-    m_display = makeMenuButton(QStringLiteral("shading_solid"), tr("Exibição"), tr("Modo de exibição"));
-    m_overlays = makeMenuButton(QStringLiteral("overlays"), tr("Overlays"), tr("Overlays da vista"));
-    m_camera = makeMenuButton(QStringLiteral("camera"), tr("Câmera"), tr("Câmera e navegação"));
-    m_split = makeToggle(QStringLiteral("split_view"), tr("Dividir"), tr("Dividir a vista 3D"));
+    m_display = makeMenuButton(QStringLiteral("shading_solid"), tr("Modo de exibição"));
+    m_overlays = makeMenuButton(QStringLiteral("overlays"), tr("Overlays da vista"));
+    m_camera = makeMenuButton(QStringLiteral("camera"), tr("Câmera e navegação"));
+    m_split = makeToggle(QStringLiteral("split_view"), tr("Dividir a vista 3D"));
     connect(m_split, &QToolButton::clicked, this, [this] {
         if (!m_syncing)
             m_controller->request(QStringLiteral("toggle_split_view"));
@@ -93,27 +90,25 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     applyMetrics();
 }
 
-QToolButton *PetuniaViewportHeader::makeMenuButton(const QString &icon, const QString &label, const QString &accessible) {
+QToolButton *PetuniaViewportHeader::makeMenuButton(const QString &icon, const QString &accessible) {
     auto *button = new QToolButton(this);
     button->setProperty("role", QStringLiteral("header"));
     button->setIcon(PetuniaIcons::get(icon));
-    button->setText(label);
     button->setToolTip(accessible);
     button->setAccessibleName(accessible);
     button->setPopupMode(QToolButton::InstantPopup);
-    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
     return button;
 }
 
-QToolButton *PetuniaViewportHeader::makeToggle(const QString &icon, const QString &label, const QString &tip) {
+QToolButton *PetuniaViewportHeader::makeToggle(const QString &icon, const QString &tip) {
     auto *button = new QToolButton(this);
     button->setProperty("role", QStringLiteral("header"));
     button->setCheckable(true);
     button->setIcon(PetuniaIcons::get(icon));
-    button->setText(label);
     button->setToolTip(tip);
     button->setAccessibleName(tip);
-    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
     return button;
 }
 
@@ -203,33 +198,34 @@ void PetuniaViewportHeader::applyMetrics() {
     const auto &theme = PetuniaTheme::instance();
     m_layout->setContentsMargins(theme.space(2), theme.space(1), theme.space(2), theme.space(1));
     m_layout->setSpacing(theme.space(1));
+    const int height = theme.compactControlHeight();
     const QSize icon(theme.iconPx(), theme.iconPx());
     for (auto *button : {m_snap, m_proportional, m_display, m_overlays, m_camera, m_split}) {
         button->setIconSize(icon);
-        button->setMinimumHeight(theme.controlHeight());
+        button->setMinimumHeight(height);
+        button->setMinimumWidth(height);
+        button->setMaximumHeight(height);
     }
-    for (auto *segmented : {m_domain, m_projection})
+    for (auto *segmented : {m_domain, m_projection, m_surfaceMode})
         for (auto *button : segmented->buttons()) {
             button->setIconSize(icon);
-            button->setMinimumHeight(theme.controlHeight());
-            button->setMinimumWidth(theme.controlHeight());
+            button->setMinimumHeight(height);
+            button->setMaximumHeight(height);
+            button->setMinimumWidth(height);
         }
-    for (auto *button : {m_snap, m_proportional, m_display, m_overlays, m_camera, m_split})
-        button->setMinimumWidth(theme.controlHeight());
-    m_domainSeparator->setFixedHeight(theme.controlHeight() - theme.space(2));
-    setMinimumHeight(theme.controlHeight() + theme.space(2));
-    setMaximumHeight(theme.controlHeight() + theme.space(2));
+    m_domainSeparator->setFixedHeight(height - theme.space(2));
+    setMinimumHeight(height + theme.space(2));
+    setMaximumHeight(height + theme.space(2));
 }
 
 void PetuniaViewportHeader::applyCompact(bool compact) {
+    // O cabeçalho já é só ícones (nome e atalho nos tooltips); o estado compacto
+    // apenas afina o espaçamento em vistas estreitas.
     if (m_compact == compact)
         return;
     m_compact = compact;
-    const auto style = compact ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon;
-    for (auto *button : {m_snap, m_proportional, m_display, m_overlays, m_camera, m_split})
-        button->setToolButtonStyle(style);
-    for (auto *button : m_projection->buttons())
-        button->setText(compact ? QString() : button->property("fullText").toString());
+    const auto &theme = PetuniaTheme::instance();
+    m_layout->setSpacing(compact ? 0 : theme.space(1));
 }
 
 void PetuniaViewportHeader::resizeEvent(QResizeEvent *event) {

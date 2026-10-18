@@ -48,6 +48,35 @@ pub struct ContextAction {
 /// Limite de ações em destaque (newdocs: 3–4 + Mais).
 pub const MAX_PRIMARY: usize = 4;
 
+/// Grupos do menu "Mais", na ordem em que aparecem. O menu mostra um cabeçalho
+/// por grupo em vez de uma lista única e longa.
+pub const GROUP_ORDER: [&str; 8] = [
+    "object", "scene", "form", "topology", "shape", "uv", "utility", "danger",
+];
+
+/// Grupo de uma ação (agrupamento do "Mais"; a barra em destaque ignora).
+pub fn group_of(id: &str) -> &'static str {
+    match id {
+        "group" | "ungroup" | "isolate" => "scene",
+        "extrude" | "inset" | "bevel" | "push_pull" | "make_face" | "flip_normals"
+        | "extrude_volume" => "form",
+        "loop_cut" | "knife" | "slice" | "subdivide" | "merge" | "connect" | "dissolve" => {
+            "topology"
+        }
+        "close_profile" | "unite" | "subtract" | "intersect" | "exclude" | "shape_builder" => {
+            "shape"
+        }
+        "unwrap" | "pack" | "relax" | "stitch" | "project_view" | "project_reference"
+        | "project_planar" | "project_cube" | "equalize_density" | "split" => "uv",
+        "measure" => "utility",
+        "delete" => "danger",
+        _ => "object",
+    }
+}
+
+/// Alvo (`Request`) tratado só pela GUI: abre o painel de alinhar e distribuir.
+pub const UI_ALIGN: &str = "ui.align";
+
 const fn act(
     id: &'static str,
     label: &'static str,
@@ -116,6 +145,109 @@ const KNIFE: ContextAction = act(
     false,
 );
 
+const ALIGN: ContextAction = act(
+    "align",
+    "Align",
+    "bounding_box",
+    Request,
+    UI_ALIGN,
+    None,
+    true,
+);
+const GROUP: ContextAction = act(
+    "group",
+    "Group",
+    "collection",
+    Command,
+    "scene.group",
+    None,
+    false,
+);
+const UNGROUP: ContextAction = act(
+    "ungroup",
+    "Ungroup",
+    "hierarchy",
+    Command,
+    "scene.ungroup",
+    None,
+    false,
+);
+const ISOLATE: ContextAction = act(
+    "isolate",
+    "Isolate",
+    "isolate",
+    Request,
+    "isolate",
+    Some("view.isolate"),
+    false,
+);
+const EXTRUDE_TOOL: ContextAction = act(
+    "extrude",
+    "Extrude",
+    "extrude",
+    Tool,
+    "extrude",
+    Some("model.extrude"),
+    false,
+);
+const INSET_TOOL: ContextAction = act(
+    "inset",
+    "Inset",
+    "inset",
+    Tool,
+    "inset",
+    Some("model.inset"),
+    false,
+);
+const BEVEL_TOOL: ContextAction = act(
+    "bevel",
+    "Bevel",
+    "bevel",
+    Tool,
+    "bevel",
+    Some("model.bevel"),
+    false,
+);
+const PUSH_PULL_TOOL: ContextAction = act(
+    "push_pull",
+    "Push/Pull",
+    "pushpull",
+    Tool,
+    "push_pull",
+    Some("model.push_pull"),
+    false,
+);
+const LOOP_CUT_TOOL: ContextAction = act(
+    "loop_cut",
+    "Loop cut",
+    "loop_cut",
+    Tool,
+    "loop_cut",
+    Some("model.loop_cut"),
+    false,
+);
+const SLICE_TOOL: ContextAction = act(
+    "slice",
+    "Slice",
+    "slice",
+    Tool,
+    "slice",
+    Some("model.slice"),
+    false,
+);
+const MEASURE_TOOL: ContextAction = act(
+    "measure", "Measure", "measure", Tool, "measure", None, false,
+);
+const SHAPE_BUILDER_TOOL: ContextAction = act(
+    "shape_builder",
+    "Shape builder",
+    "shape_layer",
+    Tool,
+    "shape_builder",
+    Some("model.shape_builder"),
+    false,
+);
+
 const OBJECT: &[ContextAction] = &[
     act(
         "duplicate",
@@ -126,6 +258,7 @@ const OBJECT: &[ContextAction] = &[
         Some("model.duplicate"),
         true,
     ),
+    ALIGN,
     act(
         "join",
         "Join",
@@ -144,6 +277,9 @@ const OBJECT: &[ContextAction] = &[
         None,
         true,
     ),
+    GROUP,
+    UNGROUP,
+    ISOLATE,
     act(
         "origin_geometry",
         "Origin to geometry",
@@ -171,6 +307,14 @@ const OBJECT: &[ContextAction] = &[
         None,
         false,
     ),
+    EXTRUDE_TOOL,
+    INSET_TOOL,
+    BEVEL_TOOL,
+    PUSH_PULL_TOOL,
+    LOOP_CUT_TOOL,
+    KNIFE,
+    SLICE_TOOL,
+    MEASURE_TOOL,
     DELETE,
 ];
 const VERTEX: &[ContextAction] = &[
@@ -212,6 +356,11 @@ const VERTEX: &[ContextAction] = &[
     ),
     MAKE_FACE,
     DISSOLVE,
+    LOOP_CUT_TOOL,
+    KNIFE,
+    SLICE_TOOL,
+    PUSH_PULL_TOOL,
+    MEASURE_TOOL,
     DELETE,
 ];
 const EDGE: &[ContextAction] = &[
@@ -246,6 +395,9 @@ const EDGE: &[ContextAction] = &[
     KNIFE,
     MAKE_FACE,
     DISSOLVE,
+    PUSH_PULL_TOOL,
+    SLICE_TOOL,
+    MEASURE_TOOL,
     DELETE,
 ];
 const FACE: &[ContextAction] = &[
@@ -297,6 +449,9 @@ const FACE: &[ContextAction] = &[
         false,
     ),
     DISSOLVE,
+    LOOP_CUT_TOOL,
+    SLICE_TOOL,
+    MEASURE_TOOL,
     DELETE,
 ];
 const DRAW: &[ContextAction] = &[
@@ -354,6 +509,9 @@ const DRAW: &[ContextAction] = &[
         None,
         false,
     ),
+    SHAPE_BUILDER_TOOL,
+    PUSH_PULL_TOOL,
+    MEASURE_TOOL,
 ];
 const UV: &[ContextAction] = &[
     act(
@@ -562,5 +720,58 @@ mod tests {
         assert!(ids(SelectionDomain::Face).contains(&"inset"));
         assert!(ids(SelectionDomain::Vertex).contains(&"merge"));
         assert!(ids(SelectionDomain::Object).contains(&"duplicate"));
+    }
+
+    #[test]
+    fn every_action_belongs_to_a_known_menu_group() {
+        for (workspace, mode, domain, actions) in all() {
+            for action in actions {
+                assert!(
+                    GROUP_ORDER.contains(&group_of(action.id)),
+                    "{workspace:?}/{mode:?}/{domain:?}: `{}` sem grupo conhecido",
+                    action.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn operations_removed_from_the_rail_are_reachable_here() {
+        use crate::tool_catalog;
+        for mode in [ModelingMode::Draw, ModelingMode::Poly] {
+            let reachable: Vec<&str> = [
+                SelectionDomain::Object,
+                SelectionDomain::Vertex,
+                SelectionDomain::Edge,
+                SelectionDomain::Face,
+            ]
+            .iter()
+            .flat_map(|domain| context_actions(Workspace::Model, mode, *domain))
+            .filter(|action| action.kind == ActionKind::Tool)
+            .map(|action| action.target)
+            .collect();
+            for tool in tool_catalog::operation_tools(Workspace::Model, mode) {
+                assert!(
+                    reachable.contains(&tool.id),
+                    "{mode:?}: a ferramenta `{}` não tem ação contextual",
+                    tool.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn object_actions_offer_align_group_and_isolate() {
+        let ids: Vec<&str> = context_actions(
+            Workspace::Model,
+            ModelingMode::Poly,
+            SelectionDomain::Object,
+        )
+        .iter()
+        .map(|action| action.id)
+        .collect();
+        for id in ["align", "group", "ungroup", "isolate"] {
+            assert!(ids.contains(&id), "objeto sem `{id}`");
+        }
     }
 }

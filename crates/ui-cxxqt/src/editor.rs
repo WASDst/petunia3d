@@ -234,6 +234,7 @@ impl QtEditor {
                 "kind": action.kind.id(),
                 "target": action.target,
                 "primary": action.primary,
+                "group": petunia_editor::context_actions::group_of(action.id),
                 "shortcut": action
                     .keymap_action
                     .and_then(|name| self.state.ui.keybinds.format_shortcut(name)),
@@ -702,6 +703,31 @@ impl QtEditor {
                 b.begin_rename();
                 return Ok(b.commit_rename(string(request, "name")?));
             }
+            "scene_group" => return Ok(b.group_selection()),
+            "scene_ungroup" => return Ok(b.ungroup(request["name"].as_str())),
+            "group_select" => return Ok(b.select_group(string(request, "name")?)),
+            "group_visibility" => return Ok(b.toggle_group_visibility(string(request, "name")?)),
+            "group_lock" => return Ok(b.toggle_group_lock(string(request, "name")?)),
+            "group_rename" => {
+                return Ok(b.rename_group(string(request, "from")?, string(request, "to")?));
+            }
+            "scene_drop" => {
+                let ids: Vec<String> = request["ids"]
+                    .as_array()
+                    .ok_or("Lista de objetos inválida")?
+                    .iter()
+                    .filter_map(|id| id.as_str().map(str::to_string))
+                    .take(10_000)
+                    .collect();
+                // `collection` ausente mantém o grupo; `null` tira do grupo.
+                let collection = match request.get("collection") {
+                    None => None,
+                    Some(value) if value.is_null() => Some(None),
+                    Some(value) => Some(Some(value.as_str().ok_or("Grupo inválido")?.to_string())),
+                };
+                return Ok(b.drop_scene_items(&ids, request["before"].as_str(), collection));
+            }
+            "isolate_part" => return Ok(b.isolate_part(string(request, "id")?)),
             "scene_move" => {
                 b.apply(UiIntent::MoveSceneAsset {
                     id: string(request, "id")?.into(),
@@ -765,6 +791,8 @@ impl QtEditor {
                 p.multiselection_measure_tag = state.ui.multiselection_measure_tag;
                 p.selection_rgb = state.ui.selection_rgb;
                 p.selection_thickness = state.ui.selection_thickness;
+                p.gizmo_size = state.ui.gizmo_size;
+                p.gizmo_thickness = state.ui.gizmo_thickness;
                 p.model_quick_actions = state.ui.model_quick_actions.clone();
                 p.active_keymap_id = state.ui.active_keymap_id.clone();
                 p.theme_id = state.ui.active_theme_id.clone();
@@ -1374,7 +1402,6 @@ fn dispatch_controller(
         ),
         "begin_rename" => b.begin_rename(),
         "begin_slice" => b.begin_slice(number(v, "x")?, number(v, "y")?),
-        "boolean_op" => b.boolean_op(string(v, "id")?),
         "cancel_decal_drag" => b.cancel_decal_drag(),
         "cancel_keymap_capture" => b.cancel_keymap_capture(),
         "cancel_knife" => b.cancel_knife(),
@@ -1398,7 +1425,6 @@ fn dispatch_controller(
         "clear_all_references" => b.clear_all_references(),
         "clear_all_uv_pins" => b.clear_all_uv_pins(),
         "clear_all_uv_seams" => b.clear_all_uv_seams(),
-        "clear_boolean_operand" => b.clear_boolean_operand(),
         "clear_hover" => b.clear_hover(),
         "clear_keymap_binding" => b.clear_keymap_binding(string(v, "target")?),
         "close_context_menu" => b.close_context_menu(),
@@ -1463,7 +1489,7 @@ fn dispatch_controller(
         }
         "hover_gizmo" => b.hover_gizmo(number(v, "x")?, number(v, "y")?),
         "import_decal_image" => b.import_decal_image(Path::new(string(v, "path")?)),
-        "join_operand" => b.join_operand(),
+        "join_selected" => b.join_selected(),
         "keep_saved_project" => b.keep_saved_project(),
         "knife_click" => b.knife_click(number(v, "normalized_x")?, number(v, "normalized_y")?),
         "menu_item_invoked" => b.menu_item_invoked(string(v, "id")?),
@@ -1577,9 +1603,6 @@ fn dispatch_controller(
         "set_asset_query" => b.set_asset_query(string(v, "query")?),
         "set_asset_sort_by_name" => b.set_asset_sort_by_name(boolean(v, "sort_by_name")?),
         "set_asset_thumbnail_size" => b.set_asset_thumbnail_size(number(v, "size")?),
-        "set_boolean_cleanup" => b.set_boolean_cleanup(boolean(v, "cleanup")?),
-        "set_boolean_keep_parts" => b.set_boolean_keep_parts(boolean(v, "keep")?),
-        "set_boolean_operand" => b.set_boolean_operand(string(v, "id")?),
         "set_brush_blend" => b.set_brush_blend(string(v, "blend")?),
         "set_brush_hardness" => b.set_brush_hardness(number(v, "val")?),
         "set_brush_lock" => b.set_brush_lock(string(v, "lock")?),
@@ -1667,6 +1690,8 @@ fn dispatch_controller(
         ),
         "set_selection_color_hex" => b.set_selection_color_hex(string(v, "value")?),
         "set_selection_thickness" => b.set_selection_thickness(number(v, "thickness")?),
+        "set_gizmo_size" => b.set_gizmo_size(number(v, "size")?),
+        "set_gizmo_thickness" => b.set_gizmo_thickness(number(v, "thickness")?),
         "set_shading_mode" => b.set_shading_mode(string(v, "id")?),
         "set_show_home_on_start" => b.set_show_home_on_start(boolean(v, "enabled")?),
         "set_show_tool_labels" => b.set_show_tool_labels(boolean(v, "enabled")?),

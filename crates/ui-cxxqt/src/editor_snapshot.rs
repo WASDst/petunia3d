@@ -243,6 +243,22 @@ fn gizmomodel(vm: &petunia_editor::GizmoModel) -> Value {
     obj.insert("view_origin_y".into(), json!(&vm.view_origin_y));
     obj.insert("cursor_screen".into(), json!(&vm.cursor_screen));
     obj.insert("cursor_visible".into(), json!(&vm.cursor_visible));
+    obj.insert("pivot_visible".into(), json!(&vm.pivot_visible));
+    obj.insert("pivot_screen".into(), json!(&vm.pivot_screen));
+    obj.insert(
+        "origin_marker_visible".into(),
+        json!(&vm.origin_marker_visible),
+    );
+    obj.insert(
+        "origin_marker_screen".into(),
+        json!(&vm.origin_marker_screen),
+    );
+    obj.insert("pivot_editing".into(), json!(&vm.pivot_editing));
+    obj.insert("x_ring_front".into(), json!(&vm.x_ring_front));
+    obj.insert("y_ring_front".into(), json!(&vm.y_ring_front));
+    obj.insert("z_ring_front".into(), json!(&vm.z_ring_front));
+    obj.insert("thickness".into(), json!(&vm.thickness));
+    obj.insert("size".into(), json!(&vm.size));
     Value::Object(obj)
 }
 fn measuretagmodel(vm: &petunia_editor::projection::MeasureTagModel) -> Value {
@@ -354,6 +370,16 @@ fn sceneitemmodel(vm: &petunia_editor::SceneItemModel) -> Value {
     obj.insert("tris".into(), json!(&vm.tris));
     obj.insert("has_custom_color".into(), json!(&vm.has_custom_color));
     obj.insert("custom_color_rgb".into(), json!(&vm.custom_color_rgb));
+    obj.insert("collection".into(), json!(&vm.collection));
+    Value::Object(obj)
+}
+fn scenegroupmodel(vm: &petunia_editor::SceneGroupModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("name".into(), json!(&vm.name));
+    obj.insert("count".into(), json!(&vm.count));
+    obj.insert("visible".into(), json!(&vm.visible));
+    obj.insert("locked".into(), json!(&vm.locked));
+    obj.insert("selected".into(), json!(&vm.selected));
     Value::Object(obj)
 }
 fn sectionstatemodel(vm: &petunia_editor::SectionStateModel) -> Value {
@@ -361,26 +387,6 @@ fn sectionstatemodel(vm: &petunia_editor::SectionStateModel) -> Value {
     obj.insert("id".into(), json!(&vm.id));
     obj.insert("pin_open".into(), json!(&vm.pin_open));
     obj.insert("open".into(), json!(&vm.open));
-    Value::Object(obj)
-}
-fn selectionoverlaymodel(vm: &petunia_editor::SelectionOverlayModel) -> Value {
-    let mut obj = Map::new();
-    obj.insert("visible".into(), json!(&vm.visible));
-    obj.insert("outline_commands".into(), json!(&vm.outline_commands));
-    obj.insert(
-        "active_outline_commands".into(),
-        json!(&vm.active_outline_commands),
-    );
-    obj.insert("point_commands".into(), json!(&vm.point_commands));
-    obj.insert(
-        "unselected_outline_commands".into(),
-        json!(&vm.unselected_outline_commands),
-    );
-    obj.insert(
-        "unselected_point_commands".into(),
-        json!(&vm.unselected_point_commands),
-    );
-    obj.insert("accent".into(), json!(&vm.accent));
     Value::Object(obj)
 }
 fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
@@ -420,6 +426,10 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert(
         "scene_items".into(),
         Value::Array(vm.scene_items.iter().map(sceneitemmodel).collect()),
+    );
+    obj.insert(
+        "scene_groups".into(),
+        Value::Array(vm.scene_groups.iter().map(scenegroupmodel).collect()),
     );
     obj.insert(
         "parts_items".into(),
@@ -501,6 +511,8 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         json!(&vm.active_selection_rgb),
     );
     obj.insert("selection_thickness".into(), json!(&vm.selection_thickness));
+    obj.insert("gizmo_size".into(), json!(&vm.gizmo_size));
+    obj.insert("gizmo_thickness".into(), json!(&vm.gizmo_thickness));
     obj.insert("selection_color_hex".into(), json!(&vm.selection_color_hex));
     obj.insert("show_xray".into(), json!(&vm.show_xray));
     obj.insert(
@@ -624,10 +636,6 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("gizmo".into(), gizmomodel(&vm.gizmo));
     obj.insert("cursor_visible".into(), json!(&vm.gizmo.cursor_visible));
     obj.insert("cursor_screen".into(), json!(&vm.gizmo.cursor_screen));
-    obj.insert(
-        "selection_overlay".into(),
-        selectionoverlaymodel(&vm.selection_overlay),
-    );
     obj.insert("add_menu_open".into(), json!(&vm.add_menu_open));
     obj.insert("inspector_width".into(), json!(&vm.inspector_width));
     obj.insert(
@@ -658,13 +666,6 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         "context_menu_can_move_down".into(),
         json!(&vm.context_menu_can_move_down),
     );
-    obj.insert(
-        "boolean_operand_name".into(),
-        json!(&vm.boolean_operand_name),
-    );
-    obj.insert("boolean_ready".into(), json!(&vm.boolean_ready));
-    obj.insert("boolean_keep_parts".into(), json!(&vm.boolean_keep_parts));
-    obj.insert("boolean_cleanup".into(), json!(&vm.boolean_cleanup));
     obj.insert(
         "reference_manager_open".into(),
         json!(&vm.reference_manager_open),
@@ -887,12 +888,6 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert(
         "label_action_subdivide".into(),
         json!(&vm.label_action_subdivide),
-    );
-    obj.insert("label_action_fuse".into(), json!(&vm.label_action_fuse));
-    obj.insert("label_action_cut".into(), json!(&vm.label_action_cut));
-    obj.insert(
-        "label_action_intersect".into(),
-        json!(&vm.label_action_intersect),
     );
     obj.insert("label_action_join".into(), json!(&vm.label_action_join));
     obj.insert("label_action_merge".into(), json!(&vm.label_action_merge));

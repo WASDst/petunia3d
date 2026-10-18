@@ -263,21 +263,14 @@ const PROJECTION: ToolDescriptor = tool(
 );
 const DECAL: ToolDescriptor = tool("decal", "Decal", "paint_decal", G::Surface, None);
 
-const DRAW_TOOLS: &[ToolDescriptor] = &[
-    SELECT,
-    MOVE,
-    ROTATE,
-    SCALE,
-    TRANSFORM,
-    DRAW_PROFILE,
-    SHAPE_BUILDER,
-    PUSH_PULL,
-    CURSOR,
-    MEASURE,
-];
+/// O rail da esquerda só tem transformar, 3D Cursor e criação (primitivas /
+/// perfis). Operações (extrude, inset, bevel, push/pull, loop cut, knife,
+/// slice, shape builder, medir) são contextuais: vivem na barra flutuante
+/// (`context_actions`), organizadas por grupo.
+const DRAW_TOOLS: &[ToolDescriptor] =
+    &[SELECT, MOVE, ROTATE, SCALE, TRANSFORM, DRAW_PROFILE, CURSOR];
 const POLY_TOOLS: &[ToolDescriptor] = &[
-    SELECT, LASSO, MOVE, ROTATE, SCALE, TRANSFORM, CREATE, POLY_PEN, EXTRUDE, INSET, BEVEL,
-    PUSH_PULL, LOOP_CUT, KNIFE, SLICE, CURSOR, MEASURE,
+    SELECT, LASSO, MOVE, ROTATE, SCALE, TRANSFORM, CREATE, POLY_PEN, CURSOR,
 ];
 const PAINT_TOOLS: &[ToolDescriptor] = &[
     PAINT_SELECT,
@@ -304,6 +297,13 @@ const PAINT_TOOLS: &[ToolDescriptor] = &[
 ];
 const SELECT_ONLY: &[ToolDescriptor] = &[SELECT];
 
+/// Ferramentas de operação do POLY: ativadas pela barra contextual.
+const POLY_OPERATIONS: &[ToolDescriptor] = &[
+    EXTRUDE, INSET, BEVEL, PUSH_PULL, LOOP_CUT, KNIFE, SLICE, MEASURE,
+];
+/// Ferramentas de operação do DRAW: ativadas pela barra contextual.
+const DRAW_OPERATIONS: &[ToolDescriptor] = &[SHAPE_BUILDER, PUSH_PULL, MEASURE];
+
 /// Ferramentas do contexto atual, na ordem do rail.
 pub fn tools_for(workspace: Workspace, mode: ModelingMode) -> &'static [ToolDescriptor] {
     match workspace {
@@ -316,9 +316,23 @@ pub fn tools_for(workspace: Workspace, mode: ModelingMode) -> &'static [ToolDesc
     }
 }
 
-/// Procura uma ferramenta pelo id no contexto.
+/// Ferramentas de operação do contexto (extrude, inset, bevel, push/pull, loop
+/// cut, knife, slice, shape builder, medir). Não aparecem no rail: a barra
+/// contextual as oferece, organizadas por grupo, sobre a seleção atual.
+pub fn operation_tools(workspace: Workspace, mode: ModelingMode) -> &'static [ToolDescriptor] {
+    match (workspace, mode) {
+        (Workspace::Model, ModelingMode::Draw) => DRAW_OPERATIONS,
+        (Workspace::Model, ModelingMode::Poly) => POLY_OPERATIONS,
+        _ => &[],
+    }
+}
+
+/// Procura uma ferramenta pelo id no contexto (rail ou operação contextual).
 pub fn find(workspace: Workspace, mode: ModelingMode, id: &str) -> Option<&'static ToolDescriptor> {
-    tools_for(workspace, mode).iter().find(|tool| tool.id == id)
+    tools_for(workspace, mode)
+        .iter()
+        .chain(operation_tools(workspace, mode))
+        .find(|tool| tool.id == id)
 }
 
 /// Todos os contextos cobertos (para testes e verificações estáticas).
@@ -389,19 +403,37 @@ mod tests {
     }
 
     #[test]
-    fn modeling_tools_missing_from_the_legacy_rail_are_reachable() {
+    fn the_rail_holds_only_transform_cursor_and_creation_tools() {
+        const OPERATIONS: [&str; 9] = [
+            "extrude",
+            "inset",
+            "bevel",
+            "push_pull",
+            "loop_cut",
+            "cut",
+            "slice",
+            "shape_builder",
+            "measure",
+        ];
+        for mode in [ModelingMode::Draw, ModelingMode::Poly] {
+            let ids: Vec<_> = tools_for(Workspace::Model, mode)
+                .iter()
+                .map(|tool| tool.id)
+                .collect();
+            for id in OPERATIONS {
+                assert!(
+                    !ids.contains(&id),
+                    "{mode:?}: a operação `{id}` pertence à barra contextual, não ao rail"
+                );
+            }
+            assert!(ids.contains(&"cursor"), "{mode:?} mantém o 3D Cursor");
+            assert!(ids.contains(&"transform"), "{mode:?} mantém Transformar");
+        }
         let poly: Vec<_> = tools_for(Workspace::Model, ModelingMode::Poly)
             .iter()
             .map(|tool| tool.id)
             .collect();
-        for id in ["extrude", "inset", "bevel", "loop_cut", "cut", "push_pull"] {
-            assert!(poly.contains(&id), "POLY deve oferecer `{id}`");
-        }
-        let draw: Vec<_> = tools_for(Workspace::Model, ModelingMode::Draw)
-            .iter()
-            .map(|tool| tool.id)
-            .collect();
-        assert!(draw.contains(&"push_pull") && draw.contains(&"draw_profile"));
+        assert!(poly.contains(&"primitive"), "POLY cria primitivas");
     }
 
     #[test]

@@ -23,10 +23,10 @@ use uuid::Uuid;
 
 use crate::Shading;
 use crate::frame::{
-    CameraMatrices, ComponentOverlays, DirtyRect, IDENTITY, OverlayFaceVertex, OverlayLine,
-    OverlayPoint, OwnedReference, OwnedRenderFrame, OwnedTexture, RenderEdge, RenderFrameInput,
-    RenderLight, RenderMesh, RenderObject, RenderOutline, RenderReferenceImage, RenderTexture,
-    RenderVertex, ViewportPalette, ViewportRenderSettings,
+    CameraMatrices, ComponentOverlays, DirtyRect, IDENTITY, OutlineEntry, OverlayFaceVertex,
+    OverlayLine, OverlayPoint, OwnedReference, OwnedRenderFrame, OwnedTexture, RenderEdge,
+    RenderFrameInput, RenderLight, RenderMesh, RenderObject, RenderOutline, RenderReferenceImage,
+    RenderTexture, RenderVertex, ViewportPalette, ViewportRenderSettings,
 };
 use crate::overlays::{OverlayShape, WorkplaneOverlay, edge_overlay_visible};
 use crate::scene::{self, RefPlane};
@@ -347,6 +347,9 @@ impl SceneExtractor {
             for value in asset.world_matrix().to_cols_array() {
                 components_key.f32(value);
             }
+            // A cor da parte também entra: trocar só a cor refaz os overlays.
+            let [r, g, b] = asset.effective_selection_overlay_color().unwrap_or([0; 3]);
+            components_key.mix(u64::from(u32::from_le_bytes([r, g, b, 1])));
         }
         let components_key = components_key.finish();
         if self.components_key != Some(components_key) {
@@ -722,24 +725,64 @@ fn rgb_f32(rgb: [u8; 3]) -> [f32; 3] {
 
 /// Contorno dos objetos selecionados: base em 62 % da cor de seleção e o ativo
 /// na cor da parte (ou da seleção).
+/// Cor do contorno de um objeto: a da própria parte (`selection_overlay_color`)
+/// ou a global. Os níveis seguem o papel: ativo pleno, selecionado mais escuro,
+/// hover discreto.
+fn outline_rgb(asset: &Asset, style: &ComponentStyle) -> [f32; 3] {
+    rgb_f32(
+        asset
+            .effective_selection_overlay_color()
+            .unwrap_or(style.selection_rgb),
+    )
+}
+
 fn resolve_outline(
     project: &Project,
     style: &ComponentStyle,
     selected: &[Uuid],
     active: Option<Uuid>,
 ) -> RenderOutline {
-    let base = rgb_f32(style.selection_rgb);
-    let active_rgb = rgb_f32(
-        project
-            .active()
-            .and_then(Asset::effective_selection_overlay_color)
-            .unwrap_or(style.selection_rgb),
-    );
+    let mut entries = Vec::with_capacity(selected.len() + 1);
+    let find = |id: Uuid| project.assets.iter().find(|asset| asset.id == id);
+    // Hover primeiro: qualquer seleção o cobre.
+    if style.domain == SelectionDomain::Object
+        && let HoverTarget::Object(index) = style.hover
+        && let Some(asset) = project.assets.get(index)
+        && asset.visible
+        && !selected.contains(&asset.id)
+    {
+        let rgb = outline_rgb(asset, style);
+        entries.push(OutlineEntry {
+            object_id: asset.id,
+            color: [
+                rgb[0] * 0.5 + 0.25,
+                rgb[1] * 0.5 + 0.25,
+                rgb[2] * 0.5 + 0.25,
+                1.0,
+            ],
+        });
+    }
+    let active = active.filter(|id| selected.contains(id));
+    for id in selected.iter().copied().filter(|id| Some(*id) != active) {
+        if let Some(asset) = find(id) {
+            let rgb = outline_rgb(asset, style);
+            entries.push(OutlineEntry {
+                object_id: id,
+                color: [rgb[0] * 0.62, rgb[1] * 0.62, rgb[2] * 0.62, 1.0],
+            });
+        }
+    }
+    if let Some(id) = active
+        && let Some(asset) = find(id)
+    {
+        let rgb = outline_rgb(asset, style);
+        entries.push(OutlineEntry {
+            object_id: id,
+            color: [rgb[0], rgb[1], rgb[2], 1.0],
+        });
+    }
     RenderOutline {
-        selected: selected.to_vec(),
-        active: active.filter(|id| selected.contains(id)),
-        color: [base[0] * 0.62, base[1] * 0.62, base[2] * 0.62, 1.0],
-        active_color: [active_rgb[0], active_rgb[1], active_rgb[2], 1.0],
+        entries,
         radius_px: style.thickness.clamp(1.0, 4.0),
     }
 }
@@ -1323,10 +1366,27 @@ mod tests {
         let id = project.assets[0].id;
         let style = ComponentStyle::default();
         let outline = resolve_outline(&project, &style, &[], Some(id));
-        assert_eq!(outline.active, None);
+        assert!(outline.entries.is_empty());
         let outline = resolve_outline(&project, &style, &[id], Some(id));
-        assert_eq!(outline.active, Some(id));
-        assert!(outline.color[0] < outline.active_color[0]);
+        assert_eq!(outline.entries.len(), 1);
+        assert_eq!(outline.entries[0].object_id, id);
+    }
+
+    #[test]
+    fn outline_uses_each_parts_own_color_and_the_active_one_last() {
+        let mut project = Project::new();
+        let first = project.assets[0].id;
+        project.add("Segundo", petunia_core::Mesh::cube(1.0));
+        let second = project.assets[1].id;
+        project.assets[0].selection_overlay_color = Some([255, 0, 0]);
+        project.assets[1].selection_overlay_color = Some([0, 0, 255]);
+        let style = ComponentStyle::default();
+        let outline = resolve_outline(&project, &style, &[first, second], Some(first));
+        assert_eq!(outline.entries.len(), 2);
+        assert_eq!(outline.entries[0].object_id, second);
+        assert!(outline.entries[0].color[2] > outline.entries[0].color[0]);
+        assert_eq!(outline.entries[1].object_id, first);
+        assert!(outline.entries[1].color[0] > outline.entries[1].color[2]);
     }
 
     #[test]

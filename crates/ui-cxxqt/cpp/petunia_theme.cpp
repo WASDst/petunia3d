@@ -150,6 +150,10 @@ int PetuniaTheme::controlHeight() const {
     return std::max(28, scaled(32));
 }
 
+int PetuniaTheme::compactControlHeight() const {
+    return std::max(28, controlHeight() - scaled(8));
+}
+
 int PetuniaTheme::fontPx(TextRole role) const {
     const int body = m_density == Density::Compact ? 13 : m_density == Density::Standard ? 14 : 15;
     // Texto operacional nunca abaixo de 12 px lógicos (U08), em qualquer escala.
@@ -176,7 +180,7 @@ int PetuniaTheme::iconPx() const {
 }
 
 int PetuniaTheme::railWidth() const {
-    return scaled(m_density == Density::Compact ? 44 : m_density == Density::Standard ? 48 : 52);
+    return scaled(m_density == Density::Compact ? 38 : m_density == Density::Standard ? 42 : 46);
 }
 
 QColor PetuniaTheme::axisColor(int axis) const {
@@ -297,9 +301,11 @@ QCheckBox:focus, QRadioButton:focus { color: @textPrimary@; }
 QMenuBar { background-color: transparent; color: @textPrimary@; }
 QMenuBar::item { padding: @s1@px @s2@px; border-radius: @radius@px; background: transparent; }
 QMenuBar::item:selected { background-color: @bgSurfaceHover@; }
-QMenu { background-color: @bgSurface@; border: 1px solid @borderStrong@; padding: @s1@px; }
-QMenu::item { padding: @s2@px @s5@px @s2@px @s3@px; border-radius: @radius@px; }
-QMenu::item:selected { background-color: @accent@; color: @textActive@; }
+QMenu { background-color: @bgSurface@; border: 1px solid @borderStrong@; border-radius: @radiusL@px; padding: @s1@px; }
+QMenu::item { padding: @s1@px @s5@px @s1@px @s2@px; margin: 1px 0; min-height: @compactH@px; border-radius: @radius@px; }
+QMenu::item:selected { background-color: @accentSoft@; color: @textPrimary@; }
+QMenu::icon { padding-left: @s1@px; }
+QMenu::indicator { width: @s4@px; height: @s4@px; }
 QMenu::item:disabled { color: @textMuted@; }
 QMenu::separator { height: 1px; background: @borderSubtle@; margin: @s1@px @s2@px; }
 
@@ -327,16 +333,16 @@ QWidget#PetuniaDrawerBar { background-color: @bgPanelHeader@; border-top: 1px so
 QFrame#PetuniaPropertySection { background: transparent; border: none; border-bottom: 1px solid @borderSubtle@; }
 QMenuBar#PetuniaMenuBar { background: transparent; }
 
-QToolButton[role="rail"] { background: transparent; border: none; border-radius: @radius@px; padding: 0 @s2@px; text-align: left; }
+QToolButton[role="rail"] { background: transparent; border: none; border-radius: @radius@px; padding: 0 @s1@px; min-height: @compactH@px; text-align: left; }
 QToolButton[role="rail"]:hover { background-color: @bgSurfaceHover@; }
 QToolButton[role="rail"]:checked { background-color: @accent@; color: @textActive@; }
 QToolButton[role="rail"]:focus { border: @ring@px solid @borderFocus@; padding: 0 @s2Ring@px; }
-QToolButton[role="header"] { background: transparent; border: 1px solid transparent; border-radius: @radius@px; padding: 0 @s2@px; }
+QToolButton[role="header"] { background: transparent; border: 1px solid transparent; border-radius: @radius@px; padding: 0 @s1@px; min-height: @compactH@px; }
 QToolButton[role="header"]:hover { background-color: @bgSurfaceHover@; }
 QToolButton[role="header"]:checked { background-color: @accentSoft@; border-color: @accent@; color: @textPrimary@; }
 QToolButton[role="header"]:focus { border: @ring@px solid @borderFocus@; padding: 0 @s2Ring@px; }
 QToolButton[role="header"]::menu-indicator { image: none; }
-QToolButton[role="sectionHeader"] { background-color: @bgPanelHeader@; border: none; border-radius: 0px; text-align: left; padding: 0 @s3@px; font-weight: 600; }
+QToolButton[role="sectionHeader"] { background-color: @bgPanelHeader@; border: none; border-radius: 0px; text-align: left; padding: 0 @s3@px; font-weight: 600; min-height: @compactH@px; }
 QToolButton[role="sectionHeader"]:checked { background-color: @bgPanelHeader@; color: @textPrimary@; }
 QToolButton[role="sectionHeader"]:hover { background-color: @bgSurfaceHover@; }
 QToolButton[role="sectionHeader"]:focus { border: @ring@px solid @borderFocus@; padding: 0 @s3Ring@px; }
@@ -348,6 +354,7 @@ QPushButton[segment="only"] { border-radius: @radius@px; }
 
 QTreeView, QListView, QTableView { background-color: @bgPanel@; alternate-background-color: @bgPanelHeader@; border: none; outline: 0; selection-background-color: @accentSoft@; selection-color: @textPrimary@; }
 QTreeView::item, QListView::item { min-height: @controlH@px; border-radius: @radius@px; }
+QTreeView[dense="true"]::item { min-height: @compactH@px; }
 QTreeView::item:hover, QListView::item:hover { background-color: @bgSurfaceHover@; }
 QTreeView::item:selected, QListView::item:selected { background-color: @accentSoft@; border-left: 3px solid @accent@; }
 QTreeView:focus, QListView:focus { border: @ring@px solid @borderFocus@; }
@@ -388,6 +395,7 @@ QSlider::handle:horizontal:focus { border: @ring@px solid @borderFocus@; }
         {QStringLiteral("fontCaption"), QString::number(fontPx(TextRole::Caption))},
         {QStringLiteral("fontTitle"), QString::number(fontPx(TextRole::Title))},
         {QStringLiteral("controlH"), QString::number(controlHeight() - 2)},
+        {QStringLiteral("compactH"), QString::number(compactControlHeight() - 2)},
         {QStringLiteral("radius"), QString::number(radius())},
         {QStringLiteral("radiusL"), QString::number(radius() + scaled(3))},
         {QStringLiteral("ring"), QString::number(focusRingWidth())},

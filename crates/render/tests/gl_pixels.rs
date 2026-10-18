@@ -1103,3 +1103,156 @@ fn painted_face_shows_in_render() {
         "a face pintada de vermelho precisa renderizar vermelho! antes {plain:?}, depois {painted:?}"
     );
 }
+
+/// Caixa envolvente (x0, y0, x1, y1) dos pixels que diferem de `base`.
+fn changed_bounds(a: &Image, b: &Image) -> Option<(u32, u32, u32, u32)> {
+    let mut bounds: Option<(u32, u32, u32, u32)> = None;
+    for y in 0..a.height {
+        for x in 0..a.width {
+            if a.at(x, y) != b.at(x, y) {
+                bounds = Some(match bounds {
+                    None => (x, y, x, y),
+                    Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+                });
+            }
+        }
+    }
+    bounds
+}
+
+/// Regressão: o contorno de seleção acompanha o objeto depois de mover/escalar
+/// (sem "fantasma" da transformação anterior).
+#[test]
+fn selection_outline_follows_the_object_after_a_transform_edit() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(240, 240) else {
+        return;
+    };
+    let mut project = cube_project();
+    let id = project.assets[0].id;
+    let camera = h.camera(ViewPreset::Front, 4.0);
+    let selected = [id];
+    // Estado inicial e depois da edição de transformação (como o painel faz).
+    for (position, scale) in [
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+        ([-0.17, 0.42, -0.16], [0.44, 2.75, 0.49]),
+        ([0.5, -0.3, 0.0], [1.5, 0.5, 1.0]),
+    ] {
+        project.assets[0].position = position;
+        project.assets[0].scale = scale;
+        let without = h.render(
+            |parts| parts.palette.background = [0.0; 4],
+            &project,
+            &camera,
+        );
+        let with = h.render(
+            |parts| {
+                parts.outlined = &selected;
+                parts.outlined_active = Some(id);
+                parts.palette.background = [0.0; 4];
+            },
+            &project,
+            &camera,
+        );
+        let background = Image {
+            pixels: without
+                .at(0, 0)
+                .repeat((without.width * without.height) as usize),
+            width: without.width,
+            height: without.height,
+        };
+        let (sx0, sy0, sx1, sy1) = changed_bounds(&without, &background).expect("o objeto aparece");
+        let (ox0, oy0, ox1, oy1) = changed_bounds(&without, &with).expect("o contorno aparece");
+        let slack = 6;
+        assert!(
+            ox0 + slack >= sx0 && oy0 + slack >= sy0 && ox1 <= sx1 + slack && oy1 <= sy1 + slack,
+            "contorno {:?} fora da silhueta {:?} com escala {scale:?}",
+            (ox0, oy0, ox1, oy1),
+            (sx0, sy0, sx1, sy1)
+        );
+        assert!(
+            ox0 <= sx0 + slack && oy0 <= sy0 + slack && ox1 + slack >= sx1 && oy1 + slack >= sy1,
+            "contorno {:?} não cobre a silhueta {:?} com escala {scale:?}",
+            (ox0, oy0, ox1, oy1),
+            (sx0, sy0, sx1, sy1)
+        );
+    }
+}
+
+/// Pixels que mudaram entre duas imagens: (total, dominados pelo vermelho).
+fn changed_pixels(base: &Image, other: &Image) -> (usize, usize) {
+    let mut total = 0;
+    let mut red = 0;
+    for y in 0..base.height {
+        for x in 0..base.width {
+            if base.at(x, y) != other.at(x, y) {
+                total += 1;
+                let [r, g, b, _] = other.at(x, y);
+                if r > g.saturating_add(40) && r > b.saturating_add(40) {
+                    red += 1;
+                }
+            }
+        }
+    }
+    (total, red)
+}
+
+/// O contorno usa a cor de seleção da própria parte (não a global), no ativo e
+/// nos demais selecionados; o hover desenha um contorno discreto sem selecionar.
+#[test]
+fn outline_uses_each_parts_selection_color_and_draws_hover() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(200, 120) else {
+        return;
+    };
+    let mut project = cube_project();
+    project.assets[0].selection_overlay_color = Some([255, 0, 0]);
+    let id = project.assets[0].id;
+    let camera = h.camera(ViewPreset::Front, 3.0);
+    let selected = [id];
+    let plain = h.render(
+        |parts| parts.palette.background = [0.0; 4],
+        &project,
+        &camera,
+    );
+    let active = h.render(
+        |parts| {
+            parts.outlined = &selected;
+            parts.outlined_active = Some(id);
+            parts.palette.background = [0.0; 4];
+        },
+        &project,
+        &camera,
+    );
+    let (total, red) = changed_pixels(&plain, &active);
+    assert!(total > 0, "o contorno do ativo aparece");
+    assert!(
+        red * 4 >= total * 3,
+        "o contorno segue a cor da parte (vermelha): {red} de {total} pixels"
+    );
+
+    // Selecionado, mas não ativo: variante mais escura da mesma cor da parte.
+    let secondary = h.render(
+        |parts| {
+            parts.outlined = &selected;
+            parts.outlined_active = None;
+            parts.palette.background = [0.0; 4];
+        },
+        &project,
+        &camera,
+    );
+    let (total, red) = changed_pixels(&plain, &secondary);
+    assert!(total > 0 && red * 4 >= total * 3, "{red} de {total}");
+
+    // Hover sem seleção: aparece um contorno.
+    let hovered = h.render(
+        |parts| {
+            parts.components.hover = HoverTarget::Object(0);
+            parts.palette.background = [0.0; 4];
+        },
+        &project,
+        &camera,
+    );
+    let (hover_total, _) = changed_pixels(&plain, &hovered);
+    assert!(hover_total > 0, "o hover do objeto desenha um contorno");
+}

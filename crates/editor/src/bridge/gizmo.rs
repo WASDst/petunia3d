@@ -69,7 +69,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         // View Roll para a ferramenta Rotate (anel perimetral externo a ~113px)
         if active == "rotate"
-            && (dist_from_origin - projection::GIZMO_VIEW_ROLL_RADIUS).abs()
+            && (dist_from_origin - projection::gizmo_view_roll_radius(&self.state)).abs()
                 <= projection::GIZMO_RING_HIT_HALF_WIDTH
         {
             return Some(GizmoTarget {

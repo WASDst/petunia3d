@@ -35,8 +35,8 @@ class PetuniaViewportHeader : public QWidget {
     void resizeEvent(QResizeEvent *event) override;
 
   private:
-    QToolButton *makeMenuButton(const QString &icon, const QString &label, const QString &accessible);
-    QToolButton *makeToggle(const QString &icon, const QString &label, const QString &tip);
+    QToolButton *makeMenuButton(const QString &icon, const QString &accessible);
+    QToolButton *makeToggle(const QString &icon, const QString &tip);
     void buildDisplayMenu();
     void buildOverlaysMenu();
     void buildCameraMenu();

@@ -811,14 +811,6 @@ impl AppState {
     }
 
     #[inline]
-    pub fn apply_boolean(
-        &mut self,
-        op: petunia_mesh::boolean::BooleanOp,
-    ) -> Result<usize, petunia_mesh::boolean::BooleanError> {
-        self.in_context(|ctx| ctx.apply_boolean(op))
-    }
-
-    #[inline]
     pub fn apply_solid_shape_builder(
         &mut self,
         explicit_operand: Option<uuid::Uuid>,
@@ -898,9 +890,23 @@ impl AppState {
         self.in_context(|ctx| ctx.contextual_push_pull(target, distance))
     }
 
+    /// Outro objeto selecionado, distinto do ativo: o operando implícito das
+    /// operações de dois objetos (Join, Shape Builder sólido).
     #[inline]
-    pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
-        self.in_context(|ctx| ctx.join_active_with_operand())
+    pub fn second_selected_asset(&self) -> Option<uuid::Uuid> {
+        let view = self.view();
+        let active = view.document.active().map(|asset| asset.id);
+        view.editor
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .find(|id| Some(*id) != active && view.document.assets.iter().any(|a| a.id == *id))
+    }
+
+    #[inline]
+    pub fn join_selected_into_active(&mut self) -> Result<usize, &'static str> {
+        self.in_context(|ctx| ctx.join_selected_into_active())
     }
 
     #[inline]

@@ -93,9 +93,17 @@ impl Command for SolidShapeEditCmd {
         if state.document.active_mesh().is_none() {
             return Err("No active mesh");
         }
-        let operand = self.operand.or(state.editor.tools.boolean_operand);
+        let operand = self.operand.or_else(|| {
+            let active = state.document.active().map(|asset| asset.id);
+            state
+                .selection
+                .assets
+                .iter()
+                .copied()
+                .find(|id| Some(*id) != active)
+        });
         let Some(operand) = operand else {
-            return Err("Choose a boolean operand first");
+            return Err("Select a second object first");
         };
         if !state
             .document

@@ -953,6 +953,82 @@ mod contextual_selection_tests {
         assert_eq!(b.state.project.undo.depth(), depth);
     }
 
+    fn reach(g: &GizmoModel) -> f32 {
+        ((g.x_end[0] - g.origin_x).powi(2) + (g.x_end[1] - g.origin_y).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn gizmo_follows_the_size_and_thickness_preferences() {
+        let mut b = bridge();
+        let default = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!((default.size - 72.0).abs() < 1.0e-3);
+        assert!(b.set_gizmo_size(120.0));
+        assert!(b.set_gizmo_thickness(4.0));
+        let big = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!((big.size - 120.0).abs() < 1.0e-3);
+        assert!((big.thickness - 4.0).abs() < 1.0e-3);
+        let ratio = reach(&big) / reach(&default);
+        assert!(
+            (ratio - 120.0 / 72.0).abs() < 0.02,
+            "a haste cresce na proporção do tamanho: {ratio}"
+        );
+        // O hit-test usa a mesma geometria do desenho.
+        let at = big.x_end;
+        assert!(b.gizmo_target_at(at[0], at[1]).is_some());
+        // Valores fora da faixa são limitados; não finitos são recusados.
+        assert!(!b.set_gizmo_size(f32::NAN));
+        assert!(!b.set_gizmo_thickness(f32::INFINITY));
+        assert!(b.set_gizmo_size(9999.0));
+        assert_eq!(b.state.ui.gizmo_size, 160.0);
+        assert!(b.set_gizmo_thickness(0.0));
+        assert_eq!(b.state.ui.gizmo_thickness, 1.0);
+    }
+
+    #[test]
+    fn rotation_rings_publish_the_camera_facing_arcs() {
+        let mut b = bridge();
+        b.apply(UiIntent::SetActiveTool("rotate".into()));
+        let g = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        let points = |commands: &str| {
+            commands
+                .split_whitespace()
+                .filter(|token| token.parse::<f32>().is_ok())
+                .count()
+                / 2
+        };
+        for (ring, front) in [
+            (&g.x_commands, &g.x_ring_front),
+            (&g.y_commands, &g.y_ring_front),
+            (&g.z_commands, &g.z_ring_front),
+        ] {
+            assert!(!front.is_empty(), "todo anel tem um lado voltado à câmera");
+            assert!(
+                points(front) < points(ring),
+                "o lado da câmera é só parte do anel ({} de {})",
+                points(front),
+                points(ring)
+            );
+        }
+    }
+
+    #[test]
+    fn pivot_and_origin_markers_follow_the_active_object() {
+        let mut b = bridge();
+        let g = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(g.pivot_visible && g.origin_marker_visible);
+        assert!(
+            (g.pivot_screen[0] - g.origin_x).abs() < 1.0e-3,
+            "o gizmo nasce no pivô"
+        );
+        assert!(!g.pivot_editing);
+        assert!(b.toggle_edit_pivot());
+        assert!(projection::compute_gizmo(&b.state, 800.0, 600.0).pivot_editing);
+        // Sem objeto ativo não há marcador.
+        b.state.project.assets.clear();
+        let empty = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(!empty.pivot_visible && !empty.origin_marker_visible);
+    }
+
     #[test]
     fn select_gizmo_drag_uses_the_existing_transaction_and_cancel_restores_source() {
         let mut b = bridge();

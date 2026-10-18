@@ -2113,7 +2113,17 @@ impl Mesh {
                             clean_uvs.pop();
                         }
 
-                        if clean_verts.len() >= 3 {
+                        // A fusão só vale se o polígono resultante for simples: duas
+                        // faces que já dividem outro vértice/aresta (por exemplo, depois
+                        // de dissolver uma aresta vizinha) fundiriam num polígono com
+                        // vértice repetido ("gravata"), que quebra a malha. Nesse caso a
+                        // aresta fica como está.
+                        let simple = {
+                            let mut seen =
+                                std::collections::HashSet::with_capacity(clean_verts.len());
+                            clean_verts.iter().all(|vertex| seen.insert(*vertex))
+                        };
+                        if clean_verts.len() >= 3 && simple {
                             self.faces[f1_idx].verts = clean_verts;
                             self.faces[f1_idx].uv = clean_uvs;
                             self.faces[f1_idx].selected = true;

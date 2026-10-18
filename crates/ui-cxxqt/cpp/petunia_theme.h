@@ -38,6 +38,9 @@ public:
 
     // ── Métricas (px lógicos) ────────────────────────────────────────────
     int controlHeight() const;
+    /// Altura de botões de ferramenta e de linhas densas (cabeçalho da vista, rail,
+    /// barra contextual, listas). Nunca abaixo do alvo mínimo de 28 px (WCAG 2.5.8).
+    int compactControlHeight() const;
     int fontPx(TextRole role) const;
     /// `step` em unidades de espaçamento (0, 1, 2, 3, 4, 6, 8…).
     int space(int step) const;

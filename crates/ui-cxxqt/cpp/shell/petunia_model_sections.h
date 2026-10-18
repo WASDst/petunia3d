@@ -20,18 +20,11 @@ class PetuniaTransformForm : public PetuniaBoundForm {
     explicit PetuniaTransformForm(QWidget *parent = nullptr);
 };
 
-/// Seção Geometria: resumo da seleção, estatísticas e sombreamento da superfície.
+/// Seção Sombreamento: facetado ou suave (resumo e estatísticas ficam na barra de status).
 class PetuniaGeometryForm : public PetuniaBoundForm {
     Q_OBJECT
   public:
     explicit PetuniaGeometryForm(QWidget *parent = nullptr);
-
-  protected:
-    void afterSync(const QJsonObject &state) override;
-
-  private:
-    QLabel *m_selection{nullptr};
-    QLabel *m_stats{nullptr};
 };
 
 /// Seção Material: slots, cor base e parâmetros PBR do material ativo.
@@ -43,13 +36,6 @@ class PetuniaMaterialForm : public PetuniaBoundForm {
   signals:
     /// Abrir o editor de nós no grafo do material ativo (O05).
     void nodeEditorRequested();
-};
-
-/// Booleana em modo direto (interino até o nó Boolean do Operation Graph, O02).
-class PetuniaBooleanForm : public PetuniaBoundForm {
-    Q_OBJECT
-  public:
-    explicit PetuniaBooleanForm(QWidget *parent = nullptr);
 };
 
 /// Perfil 2D e volume por extrusão/revolução/sweep (workspace DRAW).

@@ -43,10 +43,6 @@
     "pt-BR": "Modificadores",
     "en": "Modifiers"
   },
-  "Booleans": {
-    "pt-BR": "Booleans",
-    "en": "Booleans"
-  },
   "Vista": {
     "pt-BR": "Vista",
     "en": "View"
@@ -355,25 +351,9 @@
     "pt-BR": "Restaurar ações rápidas",
     "en": "Reset quick actions"
   },
-  "Operando": {
-    "pt-BR": "Operando",
-    "en": "Operand"
-  },
   "Limpeza": {
     "pt-BR": "Limpeza",
     "en": "Cleanup"
-  },
-  "Manter partes": {
-    "pt-BR": "Manter partes",
-    "en": "Keep parts"
-  },
-  "Juntar": {
-    "pt-BR": "Juntar",
-    "en": "Join"
-  },
-  "Limpar operando": {
-    "pt-BR": "Limpar operando",
-    "en": "Clear operand"
   },
   "Navegação planar": {
     "pt-BR": "Navegação planar",
@@ -2907,10 +2887,6 @@
     "pt-BR": "Bloquear / desbloquear\tL",
     "en": "Lock / unlock\tL"
   },
-  "Booleana (direta)": {
-    "pt-BR": "Booleana (direta)",
-    "en": "Boolean (direct)"
-  },
   "Caixa delimitadora": {
     "pt-BR": "Caixa delimitadora",
     "en": "Bounding box"
@@ -5162,5 +5138,321 @@
   "Selecione um osso de uma criatura primeiro": {
     "pt-BR": "Selecione um osso de uma criatura primeiro",
     "en": "Select a creature bone first"
+  },
+  "Tamanho dos gizmos (px)": {
+    "pt-BR": "Tamanho dos gizmos (px)",
+    "en": "Gizmo size (px)"
+  },
+  "Espessura dos gizmos": {
+    "pt-BR": "Espessura dos gizmos",
+    "en": "Gizmo thickness"
+  },
+  "Projeção e enquadramento": {
+    "pt-BR": "Projeção e enquadramento",
+    "en": "Projection and framing"
+  },
+  "Perspectiva": {
+    "pt-BR": "Perspectiva",
+    "en": "Perspective"
+  },
+  "Ortográfica": {
+    "pt-BR": "Ortográfica",
+    "en": "Orthographic"
+  },
+  "Restaurar câmera": {
+    "pt-BR": "Restaurar câmera",
+    "en": "Reset camera"
+  },
+  "Editando pivô · arraste o gizmo · Esc sai": {
+    "pt-BR": "Editando pivô · arraste o gizmo · Esc sai",
+    "en": "Editing pivot · drag the gizmo · Esc exits"
+  },
+  "FRENTE": {
+    "pt-BR": "FRENTE",
+    "en": "FRONT"
+  },
+  "TRÁS": {
+    "pt-BR": "TRÁS",
+    "en": "BACK"
+  },
+  "DIREITA": {
+    "pt-BR": "DIREITA",
+    "en": "RIGHT"
+  },
+  "ESQUERDA": {
+    "pt-BR": "ESQUERDA",
+    "en": "LEFT"
+  },
+  "TOPO": {
+    "pt-BR": "TOPO",
+    "en": "TOP"
+  },
+  "BASE": {
+    "pt-BR": "BASE",
+    "en": "BOTTOM"
+  },
+  "N": {
+    "pt-BR": "N",
+    "en": "N"
+  },
+  "L": {
+    "pt-BR": "L",
+    "en": "E"
+  },
+  "S": {
+    "pt-BR": "S",
+    "en": "S"
+  },
+  "O": {
+    "pt-BR": "O",
+    "en": "W"
+  },
+  "mínimos": {
+    "pt-BR": "mínimos",
+    "en": "minimums"
+  },
+  "centros": {
+    "pt-BR": "centros",
+    "en": "centers"
+  },
+  "máximos": {
+    "pt-BR": "máximos",
+    "en": "maximums"
+  },
+  "Mín.": {
+    "pt-BR": "Mín.",
+    "en": "Min."
+  },
+  "Centro": {
+    "pt-BR": "Centro",
+    "en": "Center"
+  },
+  "Máx.": {
+    "pt-BR": "Máx.",
+    "en": "Max."
+  },
+  "Eixo %1": {
+    "pt-BR": "Eixo %1",
+    "en": "%1 axis"
+  },
+  "Alinhar os %1 no eixo %2": {
+    "pt-BR": "Alinhar os %1 no eixo %2",
+    "en": "Align the %1 on the %2 axis"
+  },
+  "Distribuir os objetos com espaços iguais no eixo %1": {
+    "pt-BR": "Distribuir os objetos com espaços iguais no eixo %1",
+    "en": "Distribute the objects with equal gaps on the %1 axis"
+  },
+  "%1 objetos selecionados. Alinha na caixa da seleção.": {
+    "pt-BR": "%1 objetos selecionados. Alinha na caixa da seleção.",
+    "en": "%1 objects selected. Aligns to the selection box."
+  },
+  "Selecione 2 ou mais objetos para alinhar. Distribuir pede 3.": {
+    "pt-BR": "Selecione 2 ou mais objetos para alinhar. Distribuir pede 3.",
+    "en": "Select 2 or more objects to align. Distribute needs 3."
+  },
+  "Distribuir pede 3 ou mais objetos": {
+    "pt-BR": "Distribuir pede 3 ou mais objetos",
+    "en": "Distribute needs 3 or more objects"
+  },
+  "Alinhar pede 2 ou mais objetos": {
+    "pt-BR": "Alinhar pede 2 ou mais objetos",
+    "en": "Align needs 2 or more objects"
+  },
+  "Cena": {
+    "pt-BR": "Cena",
+    "en": "Scene"
+  },
+  "Forma": {
+    "pt-BR": "Forma",
+    "en": "Shape"
+  },
+  "Topologia": {
+    "pt-BR": "Topologia",
+    "en": "Topology"
+  },
+  "Perfil e formas": {
+    "pt-BR": "Perfil e formas",
+    "en": "Profile and shapes"
+  },
+  "Utilitários": {
+    "pt-BR": "Utilitários",
+    "en": "Utilities"
+  },
+  "Editar pivô: arraste o gizmo para mover só a origem  (Insert)": {
+    "pt-BR": "Editar pivô: arraste o gizmo para mover só a origem  (Insert)",
+    "en": "Edit pivot: drag the gizmo to move only the origin  (Insert)"
+  },
+  "Novo": {
+    "pt-BR": "Novo",
+    "en": "New"
+  },
+  "Atribuir": {
+    "pt-BR": "Atribuir",
+    "en": "Assign"
+  },
+  "Criar albedo": {
+    "pt-BR": "Criar albedo",
+    "en": "Create albedo"
+  },
+  "Remover albedo": {
+    "pt-BR": "Remover albedo",
+    "en": "Remove albedo"
+  },
+  "Suavizar": {
+    "pt-BR": "Suavizar",
+    "en": "Smooth"
+  },
+  "Extrusão": {
+    "pt-BR": "Extrusão",
+    "en": "Extrusion"
+  },
+  "Sweep": {
+    "pt-BR": "Sweep",
+    "en": "Sweep"
+  },
+  "Booleana": {
+    "pt-BR": "Booleana",
+    "en": "Boolean"
+  },
+  "Espelho": {
+    "pt-BR": "Espelho",
+    "en": "Mirror"
+  },
+  "Simetria": {
+    "pt-BR": "Simetria",
+    "en": "Symmetry"
+  },
+  "Entrada": {
+    "pt-BR": "Entrada",
+    "en": "Input"
+  },
+  "Cor": {
+    "pt-BR": "Cor",
+    "en": "Color"
+  },
+  "Saída": {
+    "pt-BR": "Saída",
+    "en": "Output"
+  },
+  "Nó desconhecido (preservado)": {
+    "pt-BR": "Nó desconhecido (preservado)",
+    "en": "Unknown node (preserved)"
+  },
+  "nenhuma": {
+    "pt-BR": "nenhuma",
+    "en": "none"
+  },
+  "Entradas": {
+    "pt-BR": "Entradas",
+    "en": "Inputs"
+  },
+  "Saídas": {
+    "pt-BR": "Saídas",
+    "en": "Outputs"
+  },
+  "Agrupar seleção  (Ctrl+G)": {
+    "pt-BR": "Agrupar seleção  (Ctrl+G)",
+    "en": "Group selection  (Ctrl+G)"
+  },
+  "Alinhar e distribuir…": {
+    "pt-BR": "Alinhar e distribuir…",
+    "en": "Align and distribute…"
+  },
+  "Sair do isolamento  (Shift+H)": {
+    "pt-BR": "Sair do isolamento  (Shift+H)",
+    "en": "Leave isolation  (Shift+H)"
+  },
+  "Isolar: mostrar só esta parte  (Shift+H)": {
+    "pt-BR": "Isolar: mostrar só esta parte  (Shift+H)",
+    "en": "Isolate: show only this part  (Shift+H)"
+  },
+  "Isolado": {
+    "pt-BR": "Isolado",
+    "en": "Isolated"
+  },
+  "Não isolado": {
+    "pt-BR": "Não isolado",
+    "en": "Not isolated"
+  },
+  "Grupo com %1 parte(s)": {
+    "pt-BR": "Grupo com %1 parte(s)",
+    "en": "Group with %1 part(s)"
+  },
+  "Grupo visível — clique para ocultar": {
+    "pt-BR": "Grupo visível — clique para ocultar",
+    "en": "Group visible — click to hide"
+  },
+  "Grupo oculto — clique para exibir": {
+    "pt-BR": "Grupo oculto — clique para exibir",
+    "en": "Group hidden — click to show"
+  },
+  "Grupo bloqueado — clique para liberar": {
+    "pt-BR": "Grupo bloqueado — clique para liberar",
+    "en": "Group locked — click to unlock"
+  },
+  "Grupo livre — clique para bloquear": {
+    "pt-BR": "Grupo livre — clique para bloquear",
+    "en": "Group unlocked — click to lock"
+  },
+  "Isolar o grupo": {
+    "pt-BR": "Isolar o grupo",
+    "en": "Isolate the group"
+  },
+  "Selecionar os membros": {
+    "pt-BR": "Selecionar os membros",
+    "en": "Select the members"
+  },
+  "Renomear grupo\tF2": {
+    "pt-BR": "Renomear grupo\tF2",
+    "en": "Rename group\tF2"
+  },
+  "Alternar visibilidade do grupo": {
+    "pt-BR": "Alternar visibilidade do grupo",
+    "en": "Toggle group visibility"
+  },
+  "Bloquear / desbloquear o grupo": {
+    "pt-BR": "Bloquear / desbloquear o grupo",
+    "en": "Lock / unlock the group"
+  },
+  "Desagrupar\tCtrl+Shift+G": {
+    "pt-BR": "Desagrupar\tCtrl+Shift+G",
+    "en": "Ungroup\tCtrl+Shift+G"
+  },
+  "Sair do isolamento\tShift+H": {
+    "pt-BR": "Sair do isolamento\tShift+H",
+    "en": "Leave isolation\tShift+H"
+  },
+  "Agrupar\tCtrl+G": {
+    "pt-BR": "Agrupar\tCtrl+G",
+    "en": "Group\tCtrl+G"
+  },
+  "Selecione 2 ou mais partes": {
+    "pt-BR": "Selecione 2 ou mais partes",
+    "en": "Select 2 or more parts"
+  },
+  "Align": {
+    "pt-BR": "Alinhar",
+    "en": "Align"
+  },
+  "Group": {
+    "pt-BR": "Agrupar",
+    "en": "Group"
+  },
+  "Ungroup": {
+    "pt-BR": "Desagrupar",
+    "en": "Ungroup"
+  },
+  "Gerador": {
+    "pt-BR": "Gerador",
+    "en": "Generator"
+  },
+  "Gizmos": {
+    "pt-BR": "Gizmos",
+    "en": "Gizmos"
+  },
+  "UV": {
+    "pt-BR": "UV",
+    "en": "UV"
   }
 }

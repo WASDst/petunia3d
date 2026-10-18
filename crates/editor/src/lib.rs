@@ -130,7 +130,6 @@ pub struct ViewportRenderState {
     pub show_grid: bool,
     /// Componente sob o cursor (preselection).
     pub hover: petunia_core::HoverTarget,
-    pub boolean_operand: Option<uuid::Uuid>,
     /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
     pub studio_light_follows_camera: bool,
     /// Matcap procedural no Solid (preferência).
@@ -159,7 +158,6 @@ impl Default for ViewportRenderState {
             selection_thickness: 2.0,
             show_grid: true,
             hover: petunia_core::HoverTarget::None,
-            boolean_operand: None,
             studio_light_follows_camera: true,
             matcap: false,
             ambient_occlusion: false,
@@ -236,6 +234,22 @@ pub struct GizmoModel {
     /// Projeção em tela do 3D Cursor para o overlay da viewport.
     pub cursor_screen: [f32; 2],
     pub cursor_visible: bool,
+    /// Pivô de transformação projetado (ponto médio, caixa, cursor...): marcador
+    /// próprio, distinto do 3D Cursor e do gizmo.
+    pub pivot_visible: bool,
+    pub pivot_screen: [f32; 2],
+    /// Origem do objeto ativo projetada (pode diferir do pivô).
+    pub origin_marker_visible: bool,
+    pub origin_marker_screen: [f32; 2],
+    /// O modo Editar pivô está ligado: o gizmo move só a origem.
+    pub pivot_editing: bool,
+    /// Trechos dos anéis de rotação voltados para a câmera (profundidade).
+    pub x_ring_front: String,
+    pub y_ring_front: String,
+    pub z_ring_front: String,
+    /// Espessura do traço e comprimento das hastes (preferências do gizmo).
+    pub thickness: f32,
+    pub size: f32,
 }
 
 impl GizmoModel {
@@ -259,6 +273,9 @@ impl GizmoModel {
             &mut self.plane_xz_commands,
             &mut self.plane_xy_commands,
             &mut self.view_roll_commands,
+            &mut self.x_ring_front,
+            &mut self.y_ring_front,
+            &mut self.z_ring_front,
         ] {
             commands.clear();
         }

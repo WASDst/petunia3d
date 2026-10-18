@@ -18,6 +18,21 @@ pub struct SceneItemModel {
     pub tris: usize,
     pub has_custom_color: bool,
     pub custom_color_rgb: [u8; 3],
+    /// Grupo da Estrutura a que o objeto pertence (vazio = fora de grupos).
+    pub collection: String,
+}
+
+/// Grupo (collection) da Estrutura, com o resumo dos objetos que contém.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneGroupModel {
+    pub name: String,
+    pub count: usize,
+    /// Todos os objetos do grupo estão visíveis.
+    pub visible: bool,
+    /// Todos os objetos do grupo estão bloqueados.
+    pub locked: bool,
+    /// Todos os objetos do grupo estão selecionados.
+    pub selected: bool,
 }
 
 /// Prefab da biblioteca já resumido para a grade do Asset Library.
@@ -282,6 +297,7 @@ pub struct ShellViewModel {
     pub scale: [f32; 3],
     pub cursor_3d: [f32; 3],
     pub scene_items: Vec<SceneItemModel>,
+    pub scene_groups: Vec<SceneGroupModel>,
     pub parts_items: Vec<SceneItemModel>,
     pub parts_query: String,
     pub parts_selected_only: bool,
@@ -311,6 +327,8 @@ pub struct ShellViewModel {
     pub selection_rgb: [u8; 3],
     pub active_selection_rgb: [u8; 3],
     pub selection_thickness: f32,
+    pub gizmo_size: f32,
+    pub gizmo_thickness: f32,
     pub selection_color_hex: String,
     pub show_xray: bool,
     pub show_face_orientation: bool,
@@ -387,7 +405,6 @@ pub struct ShellViewModel {
     pub gizmo_center_hover: bool,
     pub asset_library_visible: bool,
     pub gizmo: GizmoModel,
-    pub selection_overlay: SelectionOverlayModel,
     pub add_menu_open: bool,
     pub inspector_width: f32,
     pub asset_library_height: f32,
@@ -410,10 +427,6 @@ pub struct ShellViewModel {
     /// Indicates if the item can be moved down in the hierarchy.
     /// Indica se o item pode ser movido para baixo na hierarquia.
     pub context_menu_can_move_down: bool,
-    pub boolean_operand_name: String,
-    pub boolean_ready: bool,
-    pub boolean_keep_parts: bool,
-    pub boolean_cleanup: bool,
     // Reference Image Manager (P3D-013)
     pub reference_manager_open: bool,
     pub reference_slots: Vec<ReferenceSlotViewModel>,
@@ -500,9 +513,6 @@ pub struct ShellViewModel {
     pub label_quick_action_reset: String,
     pub label_quick_action_done: String,
     pub label_action_subdivide: String,
-    pub label_action_fuse: String,
-    pub label_action_cut: String,
-    pub label_action_intersect: String,
     pub label_action_join: String,
     pub label_action_merge: String,
     pub label_action_slice: String,
@@ -913,6 +923,26 @@ impl ShellViewModel {
                 custom_color_rgb: asset
                     .selection_overlay_color
                     .unwrap_or(state.ui.selection_rgb),
+                collection: asset.collection.clone().unwrap_or_default(),
+            })
+            .collect();
+        let scene_groups: Vec<SceneGroupModel> = state
+            .project
+            .project
+            .collections
+            .iter()
+            .map(|name| {
+                let members: Vec<&SceneItemModel> = scene_items
+                    .iter()
+                    .filter(|item| &item.collection == name)
+                    .collect();
+                SceneGroupModel {
+                    name: name.clone(),
+                    count: members.len(),
+                    visible: !members.is_empty() && members.iter().all(|item| item.visible),
+                    locked: !members.is_empty() && members.iter().all(|item| item.locked),
+                    selected: !members.is_empty() && members.iter().all(|item| item.selected),
+                }
             })
             .collect();
 
@@ -1318,6 +1348,7 @@ impl ShellViewModel {
             scale: [1.0, 1.0, 1.0],
             cursor_3d: state.session.cursor_3d,
             scene_items,
+            scene_groups,
             parts_items: Vec::new(),
             parts_query: String::new(),
             parts_selected_only: false,
@@ -1363,6 +1394,8 @@ impl ShellViewModel {
                 .and_then(|a| a.effective_selection_overlay_color())
                 .unwrap_or(state.ui.selection_rgb),
             selection_thickness: state.ui.selection_thickness,
+            gizmo_size: state.ui.gizmo_size,
+            gizmo_thickness: state.ui.gizmo_thickness,
             selection_color_hex: format!(
                 "#{:02X}{:02X}{:02X}",
                 state.ui.selection_rgb[0], state.ui.selection_rgb[1], state.ui.selection_rgb[2]
@@ -1439,7 +1472,6 @@ impl ShellViewModel {
             gizmo_center_hover: false,
             asset_library_visible: false,
             gizmo: GizmoModel::default(),
-            selection_overlay: SelectionOverlayModel::default(),
             add_menu_open: false,
             inspector_width: state.ui.right_width,
             asset_library_height: state.ui.shell_asset_library_height,
@@ -1455,10 +1487,6 @@ impl ShellViewModel {
             context_menu_isolated: false,
             context_menu_can_move_up: false,
             context_menu_can_move_down: false,
-            boolean_operand_name: String::new(),
-            boolean_ready: false,
-            boolean_keep_parts: false,
-            boolean_cleanup: true,
             primitive_active,
             active_asset_is_parametric,
             primitive_kind,
@@ -1539,9 +1567,6 @@ impl ShellViewModel {
             label_quick_action_reset: String::new(),
             label_quick_action_done: String::new(),
             label_action_subdivide: String::new(),
-            label_action_fuse: String::new(),
-            label_action_cut: String::new(),
-            label_action_intersect: String::new(),
             label_action_join: String::new(),
             label_action_merge: String::new(),
             label_action_slice: String::new(),
@@ -2020,30 +2045,6 @@ pub struct UvEditorModel {
     /// Ilhas UV da malha ativa (lista da Estrutura no workspace UV), limitada
     /// a `UV_ISLAND_ROWS_MAX` linhas.
     pub islands: Vec<UvIslandRowModel>,
-}
-
-/// Feedback visual da seleção na viewport, projetado para `Path` do Slint.
-///
-/// O shell desenha a silhueta do objeto por cima da imagem do backend como
-/// complemento da camada de seleção 3D: sem isso o usuário clica e nada
-/// muda na tela. Como no Blender, ativo e selecionado são canais distintos:
-/// no máximo um ativo (amarelo) contra N selecionados (laranja).
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct SelectionOverlayModel {
-    pub visible: bool,
-    /// Arestas do contorno (caixa do objeto, arestas ou faces selecionadas).
-    pub outline_commands: String,
-    /// Silhueta do objeto ATIVO. Canal separado do selecionado para o
-    /// usuário saber qual objeto é referência das operações.
-    pub active_outline_commands: String,
-    /// Marcadores preenchidos dos vértices selecionados.
-    pub point_commands: String,
-    /// Elementos não selecionados do domínio atual, para o usuário ver o que
-    /// pode clicar. Sem isso a viewport mostra um sólido sem alvos visíveis.
-    pub unselected_outline_commands: String,
-    pub unselected_point_commands: String,
-    /// Cor semântica: seleção normal ou ativo em modo componente.
-    pub accent: bool,
 }
 
 /// Parâmetro numérico de um efeito de camada, já com rótulo e faixa.

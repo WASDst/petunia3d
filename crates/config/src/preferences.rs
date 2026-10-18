@@ -125,7 +125,15 @@ const fn default_drag_threshold_px() -> f32 {
 }
 
 /// Igual a `petunia_core::DEFAULT_SNAP_RADIUS_PIXELS`.
-const fn default_snap_radius_px() -> f32 {
+const fn default_gizmo_size() -> f32 {
+    72.0
+}
+
+fn default_gizmo_thickness() -> f32 {
+    2.0
+}
+
+fn default_snap_radius_px() -> f32 {
     12.0
 }
 
@@ -146,6 +154,10 @@ pub struct UserPreferences {
     pub selection_rgb: [u8; 3],
     /// Espessura visual em pixels lógicos (1..=6).
     pub selection_thickness: f32,
+    /// Comprimento das hastes dos gizmos de transformação, px lógicos (48..=160).
+    pub gizmo_size: f32,
+    /// Espessura do traço dos gizmos de transformação, px lógicos (1..=6).
+    pub gizmo_thickness: f32,
     /// Idioma escolhido explicitamente; None preserva o idioma do host/CLI.
     pub language: Option<String>,
     /// Escala da interface (1.0 = 100%, até 2.0 = 200%).
@@ -229,6 +241,8 @@ impl Default for UserPreferences {
             invert_vertical_drag: false,
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
+            gizmo_size: default_gizmo_size(),
+            gizmo_thickness: default_gizmo_thickness(),
             ui_scale: 1.0,
             language: None,
             model_quick_actions: Vec::new(),
@@ -278,6 +292,15 @@ impl UserPreferences {
             || !(1.0..=6.0).contains(&preferences.selection_thickness)
         {
             preferences.selection_thickness = Self::default().selection_thickness;
+        }
+        if !preferences.gizmo_size.is_finite() || !(48.0..=160.0).contains(&preferences.gizmo_size)
+        {
+            preferences.gizmo_size = default_gizmo_size();
+        }
+        if !preferences.gizmo_thickness.is_finite()
+            || !(1.0..=6.0).contains(&preferences.gizmo_thickness)
+        {
+            preferences.gizmo_thickness = default_gizmo_thickness();
         }
         if !preferences.snap_radius_px.is_finite()
             || !(4.0..=48.0).contains(&preferences.snap_radius_px)
@@ -382,8 +405,10 @@ mod tests {
             invert_vertical_drag: true,
             selection_rgb: [32, 180, 240],
             selection_thickness: 3.5,
+            gizmo_size: 96.0,
+            gizmo_thickness: 3.0,
             ui_scale: 1.25,
-            model_quick_actions: vec!["model.fuse".to_string()],
+            model_quick_actions: vec!["model.join".to_string()],
             colorblind_axes: false,
             reduced_motion: false,
             show_tool_labels: true,
@@ -425,12 +450,20 @@ mod tests {
         assert_eq!(UserPreferences::load_from_path(&path).unwrap(), updated);
         fs::write(
             &path,
-            "selection_thickness = nan\ninvert_vertical_drag = true\n",
+            "selection_thickness = nan\ninvert_vertical_drag = true\ngizmo_size = 5000.0\ngizmo_thickness = nan\n",
         )
         .unwrap();
         let sanitized = UserPreferences::load_from_path(&path).unwrap();
         assert_eq!(sanitized.selection_thickness, 2.0);
         assert!(sanitized.invert_vertical_drag);
+        assert_eq!(
+            sanitized.gizmo_size, 72.0,
+            "tamanho fora da faixa volta ao padrão"
+        );
+        assert_eq!(
+            sanitized.gizmo_thickness, 2.0,
+            "espessura não finita volta ao padrão"
+        );
         fs::remove_file(&path).unwrap();
         assert_eq!(
             toml::from_str::<UserPreferences>("").unwrap(),

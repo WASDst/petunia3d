@@ -341,14 +341,20 @@ impl ComponentOverlays {
     }
 }
 
-/// Contorno de seleção de objetos (domínio Object), em largura constante.
+/// Um objeto contornado e a cor do seu contorno (já resolvida: cor da parte,
+/// variante do ativo ou do hover).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OutlineEntry {
+    pub object_id: Uuid,
+    pub color: [f32; 4],
+}
+
+/// Contorno de objetos (domínio Object), em largura constante. A ordem importa:
+/// entradas posteriores vencem onde as silhuetas se sobrepõem (hover, depois
+/// selecionados, por último o ativo).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RenderOutline {
-    pub selected: Vec<Uuid>,
-    /// Ativo, desenhado com `active_color` (precisa estar em `selected`).
-    pub active: Option<Uuid>,
-    pub color: [f32; 4],
-    pub active_color: [f32; 4],
+    pub entries: Vec<OutlineEntry>,
     /// Raio em px lógicos.
     pub radius_px: f32,
 }

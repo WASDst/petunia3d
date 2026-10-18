@@ -32,6 +32,12 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 | Ação Semântica | Atalho Padrão |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -41,7 +47,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
 | `global.save_project` | <kbd>Ctrl+S</kbd> |
-| `global.toggle_projection` | <kbd>O</kbd> |
+| `global.toggle_projection` | <kbd>Numpad 5</kbd> |
 | `global.toggle_wireframe` | <kbd>Z</kbd> |
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
@@ -62,7 +68,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
@@ -77,6 +83,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
@@ -84,14 +91,31 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -107,10 +131,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (71 atalhos)
+### Perfil: `3ds-max` (94 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -151,26 +181,43 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_edge` | <kbd>2</kbd> |
 | `model.select_face` | <kbd>4</kbd> |
 | `model.select_linked` | <kbd>L</kbd> |
-| `model.select_object` | <kbd>4</kbd> |
+| `model.select_object` | <kbd>Q</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
-| `model.tool_select` | <kbd>W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.transform` | <kbd>W</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
 | `paint.color_picker` | <kbd>I</kbd> |
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -183,10 +230,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender` (70 atalhos)
+### Perfil: `blender` (93 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -207,18 +260,17 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>X</kbd> |
-| `model.dissolve` | <kbd>X</kbd> |
 | `model.draw_profile` | <kbd>Shift+P</kbd> |
 | `model.duplicate` | <kbd>Shift+D</kbd> |
 | `model.extrude` | <kbd>E</kbd> |
 | `model.extrude_individual` | <kbd>Alt+E</kbd> |
+| `model.frame_selection` | <kbd>Numpad .</kbd> |
 | `model.inset` | <kbd>I</kbd> |
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
 | `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
-| `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -231,6 +283,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
@@ -238,14 +291,31 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -258,10 +328,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender-notebook` (71 atalhos)
+### Perfil: `blender-notebook` (94 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -292,9 +368,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
-| `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -307,6 +382,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
@@ -314,14 +390,31 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -334,10 +427,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `cinema-4d` (71 atalhos)
+### Perfil: `cinema-4d` (95 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -351,7 +450,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.toggle_wireframe` | <kbd>Z</kbd> |
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>B</kbd> |
-| `model.box_select` | <kbd>B</kbd> |
+| `model.box_select` | <kbd>Shift+B</kbd> |
 | `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
 | `model.clear_location` | <kbd>Alt+G</kbd> |
 | `model.clear_rotation` | <kbd>Alt+R</kbd> |
@@ -383,6 +482,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>E</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
@@ -390,14 +490,31 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -410,10 +527,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `maya` (71 atalhos)
+### Perfil: `maya` (94 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -444,7 +567,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -459,21 +582,38 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
-| `model.tool_select` | <kbd>W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.transform` | <kbd>W</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
 | `paint.color_picker` | <kbd>I</kbd> |
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -486,10 +626,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-notebook` (71 atalhos)
+### Perfil: `petunia-notebook` (94 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
@@ -520,9 +666,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
-| `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -535,6 +680,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
@@ -542,14 +688,31 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -562,15 +725,20 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-simple` (71 atalhos)
+### Perfil: `petunia-simple` (94 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
+| `animate.delete_keyframe` | <kbd>Delete</kbd> |
+| `animate.insert_keyframe` | <kbd>I</kbd> |
+| `animate.jump_to_start` | <kbd>Home</kbd> |
+| `animate.step_backward` | <kbd>Left</kbd> |
+| `animate.step_forward` | <kbd>Right</kbd> |
+| `animate.toggle_play` | <kbd>Space</kbd> |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>F1</kbd> |
 | `global.micro_inspector` | <kbd>Shift+Space</kbd> |
-| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Y</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Space</kbd> |
@@ -596,7 +764,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -611,6 +779,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
 | `paint.airbrush` | <kbd>Shift+B</kbd> |
@@ -618,14 +787,31 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
+| `view.camera_back` | <kbd>Ctrl+Numpad 1</kbd> |
+| `view.camera_bottom` | <kbd>Ctrl+Numpad 7</kbd> |
+| `view.camera_front` | <kbd>Numpad 1</kbd> |
+| `view.camera_iso_2_1` | <kbd>Numpad 2</kbd> |
+| `view.camera_left` | <kbd>Ctrl+Numpad 3</kbd> |
+| `view.camera_opposite` | <kbd>Numpad 9</kbd> |
+| `view.camera_persp` | <kbd>Numpad 0</kbd> |
+| `view.camera_right` | <kbd>Numpad 3</kbd> |
+| `view.camera_top` | <kbd>Numpad 7</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
+| `view.isolate` | <kbd>Numpad /</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |

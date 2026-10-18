@@ -123,7 +123,7 @@ impl Programs {
                     "outline mask",
                     vertex(POSITION_VS),
                     fragment(MASK_FS),
-                    &["uViewProj", "uModel", "uValue"],
+                    &["uViewProj", "uModel", "uColor"],
                 )?,
                 depth: make(
                     "depth prepass",
@@ -172,7 +172,7 @@ impl Programs {
                     "selection outline",
                     vertex(FULLSCREEN_VS),
                     fragment(OUTLINE_FS),
-                    &["uMask", "uColor", "uActiveColor", "uRadius", "uOrigin"],
+                    &["uMask", "uRadius", "uOrigin"],
                 )?,
                 ao: make(
                     "ambient occlusion",

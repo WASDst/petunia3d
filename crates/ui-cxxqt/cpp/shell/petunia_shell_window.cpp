@@ -7,6 +7,7 @@
 #include "../petunia_icons.h"
 #include "../petunia_recovery_dialog.h"
 #include "../petunia_theme.h"
+#include "petunia_align_popover.h"
 #include "petunia_app_bar.h"
 #include "petunia_context_actions.h"
 #include "petunia_drawer.h"
@@ -157,6 +158,15 @@ void PetuniaShellWindow::buildUi() {
     m_hud = new PetuniaOperationHud(&m_controller, m_viewArea);
     m_context = new PetuniaContextActions(&m_controller, m_viewArea);
     m_viewArea->installEventFilter(this);
+    connect(m_context, &PetuniaContextActions::uiActionRequested, this,
+            [this](const QString &target, QWidget *anchor) {
+                if (target == QLatin1String("ui.align"))
+                    openAlign(anchor);
+            });
+    connect(m_viewport, &PetuniaGlWidget::uiActionRequested, this, [this](const QString &target) {
+        if (target == QLatin1String("ui.align"))
+            openAlign(nullptr);
+    });
     m_surface->addWidget(m_viewArea);
 
     m_secondaryArea = new QWidget(m_surface);
@@ -204,6 +214,7 @@ void PetuniaShellWindow::buildUi() {
     connect(m_appBar, &PetuniaAppBar::localAction, this, &PetuniaShellWindow::triggerLocalAction);
     connect(m_structure, &PetuniaStructurePanel::createRequested, this,
             [this] { m_controller.command(QStringLiteral("model.add_cube")); });
+    connect(m_structure, &PetuniaStructurePanel::alignRequested, this, [this](QWidget *anchor) { openAlign(anchor); });
     connect(m_rail, &PetuniaToolRail::expandedChanged, this, [this](bool) { scheduleLayoutSave(); });
     connect(m_properties, &PetuniaPropertiesPanel::sectionToggled, this, [this](const QString &, bool) { scheduleLayoutSave(); });
     connect(m_properties, &PetuniaPropertiesPanel::materialNodesRequested, this, [this] { openNodeEditor(true); });
@@ -252,6 +263,12 @@ struct PetuniaFocusReturn {
 
 PetuniaNodeCanvas *PetuniaShellWindow::nodeCanvas() const {
     return m_nodePage ? m_nodePage->canvas() : nullptr;
+}
+
+void PetuniaShellWindow::openAlign(QWidget *anchor) {
+    if (!m_align)
+        m_align = new PetuniaAlignPopover(&m_controller, this);
+    m_align->popupAt(anchor ? anchor : static_cast<QWidget *>(m_viewArea));
 }
 
 void PetuniaShellWindow::openNodeEditor(bool material) {
@@ -355,6 +372,8 @@ void PetuniaShellWindow::retranslateUi() {
     m_assetsHost = nullptr;
     m_assetsPanel = nullptr;
     m_workspace.clear();
+    delete m_align; // volta a nascer, já traduzido, no próximo uso
+    m_align = nullptr;
     buildUi();
     onState(m_controller.state());
 }

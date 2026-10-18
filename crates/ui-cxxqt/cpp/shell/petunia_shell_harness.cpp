@@ -5,7 +5,9 @@
 
 #include "../petunia_editor_panel.h"
 #include "../petunia_gl_widget.h"
+#include "../petunia_nav_cube.h"
 #include "../petunia_theme.h"
+#include "petunia_align_popover.h"
 #include "petunia_app_bar.h"
 #include "petunia_context_actions.h"
 #include "petunia_drawer.h"
@@ -119,6 +121,234 @@ void sendKey(QWidget *target, int key, Qt::KeyboardModifiers mods = Qt::NoModifi
     QKeyEvent press(QEvent::KeyPress, key, mods);
     QCoreApplication::sendEvent(target, &press);
     settle(1);
+}
+} // namespace
+
+namespace {
+QStringList sceneIds(PetuniaShellController *c) {
+    QStringList ids;
+    for (const auto &value : c->state()["scene_items"].toArray())
+        ids << value.toObject()["id"].toString();
+    return ids;
+}
+
+QJsonObject sceneItem(PetuniaShellController *c, const QString &id) {
+    for (const auto &value : c->state()["scene_items"].toArray())
+        if (value.toObject()["id"].toString() == id)
+            return value.toObject();
+    return {};
+}
+
+void selectIds(PetuniaShellController *c, const QStringList &ids) {
+    QJsonArray array;
+    for (const auto &id : ids)
+        array.append(id);
+    c->request("scene_selection", {{"ids", array}, {"active", ids.isEmpty() ? QString() : ids.first()}});
+    settle(4);
+}
+
+/// Refinamento de uso (ADR-C15): rail enxuto, cabeçalho só com ícones, grupos,
+/// arrastar e soltar e isolamento na Estrutura, alinhar e distribuir, pivô, gizmos
+/// configuráveis e cubo de navegação.
+void checkRefinement(Harness &h, PetuniaShellWindow &window) {
+    auto *c = window.controller();
+    c->request("workspace", {{"id", "POLY"}});
+    settle(8);
+    window.syncNow();
+
+    // Rail: só transformar, 3D Cursor e criação; operações são contextuais.
+    QStringList railIds;
+    for (auto *button : window.toolRail()->buttons())
+        railIds << button->property("toolId").toString();
+    bool noOperations = true;
+    for (const QString &operation : {QStringLiteral("extrude"), QStringLiteral("inset"), QStringLiteral("bevel"),
+                                     QStringLiteral("push_pull"), QStringLiteral("loop_cut"), QStringLiteral("cut"),
+                                     QStringLiteral("slice"), QStringLiteral("shape_builder"), QStringLiteral("measure")})
+        noOperations = noOperations && !railIds.contains(operation);
+    h.add("rail:only-transform-cursor-and-create", noOperations && railIds.contains("transform") &&
+                                                      railIds.contains("cursor") && railIds.contains("primitive"),
+          railIds.join(","));
+
+    // Cabeçalho da vista: só ícones (nome e atalho nos tooltips).
+    bool iconOnly = true;
+    for (auto *button : window.viewportHeader()->findChildren<QToolButton *>())
+        iconOnly = iconOnly && button->text().isEmpty() && !button->toolTip().isEmpty();
+    h.add("header:icon-only-with-tooltips", iconOnly);
+
+    // Cena com vários objetos: seleciona os três primeiros.
+    while (sceneIds(c).size() < 4)
+        c->request("command", {{"id", "model.add_cube"}});
+    settle(4);
+    const QStringList ids = sceneIds(c);
+    const QStringList firstThree{ids[0], ids[1], ids[2]};
+    selectIds(c, firstThree);
+    h.add("structure:multi-select-reaches-the-editor", c->state()["selected_count"].toInt() == 3,
+          QString::number(c->state()["selected_count"].toInt()));
+
+    // Ctrl+G com a tecla real: os três viram um grupo.
+    auto *tree = window.structure()->tree();
+    realKey(tree, Qt::Key_G, Qt::ControlModifier, QStringLiteral("g"));
+    window.syncNow();
+    const auto groups = c->state()["scene_groups"].toArray();
+    bool allGrouped = !groups.isEmpty();
+    for (const auto &id : firstThree)
+        allGrouped = allGrouped && !sceneItem(c, id)["collection"].toString().isEmpty();
+    h.add("structure:ctrl-g-groups-the-selection", groups.size() == 1 && allGrouped,
+          QString::number(groups.size()));
+    const QString groupName = groups.isEmpty() ? QString() : groups.first().toObject()["name"].toString();
+    h.add("structure:group-row-and-members-in-the-tree",
+          window.structure()->indexOfId(QStringLiteral("group:") + groupName).isValid() &&
+              window.structure()->indexOfId(firstThree[0]).isValid());
+    h.shot(&window, "shell_POLY_groups");
+
+    // Arrastar e soltar: a 4ª parte entra no grupo (soltar sobre o grupo)...
+    const QString loose = ids[3];
+    selectIds(c, {loose});
+    const auto groupIndex = window.structure()->indexOfId(QStringLiteral("group:") + groupName);
+    window.structure()->dropOn(groupIndex, PetuniaStructurePanel::DropPosition::OnItem);
+    window.syncNow();
+    h.add("structure:drop-on-group-joins-it", sceneItem(c, loose)["collection"].toString() == groupName,
+          sceneItem(c, loose)["collection"].toString());
+    // ...e sai dele ao ser solta antes de uma parte que está fora de qualquer grupo.
+    selectIds(c, {loose});
+    window.structure()->dropOn(QModelIndex(), PetuniaStructurePanel::DropPosition::OnViewport);
+    window.syncNow();
+    h.add("structure:drop-on-empty-area-leaves-the-group", sceneItem(c, loose)["collection"].toString().isEmpty());
+    const QStringList afterDrop = sceneIds(c);
+    h.add("structure:drop-on-empty-area-moves-to-the-end", !afterDrop.isEmpty() && afterDrop.last() == loose,
+          afterDrop.join(","));
+
+    // Reordenar antes de outra parte (alvo acima).
+    selectIds(c, {loose});
+    window.structure()->dropOn(window.structure()->indexOfId(ids[0]), PetuniaStructurePanel::DropPosition::AboveItem);
+    window.syncNow();
+    const QStringList reordered = sceneIds(c);
+    h.add("structure:drop-above-reorders", !reordered.isEmpty() && reordered.first() == loose, reordered.join(","));
+
+    // Isolar uma parte pela linha: só ela e a seleção ficam na cena; de novo, volta tudo.
+    c->request("isolate_part", {{"id", ids[1]}});
+    window.syncNow();
+    int visibleWhileIsolated = 0;
+    for (const auto &id : sceneIds(c))
+        visibleWhileIsolated += sceneItem(c, id)["visible"].toBool() ? 1 : 0;
+    h.add("structure:isolate-keeps-only-the-selection", c->state()["isolate_active"].toBool() && visibleWhileIsolated >= 1 &&
+                                                          visibleWhileIsolated < sceneIds(c).size(),
+          QString::number(visibleWhileIsolated));
+    c->request("isolate_part", {{"id", ids[1]}});
+    window.syncNow();
+    bool allVisible = !c->state()["isolate_active"].toBool();
+    for (const auto &id : sceneIds(c))
+        allVisible = allVisible && sceneItem(c, id)["visible"].toBool();
+    h.add("structure:leaving-isolation-restores-visibility", allVisible);
+
+    // Desagrupar devolve as partes à lista solta.
+    selectIds(c, {ids[0]});
+    realKey(tree, Qt::Key_G, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral("G"));
+    window.syncNow();
+    h.add("structure:ctrl-shift-g-ungroups", c->state()["scene_groups"].toArray().isEmpty());
+
+    // Alinhar e distribuir: painel com 9 + 3 botões; habilitado só com a seleção certa.
+    selectIds(c, firstThree);
+    window.openAlign();
+    settle(4);
+    auto *align = window.alignPopover();
+    bool aligned = align && align->isVisible() && align->buttons().size() == 12;
+    int enabledWithThree = 0;
+    if (align)
+        for (auto *button : align->buttons())
+            enabledWithThree += button->isEnabled() ? 1 : 0;
+    h.add("align:popover-has-grid-and-distribute", aligned, QString::number(align ? align->buttons().size() : -1));
+    h.add("align:enabled-with-three-objects", enabledWithThree == 12, QString::number(enabledWithThree));
+    h.shot(&window, "shell_POLY_align");
+    if (align) {
+        // O painel é uma janela própria (popup): captura à parte para olhar o resultado.
+        h.shot(align, "shell_POLY_align_popup");
+        align->hide();
+    }
+    selectIds(c, {ids[0]});
+    window.openAlign();
+    settle(4);
+    int enabledWithOne = 0;
+    if (auto *popover = window.alignPopover())
+        for (auto *button : popover->buttons())
+            enabledWithOne += button->isEnabled() ? 1 : 0;
+    h.add("align:disabled-with-one-object", enabledWithOne == 0, QString::number(enabledWithOne));
+    if (auto *popover = window.alignPopover())
+        popover->hide();
+
+    // Pivô: marcador publicado e modo de edição refletido no gizmo.
+    window.syncNow();
+    const auto gizmo = c->state()["gizmo"].toObject();
+    h.add("pivot:marker-published", gizmo["pivot_visible"].toBool() && gizmo["origin_marker_visible"].toBool());
+    c->request("edit_pivot");
+    window.syncNow();
+    h.add("pivot:edit-mode-reflected", c->state()["gizmo"].toObject()["pivot_editing"].toBool());
+    c->request("edit_pivot");
+    window.syncNow();
+
+    // Gizmos: tamanho e espessura vêm das preferências.
+    c->request("set_gizmo_size", {{"size", 110}});
+    c->request("set_gizmo_thickness", {{"thickness", 3.5}});
+    window.syncNow();
+    h.add("gizmo:size-and-thickness-preferences", std::abs(c->state()["gizmo_size"].toDouble() - 110.0) < 0.01 &&
+                                                     std::abs(c->state()["gizmo_thickness"].toDouble() - 3.5) < 0.01);
+    c->request("set_gizmo_size", {{"size", 72}});
+    c->request("set_gizmo_thickness", {{"thickness", 2}});
+
+    // Cubo de navegação: acertos por face, aresta, canto, bússola, início e menu.
+    {
+        PetuniaNavCube cube;
+        const QPointF center(100, 100);
+        const double unit = 17.0;
+        cube.setGeometry(center, unit);
+        // Vista em perspectiva isométrica: olho em (sen y cos p, sen p, cos y cos p).
+        const double yaw = 0.7, pitch = 0.6;
+        const QVector3D eye(float(std::sin(yaw) * std::cos(pitch)), float(std::sin(pitch)),
+                            float(std::cos(yaw) * std::cos(pitch)));
+        const QVector3D forward = -eye;
+        const QVector3D right(float(std::cos(yaw)), 0.0f, float(-std::sin(yaw)));
+        const QVector3D up = QVector3D::crossProduct(right, forward).normalized();
+        cube.setCamera(right, up, forward);
+        auto onScreen = [&](const QVector3D &world) {
+            return center + QPointF(QVector3D::dotProduct(world, right), -QVector3D::dotProduct(world, up)) * unit;
+        };
+        const auto top = cube.hitTest(onScreen(QVector3D(0, 1, 0)));
+        const auto front = cube.hitTest(onScreen(QVector3D(0, 0, 1)));
+        const auto side = cube.hitTest(onScreen(QVector3D(1, 0, 0)));
+        h.add("navcube:face-hits-map-to-presets",
+              top.type == PetuniaNavCube::Hit::Type::Preset && top.preset == 5 &&
+                  front.type == PetuniaNavCube::Hit::Type::Preset && front.preset == 1 &&
+                  side.type == PetuniaNavCube::Hit::Type::Preset && side.preset == 3,
+              QStringLiteral("topo=%1 frente=%2 direita=%3").arg(top.preset).arg(front.preset).arg(side.preset));
+        const auto corner = cube.hitTest(onScreen(QVector3D(1, 1, 1)));
+        h.add("navcube:corner-hit-gives-its-direction",
+              corner.type == PetuniaNavCube::Hit::Type::Direction && corner.direction == QVector3D(1, 1, 1),
+              corner.id);
+        const auto edge = cube.hitTest(onScreen(QVector3D(1, 1, 0)));
+        h.add("navcube:edge-hit-gives-the-two-faces",
+              edge.type == PetuniaNavCube::Hit::Type::Direction && edge.direction == QVector3D(1, 1, 0), edge.id);
+        h.add("navcube:outside-hits-nothing", cube.hitTest(QPointF(400, 400)).type == PetuniaNavCube::Hit::Type::None);
+        const QRectF bounds = cube.bounds();
+        const auto home = cube.hitTest(QPointF(bounds.left() + 2, bounds.top() + 2));
+        const auto menu = cube.hitTest(QPointF(bounds.right() - 2, bounds.bottom() - 2));
+        h.add("navcube:home-and-menu-hit", home.type == PetuniaNavCube::Hit::Type::Home &&
+                                              menu.type == PetuniaNavCube::Hit::Type::Menu,
+              QStringLiteral("%1 / %2").arg(home.id, menu.id));
+        // Vista Frente alinhada aos eixos: cantos da frente e de trás coincidem; vence a frente.
+        cube.setCamera(QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, -1));
+        const auto frontCorner = cube.hitTest(center + QPointF(unit, -unit));
+        h.add("navcube:coincident-corner-prefers-the-nearer-one",
+              frontCorner.type == PetuniaNavCube::Hit::Type::Direction && frontCorner.direction.z() > 0.0f,
+              frontCorner.id);
+        // Pinta sem falhar em todas as vistas dos seis presets.
+        QImage canvas(220, 220, QImage::Format_ARGB32_Premultiplied);
+        canvas.fill(Qt::transparent);
+        QPainter painter(&canvas);
+        cube.setCamera(right, up, forward);
+        cube.paint(painter, top, true);
+        painter.end();
+        h.add("navcube:paints-pixels", canvas.pixelColor(100, 100).alpha() > 0);
+    }
 }
 } // namespace
 
@@ -989,6 +1219,8 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
     const int before = window.focusedRegion();
     sendKey(&window, Qt::Key_F6, Qt::ShiftModifier);
     h.add("focus:shift-f6-goes-back", window.focusedRegion() != before);
+
+    checkRefinement(h, window);
 
     // Tema claro e densidade: a interface inteira segue os tokens.
     c->request("theme", {{"id", "petunia-light"}});

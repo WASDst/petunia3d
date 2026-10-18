@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-17",
+  "updated": "2026-10-18",
   "phases": [
     {
       "id": "integrity",
@@ -924,13 +924,18 @@
     },
     "gui-workspaces-native-2026-10-17": {
       "revision": "working tree sobre 908aecf7",
-      "document": "website/docs/09-ui/shell-v2-proposal.md (F7) · AGENTS.md Camadas 2/3/6",
-      "summary": "PAINT/UV/ANIMATE com seções nativas de Propriedades (Pincel, Camada, Alvo, Efeitos, Projeção, Decalque, Canvas; Seleção UV, Desdobrar, Costuras, Empacotar, Transformar, Exibição; Criatura, Motion, Pose, Camadas, Keyframes); superfície 3D|Dividido|2D persistida por workspace; transporte da linha do tempo na gaveta; Estrutura UV lista ilhas (uv_editor.islands + uv_select_island, índice validado); diálogos Início/Recuperação/Paleta/Placeholder e seletor de cor só com papéis do tema (alvos >= 28 px, fontes do tema, roda de cor por teclado); menu de contexto da vista por teclado (Shift+F10) com rótulos traduzidos; motivo de desabilitação nos botões por estado; gaveta recolhida devolve a altura à superfície; barra contextual compacta cabe na vista. Gates pass: editor_parity 22, shell_v2 (172 verificações, 12 novas exigidas por nome), bridge_test 11 (1 pulado: sem display), ui_i18n_catalog 3, component_contracts 1, ui_contract_ids 3, gallery_test 1, ui_thread_guard 1, lib 5, core --lib 202, editor --lib 137, fmt e clippy -D warnings. Não executado: Windows, GPU física, leitor de tela, escala 150–200%; atalhos QShortcut da Estrutura (Alt+setas, H/L/Del por workspace) e teclado do canvas 2D sem teste automatizado."
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "[Documentos: website/docs/09-ui/shell-v2-proposal.md (F7) · AGENTS.md Camadas 2/3/6] PAINT/UV/ANIMATE com seções nativas de Propriedades (Pincel, Camada, Alvo, Efeitos, Projeção, Decalque, Canvas; Seleção UV, Desdobrar, Costuras, Empacotar, Transformar, Exibição; Criatura, Motion, Pose, Camadas, Keyframes); superfície 3D|Dividido|2D persistida por workspace; transporte da linha do tempo na gaveta; Estrutura UV lista ilhas (uv_editor.islands + uv_select_island, índice validado); diálogos Início/Recuperação/Paleta/Placeholder e seletor de cor só com papéis do tema (alvos >= 28 px, fontes do tema, roda de cor por teclado); menu de contexto da vista por teclado (Shift+F10) com rótulos traduzidos; motivo de desabilitação nos botões por estado; gaveta recolhida devolve a altura à superfície; barra contextual compacta cabe na vista. Gates pass: editor_parity 22, shell_v2 (172 verificações, 12 novas exigidas por nome), bridge_test 11 (1 pulado: sem display), ui_i18n_catalog 3, component_contracts 1, ui_contract_ids 3, gallery_test 1, ui_thread_guard 1, lib 5, core --lib 202, editor --lib 137, fmt e clippy -D warnings. Não executado: Windows, GPU física, leitor de tela, escala 150–200%; atalhos QShortcut da Estrutura (Alt+setas, H/L/Del por workspace) e teclado do canvas 2D sem teste automatizado."
     },
     "gui-keyboard-structure-canvas-2026-10-18": {
       "revision": "working tree sobre 734321e5",
-      "document": "AGENTS.md Camadas 3/6 · website/docs/09-ui/shell-v2-proposal.md (F7)",
-      "summary": "Harness com teclas reais (qt_sendShortcutOverrideEvent, mesmo caminho do QTest): Alt+↑/↓ reordena camadas de pintura, H alterna visibilidade, Delete remove a camada (não o objeto); no editor UV +/− aproximam, Ctrl+setas deslocam sem editar o documento, setas movem a seleção UV (um Undo) e Home enquadra. Corrigidos: direção do reordenar camadas (lista topo→base vs delta da pilha base→topo, também no menu de contexto) e atalhos globais engolindo +/−/setas do canvas 2D. shell_v2 pass 180/180 (3 execuções), ui_i18n_catalog pass, fmt pass."
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "[Documentos: AGENTS.md Camadas 3/6 · website/docs/09-ui/shell-v2-proposal.md (F7)] Harness com teclas reais (qt_sendShortcutOverrideEvent, mesmo caminho do QTest): Alt+↑/↓ reordena camadas de pintura, H alterna visibilidade, Delete remove a camada (não o objeto); no editor UV +/− aproximam, Ctrl+setas deslocam sem editar o documento, setas movem a seleção UV (um Undo) e Home enquadra. Corrigidos: direção do reordenar camadas (lista topo→base vs delta da pilha base→topo, também no menu de contexto) e atalhos globais engolindo +/−/setas do canvas 2D. shell_v2 pass 180/180 (3 execuções), ui_i18n_catalog pass, fmt pass."
+    },
+    "shell-v2-refinement-2026-10-18": {
+      "revision": "árvore de trabalho sobre 85a7ed3b (commit desta entrega)",
+      "document": "09-ui/shell-v2-refinement.md",
+      "summary": "Refinamento do shell v2 (ADR-C15), executado no fim da implementação em 2026-10-18. fmt limpo; clippy -D warnings sem avisos (core, editor, render, config, mesh, project, application, ui-cxxqt). Rust (core, config, editor, project, mesh, render, application; --all-features; PETUNIA_REQUIRE_GL=1): 85 binários, 1519 testes, 0 falhas, nenhum SKIPPED (GL headless por EGL: contorno por parte, hover e contorno acompanhando a transformação). Qt (petunia_ui_cxxqt, offscreen, --test-threads=1, pulando test_widgets_studio_window_creation): 48 testes, 0 falhas; shell_v2 (harness) passou. xtask docs-generate --check sem drift; verify-progress e progress.test.cjs passam. Bug real achado pelo teste de operações em objeto esticado: dissolver arestas vizinhas gerava face com vértice repetido (3 testes de regressão falhavam antes do conserto). primitive_frame falhava já no HEAD por comparar HashSet serializado; corrigido ordenando os conjuntos. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, escalas 150%/200%."
     }
   },
   "tasks": [
@@ -1099,7 +1104,8 @@
         "06-paint/workspace-ux.md",
         "07-uv/workspace-ux.md",
         "09-ui/slint-reassessment.md",
-        "10-animation/workspace-ux.md"
+        "10-animation/workspace-ux.md",
+        "09-ui/shell-v2-proposal.md"
       ]
     },
     {
@@ -2454,7 +2460,8 @@
       ],
       "documents": [
         "06-paint/workspace-ux.md",
-        "09-ui/workspaces-feedback-accessibility.md"
+        "09-ui/workspaces-feedback-accessibility.md",
+        "09-ui/shell-v2-proposal.md"
       ]
     },
     {
@@ -2600,7 +2607,8 @@
       ],
       "documents": [
         "07-uv/workspace-ux.md",
-        "09-ui/workspaces-feedback-accessibility.md"
+        "09-ui/workspaces-feedback-accessibility.md",
+        "09-ui/shell-v2-proposal.md"
       ]
     },
     {
@@ -4671,6 +4679,11 @@
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
           "completed": true,
           "evidence": "u19-gates"
+        },
+        {
+          "title": "Reconciliar as tarefas U01–U09 (escritas para o frontend Slint) com o shell v2 e arquivar o que ficou obsoleto.",
+          "completed": false,
+          "evidence": null
         }
       ],
       "documents": [
@@ -4907,7 +4920,308 @@
       ],
       "documents": [
         "03-geometry/operation-graph.md",
-        "05-materials/architecture-decision.md"
+        "05-materials/architecture-decision.md",
+        "09-ui/shell-v2-proposal.md"
+      ]
+    },
+    {
+      "id": "U20",
+      "phase": "slint-gl",
+      "title": "Contorno de seleção sem fantasma",
+      "description": "Remover o contorno 2D projetado em Rust e desenhado por QPainter (desatualizava ao arrastar); o contorno passa a ser só o passe GL, com a cor de seleção de cada parte e o hover do objeto.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Contorno antigo (`selection_overlay`) removido de editor, snapshot e widget Qt.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Passe GL com máscara RGBA por parte (cor da parte, ativo, hover).",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U21",
+      "phase": "slint-gl",
+      "title": "Booleanas só por nós",
+      "description": "Remover Fuse/Cut/Intersect diretos, operando global e Keep Parts; o nó Boolean do Operation Graph é o único caminho. Join passa a fundir a seleção no ativo.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Comandos, estado, ponte, UI e menus das booleanas diretas removidos; Join por seleção.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U22",
+      "phase": "slint-gl",
+      "title": "Estrutura: arrastar, grupos, isolar e alinhar",
+      "description": "Árvore de partes com arrastar e soltar real (reordenar e mover entre grupos), seleção múltipla, Ctrl+G/Ctrl+Shift+G, isolamento por linha e painel de alinhar/distribuir.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Comandos scene.group/ungroup/move_assets/rename_group com Undo; isolamento da seleção.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Árvore com grupos, DnD, coluna de isolar e painel de alinhar e distribuir.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U23",
+      "phase": "slint-gl",
+      "title": "Pivô visível e editável",
+      "description": "Marcador de pivô e de origem na vista, distintos do 3D Cursor; modo Editar pivô com indicação e atalho.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Marcador de pivô/origem na vista e indicação do modo de edição.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U24",
+      "phase": "slint-gl",
+      "title": "Propriedades enxutas",
+      "description": "Seções densas: Transformação com pivô em uma linha, Sombreamento só com o controle, Perfil/Material com botões agrupados; sem estatísticas duplicadas.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Seções compactadas (botões em linha, ícones, rótulos curtos).",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U25",
+      "phase": "slint-gl",
+      "title": "Cabeçalho, barra contextual e menus compactos",
+      "description": "Cabeçalho da vista só com ícones, alturas compactas, menus com raio e espaçamento menores, “Mais” agrupado.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Cabeçalho icon-only, altura compacta, menus estilizados, “Mais” por grupo.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U26",
+      "phase": "slint-gl",
+      "title": "Cubo de navegação",
+      "description": "Cubo 3D com faces, arestas, cantos, anel de bússola, início e menu de projeção (substitui as esferas de eixos; corrige o mapeamento Y/Z antigo).",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Cubo de navegação com hit-test por face/aresta/canto e FFI de direção/azimute.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U27",
+      "phase": "slint-gl",
+      "title": "Gizmos de transformação reformulados",
+      "description": "Hastes com ponta, alças de escala arredondadas, planos translúcidos, anéis de rotação com o lado da câmera em destaque; tamanho e espessura nas Preferências.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Novo desenho e preferências `gizmo_size`/`gizmo_thickness`.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U28",
+      "phase": "slint-gl",
+      "title": "Nós com identidade visual",
+      "description": "Cabeçalho colorido com ícone e rótulo do papel, portas e fios por tipo (forma + cor + traço), legenda e dica com os tipos de entrada/saída.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Cor, ícone, papel e tipos nas portas e fios; legenda.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U29",
+      "phase": "slint-gl",
+      "title": "Rail só transformar, cursor e criação",
+      "description": "Rail com transformar, 3D Cursor e criação; operações (extrude, inset, bevel, push/pull, loop cut, knife, slice, shape builder, medir) viram ações contextuais agrupadas.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Catálogo do rail enxuto; operações na barra contextual por grupo.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
+      ]
+    },
+    {
+      "id": "U30",
+      "phase": "slint-gl",
+      "title": "Vértices e arestas: auditoria",
+      "description": "Reproduzir e corrigir falhas de operações básicas de vértices/arestas em objetos com transformação não uniforme.",
+      "document": "09-ui/shell-v2-refinement.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
+      "baseline": "Reabertura 2026-10-18 por feedback de uso do shell v2 (ver 09-ui/shell-v2-refinement.md).",
+      "checkpoints": [
+        {
+          "title": "Seleção por clique de vértice e de aresta em objeto esticado, girado e deslocado (teste de regressão).",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Operações básicas de vértice/aresta/face em objeto transformado: válidas, com Undo exato e um passo de histórico (teste).",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Correção: dissolver arestas vizinhas gerava face com vértice repetido (Mesh::dissolve_selected) com 6 testes de regressão.",
+          "completed": true,
+          "evidence": "shell-v2-refinement-2026-10-18"
+        },
+        {
+          "title": "Reproduzir e corrigir os demais casos do relato (precisam de passos concretos).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, GL headless, visual manual) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-refinement.md"
       ]
     }
   ]

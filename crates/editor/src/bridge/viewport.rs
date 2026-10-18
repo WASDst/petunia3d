@@ -104,7 +104,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             selection_thickness: self.state.ui.selection_thickness,
             show_grid: self.state.session.show_grid,
             hover: self.state.session.tools.hover,
-            boolean_operand: self.state.session.tools.boolean_operand,
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
             matcap: self.preferences.viewport_matcap,
             ambient_occlusion: self.preferences.viewport_ambient_occlusion,

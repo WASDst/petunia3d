@@ -8,7 +8,9 @@
 #include <QWidget>
 #include <functional>
 
+class QBoxLayout;
 class QPushButton;
+class QToolButton;
 
 /// Imagem do documento (referências, prefabs) lida da ponte do editor.
 QImage petuniaImage(const QString &kind, const QString &id);
@@ -38,6 +40,26 @@ class PetuniaBoundForm : public QWidget {
   protected:
     void button(QFormLayout *, const QString &label, const QString &action,
                 QJsonObject args = {}, const QString &enabledKey = {});
+    /// Botão compacto de uma linha: ícone opcional, rótulo curto e dica longa.
+    struct ButtonSpec {
+        QString label;
+        QString action;
+        QJsonObject args;
+        QString enabledKey;
+        QString icon;
+        QString tip;
+    };
+    /// Vários botões lado a lado (até `columns` por linha) numa só linha do
+    /// formulário: no lugar de uma coluna de botões de largura total.
+    void buttonRow(QFormLayout *, const QList<ButtonSpec> &specs, int columns = 0);
+    /// Botão de ícone que liga/desliga um valor booleano do snapshot (`key`).
+    QToolButton *iconToggle(QBoxLayout *, const QString &icon, const QString &tip,
+                            const QString &key, const QString &action,
+                            const QString &arg = QStringLiteral("value"),
+                            QJsonObject args = {});
+    /// Botão de ícone que envia uma ação (sem estado).
+    QToolButton *iconButton(QBoxLayout *, const QString &icon, const QString &tip,
+                            const QString &action, QJsonObject args = {});
     void number(QFormLayout *, const QString &label, const QString &key,
                 const QString &action, const QString &arg, qreal min, qreal max,
                 qreal step = 0.01, QJsonObject args = {});

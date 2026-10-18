@@ -255,6 +255,10 @@
         {
           "path": "09-ui/shell-v2-proposal.md",
           "title": "Shell v2 — proposta de refatoração da GUI Qt"
+        },
+        {
+          "path": "09-ui/shell-v2-refinement.md",
+          "title": "Shell v2 — refinamento de uso — implementado, visual pendente"
         }
       ]
     },

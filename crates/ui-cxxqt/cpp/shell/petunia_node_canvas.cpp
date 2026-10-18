@@ -46,6 +46,55 @@ QString typeLabel(const QString &type) {
         return petuniaTr(QStringLiteral("Value"));
     return petuniaTr(QStringLiteral("Geometry"));
 }
+
+/// Cor de um tipo de porta e de fio: o tipo também se distingue pela forma
+/// (círculo, losango, quadrado) e pelo traço do fio; a cor só reforça.
+QColor typeColor(const QString &type) {
+    const auto &t = PetuniaTheme::instance();
+    if (type == QLatin1String("operation"))
+        return t.accentSelection();
+    if (type == QLatin1String("texture"))
+        return t.statusSuccess();
+    if (type == QLatin1String("color"))
+        return t.statusWarning();
+    if (type == QLatin1String("value"))
+        return t.textSecondary();
+    return t.statusInfo(); // geometria
+}
+
+/// Identidade visual de um nó: cor do cabeçalho, ícone e rótulo do papel. Nós de
+/// objeto, de operação (por tipo) e de receita de material (por categoria) leem
+/// diferente à primeira vista.
+struct NodeVisual {
+    QColor color;
+    QString icon;
+    QString role;
+};
+
+NodeVisual nodeVisual(const QJsonObject &row) {
+    const auto &t = PetuniaTheme::instance();
+    const QString typeId = row["type_id"].toString();
+    if (typeId == QLatin1String("petunia.object"))
+        return {t.textSecondary(), QStringLiteral("cube"), petuniaTr(QStringLiteral("Objeto"))};
+    if (typeId == QLatin1String("petunia.boolean"))
+        return {t.accentSelection(), QStringLiteral("boolean_cut"), petuniaTr(QStringLiteral("Booleana"))};
+    if (typeId == QLatin1String("petunia.mirror"))
+        return {t.statusInfo(), QStringLiteral("mirror"), petuniaTr(QStringLiteral("Espelho"))};
+    if (typeId == QLatin1String("petunia.symmetry"))
+        return {t.statusInfo(), QStringLiteral("symmetrize"), petuniaTr(QStringLiteral("Simetria"))};
+    const QString category = row["category"].toString();
+    if (typeId.startsWith(QLatin1String("recipe."))) {
+        if (category == QLatin1String("input"))
+            return {t.statusInfo(), QStringLiteral("reference_image"), petuniaTr(QStringLiteral("Entrada"))};
+        if (category == QLatin1String("pattern"))
+            return {t.accentPrimary(), QStringLiteral("paint_gradient"), petuniaTr(QStringLiteral("Gerador"))};
+        if (category == QLatin1String("color"))
+            return {t.statusWarning(), QStringLiteral("paint_palette"), petuniaTr(QStringLiteral("Cor"))};
+        if (category == QLatin1String("output"))
+            return {t.statusSuccess(), QStringLiteral("output"), petuniaTr(QStringLiteral("Saída"))};
+    }
+    return {t.accentPrimary(), QStringLiteral("modifier"), petuniaTr(QStringLiteral("Operação"))};
+}
 } // namespace
 
 // ── Nó ──────────────────────────────────────────────────────────────────────
@@ -58,6 +107,7 @@ class PetuniaNodeItem : public QGraphicsObject {
         m_id = row["id"].toString();
         m_inputs = row["inputs"].toArray();
         m_outputs = row["outputs"].toArray();
+        setToolTip(portSummary());
     }
 
     const QString &id() const { return m_id; }
@@ -114,24 +164,45 @@ class PetuniaNodeItem : public QGraphicsObject {
         QColor border = m_selected ? t.accentSelectionActive() : (m_active ? t.accentPrimary() : t.borderStrong());
         p->setPen(QPen(border, m_selected ? t.focusRingWidth() + 1 : 1.2));
         p->drawRoundedRect(body, 7, 7);
-        // Cabeçalho: o papel do nó não depende só de cor (glifo + texto).
+        // Cabeçalho: o papel do nó não depende só de cor (ícone + rótulo do papel).
+        const NodeVisual visual = nodeVisual(m_row);
         p->save();
         p->setClipRect(QRectF(0, 0, kNodeWidth, kHeader));
         p->setPen(Qt::NoPen);
         p->setBrush(isObject() ? t.bgSurfaceActive() : t.bgPanelHeader());
         p->drawRoundedRect(body, 7, 7);
+        QColor tint = visual.color;
+        tint.setAlpha(enabled ? 64 : 24);
+        p->setBrush(tint);
+        p->drawRoundedRect(body, 7, 7);
+        p->setBrush(enabled ? visual.color : t.textMuted());
+        p->drawRect(QRectF(0, 0, 4, kHeader));
         p->restore();
+        const QIcon roleIcon = PetuniaIcons::get(visual.icon, (enabled ? visual.color : t.textMuted()).name());
+        roleIcon.paint(p, QRect(10, int((kHeader - 16) / 2), 16, 16));
         QFont f = p->font();
         f.setPixelSize(t.fontPx(PetuniaTheme::TextRole::Body));
         f.setBold(true);
         p->setFont(f);
         p->setPen(enabled ? t.textPrimary() : t.textMuted());
-        const QString glyph = isObject() ? QStringLiteral("▣ ") : QStringLiteral("ƒ ");
-        QString title = glyph + m_row["title"].toString();
+        QString title = m_row["title"].toString();
         if (!enabled)
             title += QStringLiteral(" (off)");
-        p->drawText(QRectF(10, 0, kNodeWidth - 20, kHeader), Qt::AlignVCenter | Qt::AlignLeft,
-                    QFontMetrics(f).elidedText(title, Qt::ElideRight, int(kNodeWidth - 20)));
+        const bool hasError = !m_row["error"].isNull() && !m_row["error"].toString().isEmpty();
+        // O rótulo do papel fica à direita (some quando falta espaço ou há erro).
+        QFont roleFont = f;
+        roleFont.setBold(false);
+        roleFont.setPixelSize(t.fontPx(PetuniaTheme::TextRole::Caption));
+        const int roleWidth = hasError ? 0 : QFontMetrics(roleFont).horizontalAdvance(visual.role);
+        const qreal titleRight = kNodeWidth - 10 - (roleWidth > 0 ? roleWidth + 8 : 0) - (hasError ? 18 : 0);
+        p->drawText(QRectF(32, 0, titleRight - 32, kHeader), Qt::AlignVCenter | Qt::AlignLeft,
+                    QFontMetrics(f).elidedText(title, Qt::ElideRight, int(titleRight - 32)));
+        if (roleWidth > 0 && titleRight - 32 > 56) {
+            p->setFont(roleFont);
+            p->setPen(t.textMuted());
+            p->drawText(QRectF(kNodeWidth - 10 - roleWidth, 0, roleWidth, kHeader), Qt::AlignVCenter | Qt::AlignRight,
+                        visual.role);
+        }
         f.setBold(false);
         f.setPixelSize(t.fontPx(PetuniaTheme::TextRole::Caption));
         p->setFont(f);
@@ -147,6 +218,7 @@ class PetuniaNodeItem : public QGraphicsObject {
         p->drawText(QRectF(10, bodyHeight() - 20, kNodeWidth - 20, 18), Qt::AlignVCenter | Qt::AlignLeft,
                     QFontMetrics(f).elidedText(summary, Qt::ElideRight, int(kNodeWidth - 20)));
         if (!m_row["error"].isNull() && !m_row["error"].toString().isEmpty()) {
+            p->setFont(f);
             p->setPen(QPen(t.statusError(), 2));
             p->drawText(QRectF(kNodeWidth - 22, 0, 18, kHeader), Qt::AlignCenter, QStringLiteral("!"));
         }
@@ -164,22 +236,22 @@ class PetuniaNodeItem : public QGraphicsObject {
         // A forma distingue o tipo (nunca só a cor): círculo vazado = geometria,
         // losango = operação, quadrado arredondado = textura, círculo cheio = cor,
         // quadrado pequeno = valor.
-        p->setPen(QPen(t.borderStrong(), 2));
+        const QColor color = typeColor(type);
+        p->setPen(QPen(color, 2));
         if (type == QLatin1String("geometry")) {
             p->setBrush(t.bgSurface());
-            p->setPen(QPen(t.accentPrimary(), 2));
             p->drawEllipse(pos, kPort, kPort);
         } else if (type == QLatin1String("texture")) {
-            p->setBrush(t.accentPrimary());
+            p->setBrush(color);
             p->drawRoundedRect(QRectF(pos.x() - kPort, pos.y() - kPort, 2 * kPort, 2 * kPort), 3, 3);
         } else if (type == QLatin1String("color")) {
-            p->setBrush(t.statusWarning());
+            p->setBrush(color);
             p->drawEllipse(pos, kPort, kPort);
         } else if (type == QLatin1String("value")) {
-            p->setBrush(t.textSecondary());
+            p->setBrush(color);
             p->drawRect(QRectF(pos.x() - kPort + 2, pos.y() - kPort + 2, 2 * kPort - 4, 2 * kPort - 4));
         } else {
-            p->setBrush(t.accentPrimary());
+            p->setBrush(color);
             QPolygonF diamond;
             diamond << pos + QPointF(0, -kPort - 1) << pos + QPointF(kPort + 1, 0) << pos + QPointF(0, kPort + 1)
                     << pos + QPointF(-kPort - 1, 0);
@@ -190,6 +262,21 @@ class PetuniaNodeItem : public QGraphicsObject {
         const QRectF r = input ? QRectF(pos.x() + 10, pos.y() - 9, kNodeWidth / 2 - 8, 18)
                                : QRectF(pos.x() - kNodeWidth / 2 - 2, pos.y() - 9, kNodeWidth / 2 - 8, 18);
         p->drawText(r, Qt::AlignVCenter | (input ? Qt::AlignLeft : Qt::AlignRight), label);
+    }
+
+    /// Dica do nó: papel e os tipos de cada entrada/saída (forma + nome do tipo).
+    QString portSummary() const {
+        auto describe = [](const QJsonArray &ports) {
+            QStringList parts;
+            for (const auto &value : ports) {
+                const auto port = value.toObject();
+                parts << QStringLiteral("%1 (%2)").arg(petuniaTr(port["label"].toString()), typeLabel(port["type"].toString()));
+            }
+            return parts.isEmpty() ? petuniaTr(QStringLiteral("nenhuma")) : parts.join(QStringLiteral(", "));
+        };
+        return QStringLiteral("%1\n%2: %3\n%4: %5")
+            .arg(nodeVisual(m_row).role, petuniaTr(QStringLiteral("Entradas")), describe(m_inputs),
+                 petuniaTr(QStringLiteral("Saídas")), describe(m_outputs));
     }
 
     QString summaryText() const {
@@ -232,12 +319,14 @@ class PetuniaWireItem : public QGraphicsPathItem {
         const qreal dx = std::max<qreal>(40, std::abs(b.x() - a.x()) / 2);
         path.cubicTo(a + QPointF(dx, 0), b - QPointF(dx, 0), b);
         setPath(path);
-        const auto &t = PetuniaTheme::instance();
-        // Geometria = tracejado; operação = contínuo: o tipo nunca depende só de cor.
-        QPen pen(m_type == QLatin1String("geometry") ? t.textSecondary() : t.accentPrimary(),
-                 m_type == QLatin1String("geometry") ? 2.0 : 2.6);
+        // Cada tipo tem cor e traço próprios (geometria tracejado, valor ponto e
+        // traço, operação contínuo grosso): o tipo nunca depende só de cor.
+        QPen pen(typeColor(m_type), m_type == QLatin1String("operation") ? 2.8 : 2.0);
         if (m_type == QLatin1String("geometry"))
             pen.setStyle(Qt::DashLine);
+        else if (m_type == QLatin1String("value"))
+            pen.setStyle(Qt::DashDotLine);
+        pen.setCapStyle(Qt::RoundCap);
         setPen(pen);
         m_mid = path.pointAtPercent(0.5);
     }
@@ -1161,6 +1250,69 @@ void PetuniaNodeCanvas::focusOutEvent(QFocusEvent *event) {
     QGraphicsView::focusOutEvent(event);
     for (auto *item : std::as_const(m_nodes))
         item->setFocused(false);
+}
+
+/// Legenda dos tipos de porta/fio presentes no grafo (forma + cor + nome),
+/// fixa no canto da vista: ajuda a ler o que cada ligação transporta.
+void PetuniaNodeCanvas::drawForeground(QPainter *painter, const QRectF &rect) {
+    QGraphicsView::drawForeground(painter, rect);
+    QStringList types;
+    for (const auto &value : m_nodeRows) {
+        const auto row = value.toObject();
+        for (const char *key : {"inputs", "outputs"})
+            for (const auto &port : row[QLatin1String(key)].toArray()) {
+                const QString type = port.toObject()["type"].toString();
+                if (!type.isEmpty() && !types.contains(type))
+                    types << type;
+            }
+    }
+    if (types.isEmpty())
+        return;
+    static const QStringList order{"geometry", "operation", "texture", "color", "value"};
+    std::sort(types.begin(), types.end(),
+              [](const QString &a, const QString &b) { return order.indexOf(a) < order.indexOf(b); });
+    const auto &theme = PetuniaTheme::instance();
+    painter->save();
+    painter->resetTransform();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    QFont font = painter->font();
+    font.setPixelSize(theme.fontPx(PetuniaTheme::TextRole::Caption));
+    painter->setFont(font);
+    const QFontMetrics metrics(font);
+    qreal width = 12;
+    for (const auto &type : types)
+        width += 18 + metrics.horizontalAdvance(typeLabel(type)) + 12;
+    const QRectF box(10, 10, width, 26);
+    QColor fill = theme.bgPanel();
+    fill.setAlpha(215);
+    painter->setPen(QPen(theme.borderSubtle(), 1));
+    painter->setBrush(fill);
+    painter->drawRoundedRect(box, 6, 6);
+    qreal x = box.left() + 10;
+    const qreal y = box.center().y();
+    for (const auto &type : types) {
+        const QColor color = typeColor(type);
+        painter->setPen(QPen(color, 2));
+        const QPointF at(x + 6, y);
+        painter->setBrush(type == QLatin1String("geometry") ? Qt::NoBrush : QBrush(color));
+        if (type == QLatin1String("texture")) {
+            painter->drawRoundedRect(QRectF(at.x() - 5, at.y() - 5, 10, 10), 2.5, 2.5);
+        } else if (type == QLatin1String("value")) {
+            painter->drawRect(QRectF(at.x() - 3.5, at.y() - 3.5, 7, 7));
+        } else if (type == QLatin1String("operation")) {
+            QPolygonF diamond;
+            diamond << at + QPointF(0, -6) << at + QPointF(6, 0) << at + QPointF(0, 6) << at + QPointF(-6, 0);
+            painter->drawPolygon(diamond);
+        } else {
+            painter->drawEllipse(at, 5, 5);
+        }
+        painter->setPen(theme.textSecondary());
+        const QString label = typeLabel(type);
+        painter->drawText(QRectF(x + 16, box.top(), metrics.horizontalAdvance(label) + 4, box.height()),
+                          Qt::AlignVCenter | Qt::AlignLeft, label);
+        x += 18 + metrics.horizontalAdvance(label) + 12;
+    }
+    painter->restore();
 }
 
 void PetuniaNodeCanvas::drawBackground(QPainter *painter, const QRectF &rect) {

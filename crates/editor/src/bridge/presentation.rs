@@ -123,6 +123,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 tris: 0,
                 has_custom_color: false,
                 custom_color_rgb: self.state.ui.selection_rgb,
+                collection: String::new(),
             });
         }
 
@@ -156,12 +157,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.viewport.draws_gizmo() {
             vm.gizmo.clear_handle_geometry();
         }
-        vm.selection_overlay = compute_selection_overlay(
-            &self.state,
-            self.viewport_size[0],
-            self.viewport_size[1],
-            self.viewport.draws_component_guides(),
-        );
         vm.add_menu_open = self.add_menu_open;
         if let Some(draft) = &self.rename_draft {
             vm.rename_active = true;
@@ -336,23 +331,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
         }
-        if let Some(operand) = self.state.session.tools.boolean_operand {
-            if let Some(asset) = self
-                .state
-                .project
-                .assets
-                .iter()
-                .find(|asset| asset.id == operand)
-            {
-                vm.boolean_operand_name = asset.name.clone();
-            } else {
-                vm.boolean_operand_name = "missing".to_string();
-            }
-        }
-        vm.boolean_keep_parts = self.state.session.tools.boolean_keep_parts;
-        vm.boolean_cleanup = self.state.session.tools.boolean_cleanup;
-        vm.boolean_ready = self.state.session.tools.boolean_operand.is_some()
-            && self.state.project.active_mesh().is_some();
         if let Some(kind) = self.menu_open {
             vm.menu_open = kind.id().to_string();
         }
@@ -408,9 +386,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_quick_action_reset = translated(petunia_config::text_id::UI_QUICK_ACTION_RESET);
         vm.label_quick_action_done = translated(petunia_config::text_id::UI_QUICK_ACTION_DONE);
         vm.label_action_subdivide = translated(petunia_config::text_id::UI_ACTION_SUBDIVIDE);
-        vm.label_action_fuse = translated(petunia_config::text_id::UI_ACTION_FUSE);
-        vm.label_action_cut = translated(petunia_config::text_id::UI_ACTION_CUT);
-        vm.label_action_intersect = translated(petunia_config::text_id::UI_ACTION_INTERSECT);
         vm.label_action_join = translated(petunia_config::text_id::UI_ACTION_JOIN);
         vm.label_action_merge = translated(petunia_config::text_id::UI_ACTION_MERGE);
         vm.label_action_slice = translated(petunia_config::text_id::UI_ACTION_SLICE);
@@ -1392,11 +1367,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.subdivide" => self
                 .state
                 .t_id(petunia_config::text_id::UI_ACTION_SUBDIVIDE),
-            "model.fuse" => self.state.t_id(petunia_config::text_id::UI_ACTION_FUSE),
-            "model.cut" => self.state.t_id(petunia_config::text_id::UI_ACTION_CUT),
-            "model.intersect" => self
-                .state
-                .t_id(petunia_config::text_id::UI_ACTION_INTERSECT),
             "model.join" => self.state.t_id(petunia_config::text_id::UI_ACTION_JOIN),
             "model.merge" => self.state.t_id(petunia_config::text_id::UI_ACTION_MERGE),
             "model.slice" => self.state.t_id(petunia_config::text_id::UI_ACTION_SLICE),

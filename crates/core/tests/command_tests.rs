@@ -1717,199 +1717,6 @@ fn test_alias_does_not_duplicate_command_ids_in_the_catalog() {
 }
 
 #[test]
-fn test_boolean_fuse_and_cut_between_active_and_operand() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
-    state.project.assets[0].name = "A".to_string();
-    let a_id = state.project.assets[0].id;
-
-    // Sem operando escolhido a operação precisa ser recusada.
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Union))
-            .is_err()
-    );
-    assert_eq!(state.project.assets.len(), 1);
-
-    // Cria B deslocado no eixo X para que a união tenha volume maior.
-    let mut b = petunia_mesh::Mesh::cube(2.0);
-    b.select_all();
-    b.translate_selected([1.0, 0.0, 0.0]);
-    b.deselect_all();
-    state.project.add("B", b);
-    let b_id = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
-
-    let before = state.project.assets[0].mesh.verts.len();
-    let undo_before = state.project.undo.depth().0;
-    assert!(state.dispatch(&BooleanOpCmd::new(BooleanOp::Union)).is_ok());
-    assert_eq!(
-        state.project.undo.depth().0,
-        undo_before + 1,
-        "Fuse é exatamente uma entrada de undo"
-    );
-    assert_eq!(state.project.assets.len(), 1, "B é consumido");
-    assert!(state.project.assets[0].mesh.verts.len() > before);
-    assert!(state.session.tools.boolean_operand.is_none());
-    assert_eq!(state.project.active, 0);
-    assert_eq!(state.project.assets[0].id, a_id);
-
-    // Undo restaura os dois objetos.
-    assert!(state.undo());
-    assert_eq!(state.project.assets.len(), 2);
-    assert!(state.project.assets.iter().any(|a| a.id == b_id));
-
-    // Cut: o operando precisa existir de novo.
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_ok()
-    );
-    assert_eq!(state.project.assets.len(), 1);
-    assert_eq!(state.project.assets[0].id, a_id);
-}
-
-#[test]
-fn test_boolean_refuses_the_active_asset_as_operand_and_missing_operand() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    let active = state.project.assets[0].id;
-
-    state.session.tools.boolean_operand = Some(active);
-    let err = state
-        .dispatch(&BooleanOpCmd::new(BooleanOp::Union))
-        .unwrap_err()
-        .to_string();
-    assert!(err.contains("active"), "veio: {err}");
-    assert_eq!(state.project.assets.len(), 1);
-
-    state.session.tools.boolean_operand = Some(uuid::Uuid::new_v4());
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_err()
-    );
-    assert_eq!(state.project.assets.len(), 1);
-}
-
-#[test]
-fn test_keep_parts_keeps_the_operand_in_the_scene() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
-
-    let mut b = petunia_mesh::Mesh::cube(2.0);
-    b.select_all();
-    b.translate_selected([1.6, 0.0, 0.0]);
-    b.deselect_all();
-    state.project.add("B", b);
-    let b_id = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
-    state.session.tools.boolean_keep_parts = true;
-
-    assert!(state.dispatch(&BooleanOpCmd::new(BooleanOp::Union)).is_ok());
-    assert_eq!(
-        state.project.assets.len(),
-        2,
-        "Keep Parts mantém o operando na cena"
-    );
-    assert!(state.project.assets.iter().any(|a| a.id == b_id));
-    assert_eq!(state.project.active, 0, "o ativo continua sendo A");
-    assert!(state.session.tools.boolean_operand.is_none());
-}
-
-#[test]
-fn test_boolean_cut_returns_quads_not_kernel_triangles_and_undoes_in_one_step() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = (petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0)).into();
-    let before_faces = state.project.assets[0].mesh.faces.len();
-    state
-        .project
-        .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
-    let hole = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(hole);
-
-    let undo_before = state.project.undo.depth().0;
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_ok()
-    );
-    assert_eq!(state.project.undo.depth().0, undo_before + 1);
-    let report = state
-        .session
-        .tools
-        .boolean_report
-        .clone()
-        .expect("relatório do cleanup");
-    let mesh = state.project.active_mesh().unwrap();
-    let quads = mesh.faces.iter().filter(|f| f.verts.len() == 4).count();
-    assert!(!report.fell_back, "{report:?}");
-    assert!(
-        quads >= 28,
-        "paredes do furo e laterais voltam a ser quads: {quads}"
-    );
-    assert!(
-        mesh.faces.len() < report.kernel_triangles,
-        "menos faces que os triângulos do kernel"
-    );
-    assert!(
-        state.ui.status.contains("quads"),
-        "status: {}",
-        state.ui.status
-    );
-
-    state.undo();
-    assert_eq!(state.project.assets.len(), 2, "o operando volta");
-    assert_eq!(state.project.assets[0].mesh.faces.len(), before_faces);
-}
-
-#[test]
-fn test_boolean_cleanup_can_be_turned_off_to_keep_the_kernel_triangles() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = (petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0)).into();
-    state
-        .project
-        .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
-    let hole = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(hole);
-    state.session.tools.boolean_cleanup = false;
-
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_ok()
-    );
-    let mesh = state.project.active_mesh().unwrap();
-    assert!(mesh.faces.iter().all(|f| f.verts.len() == 3));
-    assert!(state.session.tools.boolean_report.is_none());
-}
-
-#[test]
 fn test_join_merges_both_topologies_without_a_boolean_kernel() {
     use petunia_core::JoinObjectsCmd;
 
@@ -1928,7 +1735,8 @@ fn test_join_merges_both_topologies_without_a_boolean_kernel() {
     let b_verts = state.project.assets[1].mesh.verts.len();
     let b_faces = state.project.assets[1].mesh.faces.len();
     state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
+    let a_id = state.project.assets[0].id;
+    state.session.selection.assets = vec![a_id, b_id];
 
     let undo_before = state.project.undo.depth().0;
     assert!(state.dispatch(&JoinObjectsCmd).is_ok());
@@ -1952,6 +1760,23 @@ fn test_join_merges_both_topologies_without_a_boolean_kernel() {
         2,
         "undo restaura os dois objetos"
     );
+}
+
+#[test]
+fn test_join_needs_a_second_selected_object() {
+    use petunia_core::JoinObjectsCmd;
+
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    let a_id = state.project.assets[0].id;
+    state.project.add("B", petunia_mesh::Mesh::cube(2.0));
+    state.project.active = 0;
+    state.session.selection.assets = vec![a_id];
+    assert!(
+        state.dispatch(&JoinObjectsCmd).is_err(),
+        "sem outro objeto selecionado o Join é recusado"
+    );
+    assert_eq!(state.project.assets.len(), 2);
 }
 
 #[test]

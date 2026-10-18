@@ -1,4 +1,5 @@
 #include "petunia_bound_form.h"
+#include "petunia_icons.h"
 #include "petunia_number_field.h"
 #include "petunia_number_field.h"
 #include "petunia_theme.h"
@@ -6,6 +7,8 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QColorDialog>
+#include <QGridLayout>
+#include <QToolButton>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -37,6 +40,72 @@ void PetuniaBoundForm::button(QFormLayout *form, const QString &label,
             [=, this] { send(action, args); });
     m_bindings.append({widget, {}, enabled, {}});
 }
+void PetuniaBoundForm::buttonRow(QFormLayout *form, const QList<ButtonSpec> &specs, int columns) {
+    auto *container = new QWidget(this);
+    auto *grid = new QGridLayout(container);
+    const auto &theme = PetuniaTheme::instance();
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setHorizontalSpacing(theme.space(1));
+    grid->setVerticalSpacing(theme.space(1));
+    const int perRow = columns > 0 ? columns : int(specs.size());
+    int index = 0;
+    for (const auto &spec : specs) {
+        auto *widget = new QPushButton(spec.label, container);
+        if (!spec.icon.isEmpty())
+            widget->setIcon(PetuniaIcons::get(spec.icon));
+        widget->setMinimumHeight(theme.compactControlHeight());
+        widget->setAccessibleName(spec.tip.isEmpty() ? spec.label : spec.tip);
+        widget->setToolTip(spec.tip.isEmpty() ? spec.label : spec.tip);
+        widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        widget->setProperty("petuniaTip", widget->toolTip());
+        if (spec.action == "command")
+            widget->setProperty("commandId", spec.args["id"].toString());
+        grid->addWidget(widget, index / perRow, index % perRow);
+        connect(widget, &QPushButton::clicked, this, [this, spec] { send(spec.action, spec.args); });
+        m_bindings.append({widget, {}, spec.enabledKey, {}});
+        ++index;
+    }
+    form->addRow(container);
+}
+
+QToolButton *PetuniaBoundForm::iconToggle(QBoxLayout *layout, const QString &icon, const QString &tip,
+                                          const QString &key, const QString &action, const QString &arg,
+                                          QJsonObject args) {
+    const auto &theme = PetuniaTheme::instance();
+    auto *widget = new QToolButton(this);
+    widget->setProperty("role", QStringLiteral("header"));
+    widget->setCheckable(true);
+    widget->setIcon(PetuniaIcons::get(icon));
+    widget->setIconSize(QSize(theme.iconPx(), theme.iconPx()));
+    widget->setToolTip(tip);
+    widget->setAccessibleName(tip);
+    widget->setFixedSize(theme.compactControlHeight(), theme.compactControlHeight());
+    layout->addWidget(widget);
+    connect(widget, &QToolButton::toggled, this, [=, this](bool value) mutable {
+        if (!arg.isEmpty())
+            args.insert(arg, value);
+        send(action, args);
+    });
+    m_bindings.append({widget, key, {}, {}});
+    return widget;
+}
+
+QToolButton *PetuniaBoundForm::iconButton(QBoxLayout *layout, const QString &icon, const QString &tip,
+                                          const QString &action, QJsonObject args) {
+    const auto &theme = PetuniaTheme::instance();
+    auto *widget = new QToolButton(this);
+    widget->setProperty("role", QStringLiteral("header"));
+    widget->setIcon(PetuniaIcons::get(icon));
+    widget->setIconSize(QSize(theme.iconPx(), theme.iconPx()));
+    widget->setToolTip(tip);
+    widget->setAccessibleName(tip);
+    widget->setFixedSize(theme.compactControlHeight(), theme.compactControlHeight());
+    layout->addWidget(widget);
+    connect(widget, &QToolButton::clicked, this, [=, this] { send(action, args); });
+    m_bindings.append({widget, {}, {}, {}});
+    return widget;
+}
+
 void PetuniaBoundForm::number(QFormLayout *form, const QString &label,
                                 const QString &key, const QString &action,
                                 const QString &arg, qreal min, qreal max,
@@ -268,8 +337,11 @@ void PetuniaBoundForm::sync(const QJsonObject &state) {
             for (const auto &c : state["commands"].toArray()) {
                 const auto cmd = c.toObject();
                 if (cmd["id"] == command) {
-                    binding.widget->setEnabled(cmd["enabled"].toBool());
-                    binding.widget->setToolTip(cmd["reason"].toString());
+                    const bool ok = cmd["enabled"].toBool();
+                    binding.widget->setEnabled(ok);
+                    // Habilitado, vale a dica do próprio botão; desabilitado, o motivo.
+                    binding.widget->setToolTip(ok ? binding.widget->property("petuniaTip").toString()
+                                                  : cmd["reason"].toString());
                     found = true;
                     break;
                 }
@@ -311,6 +383,8 @@ void PetuniaBoundForm::sync(const QJsonObject &state) {
         } else if (auto *w = qobject_cast<QDoubleSpinBox *>(binding.widget))
             w->setValue(value.toDouble());
         else if (auto *w = qobject_cast<QCheckBox *>(binding.widget))
+            w->setChecked(value.toBool());
+        else if (auto *w = qobject_cast<QToolButton *>(binding.widget); w && w->isCheckable())
             w->setChecked(value.toBool());
         else if (auto *w = qobject_cast<QLineEdit *>(binding.widget)) {
             w->setText(value.isString()

@@ -571,17 +571,6 @@ pub struct ToolState {
     pub pending_modal: Option<crate::modal::ModalKind>,
     pub pointer_session: Option<crate::modal::PointerSession>,
     pub cut_session: Option<crate::cutting_session::CutSession>,
-    /// Operando B das operações booleanas (Fuse/Cut/Intersect): o outro ativo
-    /// escolhido pelo usuário, distinto do ativo atual (A).
-    pub boolean_operand: Option<uuid::Uuid>,
-    /// Modificador **Keep Parts**: mantém o operando na cena depois da operação,
-    /// em vez de consumi-lo.
-    pub boolean_keep_parts: bool,
-    /// Cleanup seguro do resultado (cap. 04): regiões coplanares viram quads,
-    /// n-gons e faixas. Desligado, mantém a triangulação crua do kernel.
-    pub boolean_cleanup: bool,
-    /// Relatório da última operação booleana (para status e testes).
-    pub boolean_report: Option<petunia_mesh::boolean_cleanup::CleanupReport>,
     pub mesh_preview: Option<crate::mesh_preview::MeshPreview>,
     pub paint_color: [f32; 3],
     pub paint_radius: f32,
@@ -682,10 +671,6 @@ impl ToolState {
             pending_modal: None,
             pointer_session: None,
             cut_session: None,
-            boolean_operand: None,
-            boolean_keep_parts: false,
-            boolean_cleanup: true,
-            boolean_report: None,
             mesh_preview: None,
             paint_color: [1.0, 0.2, 0.2],
             paint_radius: 0.8,
@@ -1689,6 +1674,10 @@ pub struct UiState {
     pub multiselection_measure_tag: bool,
     pub selection_rgb: [u8; 3],
     pub selection_thickness: f32,
+    /// Comprimento das hastes dos gizmos (px lógicos, 48..=160).
+    pub gizmo_size: f32,
+    /// Espessura do traço dos gizmos (px lógicos, 1..=6).
+    pub gizmo_thickness: f32,
     pub inspector_detached: bool,
     /// Opções do diálogo de exportação (não pertencem ao documento).
     pub export_selected: Vec<Uuid>,
@@ -1802,6 +1791,8 @@ impl UiState {
             multiselection_measure_tag: true,
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
+            gizmo_size: 72.0,
+            gizmo_thickness: 2.0,
             inspector_detached: false,
             export_selected: Vec::new(),
             export_gltf: true,
@@ -1888,20 +1879,17 @@ impl UiState {
     }
 
     /// Catálogo controlado de ações rápidas do Inspector MODEL.
-    pub const MODEL_QUICK_ACTION_CANDIDATES: [&'static str; 8] = [
+    pub const MODEL_QUICK_ACTION_CANDIDATES: [&'static str; 6] = [
         "model.subdivide",
-        "model.fuse",
-        "model.cut",
         "model.join",
-        "model.intersect",
         "model.merge",
         "model.slice",
         "model.loop_cut",
+        "model.knife",
     ];
 
     /// Conjunto padrão de ações rápidas, sem esconder capacidade essencial.
-    pub const MODEL_QUICK_ACTION_DEFAULTS: [&'static str; 4] =
-        ["model.subdivide", "model.fuse", "model.cut", "model.join"];
+    pub const MODEL_QUICK_ACTION_DEFAULTS: [&'static str; 2] = ["model.subdivide", "model.join"];
 
     /// Máximo de ações rápidas para preservar contexto em vez de volume.
     pub const MODEL_QUICK_ACTION_LIMIT: usize = 6;
@@ -3851,126 +3839,6 @@ impl CommandContext<'_> {
         true
     }
 
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    pub fn apply_boolean(
-        &mut self,
-        op: petunia_mesh::boolean::BooleanOp,
-    ) -> Result<usize, petunia_mesh::boolean::BooleanError> {
-        use petunia_mesh::boolean::{BooleanError, boolean_meshes};
-        let operand_id = self
-            .editor
-            .tools
-            .boolean_operand
-            .ok_or(BooleanError::InvalidInput("no operand selected"))?;
-        let active_index = self.document.active;
-        let operand_index = self
-            .document
-            .assets
-            .iter()
-            .position(|asset| asset.id == operand_id)
-            .ok_or(BooleanError::InvalidInput("operand no longer exists"))?;
-        if operand_index == active_index {
-            return Err(BooleanError::InvalidInput("operand is the active asset"));
-        }
-        // O kernel só aceita triângulos: `boolean_meshes_clean` triangula cópias dos
-        // operandos e, depois, funde de volta as regiões coplanares (cap. 04).
-        // O resultado vive no objeto ativo: o operando entra no frame dele.
-        let a = self.document.assets[active_index].mesh.to_owned_value();
-        let b = self.document.assets[operand_index]
-            .mesh_in_frame_of(&self.document.assets[active_index]);
-        let operand_in_active = b.clone();
-        let (mut result, report) = if self.editor.tools.boolean_cleanup {
-            let (mesh, report) = petunia_mesh::boolean::boolean_meshes_clean(&a, &b, op)?;
-            (mesh, Some(report))
-        } else {
-            let (mut ta, mut tb) = (a, b);
-            ta.triangulate();
-            tb.triangulate();
-            (boolean_meshes(&ta, &tb, op)?, None)
-        };
-        let texture = if report.as_ref().is_some_and(|r| {
-            r.uv == petunia_mesh::boolean_cleanup::UvOutcome::Inherited && !r.fell_back
-        }) {
-            None
-        } else {
-            crate::boolean_texture::transfer(
-                &self.document.project,
-                &mut result,
-                &self.document.assets[active_index],
-                &self.document.assets[operand_index],
-                &operand_in_active,
-            )
-        };
-        if texture.is_none() && report.as_ref().is_none_or(|r| r.fell_back) {
-            result.layout_uv_charts(petunia_mesh::primitives::DEFAULT_UV_PADDING);
-        }
-        let verts = result.verts.len();
-        let mut report = report;
-        if texture.is_some()
-            && let Some(report) = &mut report
-        {
-            report.uv = petunia_mesh::boolean_cleanup::UvOutcome::Relaid;
-        }
-        self.editor.tools.boolean_report = report;
-
-        self.checkpoint(match op {
-            petunia_mesh::boolean::BooleanOp::Union => "fuse",
-            petunia_mesh::boolean::BooleanOp::Difference => "cut",
-            petunia_mesh::boolean::BooleanOp::Intersection => "intersect",
-        });
-        let albedo_name = self.t_id(petunia_config::TextId::new("surface.boolean_albedo"));
-        let material_id = texture
-            .as_ref()
-            .and_then(|transfer| transfer.material.clone())
-            .map(|m| self.document.project.add_material(m));
-        if let Some(asset) = self.document.assets.get_mut(active_index) {
-            asset.mesh = result.into();
-            asset.parametric = None;
-            if let Some(material_id) = material_id {
-                asset.material_id = Some(material_id);
-            }
-            if let Some(transfer) = texture {
-                let texture = transfer.albedo;
-                let name = albedo_name;
-                let mut stack = petunia_project::paint_layers::PaintLayerStack::new();
-                stack.add_layer(petunia_project::paint_layers::PaintLayer::new_raster(
-                    name,
-                    texture.clone(),
-                ));
-                asset.texture = Some(texture);
-                asset.paint_stack = Some(stack);
-            }
-        }
-        // Keep Parts mantém B na cena; sem o modificador ele é consumido, e
-        // remover antes do ativo desloca o índice.
-        if !self.editor.tools.boolean_keep_parts {
-            self.document.assets.remove(operand_index);
-            if operand_index < active_index {
-                self.document.active = active_index - 1;
-            }
-        }
-        self.editor.tools.boolean_operand = None;
-        self.sync_selection();
-        self.emit_mesh_changed();
-        self.mark_dirty();
-        Ok(verts)
-    }
-
     /// Executa uma operação do ShapeBuilder sólido de dois operandos (H25) sob transação atômica.
     pub fn apply_solid_shape_builder(
         &mut self,
@@ -3984,7 +3852,7 @@ impl CommandContext<'_> {
         };
 
         let operand_id = explicit_operand
-            .or(self.editor.tools.boolean_operand)
+            .or_else(|| self.second_selected_asset())
             .ok_or(CommandError::Execution("No operand selected".to_string()))?;
         let active_index = self.document.active;
         let operand_index = self
@@ -4691,43 +4559,70 @@ impl CommandContext<'_> {
         Ok(())
     }
 
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
-        let operand_id = self
-            .editor
-            .tools
-            .boolean_operand
-            .ok_or("Choose a boolean operand first")?;
+    /// Outro objeto selecionado, distinto do ativo: o operando implícito das
+    /// operações de dois objetos (Join, Shape Builder sólido).
+    pub fn second_selected_asset(&self) -> Option<uuid::Uuid> {
+        let active = self.document.active().map(|asset| asset.id);
+        self.editor
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .find(|id| Some(*id) != active && self.document.assets.iter().any(|a| a.id == *id))
+    }
+
+    /// **Join**: funde os demais objetos selecionados no ativo como um único
+    /// objeto, sem kernel booleano — a topologia de todos é preservada lado a
+    /// lado. Uma única entrada de Undo.
+    pub fn join_selected_into_active(&mut self) -> Result<usize, &'static str> {
         let active_index = self.document.active;
-        let operand_index = self
+        let active_id = self
+            .document
+            .assets
+            .get(active_index)
+            .map(|asset| asset.id)
+            .ok_or("No active mesh")?;
+        let others: Vec<uuid::Uuid> = self
+            .editor
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .filter(|id| *id != active_id)
+            .collect();
+        let sources: Vec<(uuid::Uuid, petunia_mesh::Mesh)> = others
+            .iter()
+            .filter_map(|id| {
+                let asset = self.document.assets.iter().find(|a| a.id == *id)?;
+                (!asset.locked).then(|| {
+                    (
+                        *id,
+                        asset.mesh_in_frame_of(&self.document.assets[active_index]),
+                    )
+                })
+            })
+            .collect();
+        if sources.is_empty() {
+            return Err("Select the objects to join and keep one active");
+        }
+        self.checkpoint("join");
+        let mut added = 0usize;
+        for (_, other) in &sources {
+            added += other.verts.len();
+            if let Some(asset) = self.document.assets.get_mut(active_index) {
+                asset.mesh.join(other);
+            }
+        }
+        self.document
+            .assets
+            .retain(|asset| !sources.iter().any(|(id, _)| *id == asset.id));
+        self.document.active = self
             .document
             .assets
             .iter()
-            .position(|asset| asset.id == operand_id)
-            .ok_or("The boolean operand no longer exists")?;
-        if operand_index == active_index {
-            return Err("The boolean operand cannot be the active object");
-        }
-        // O operando passa a viver no frame do ativo (aparência preservada).
-        let other = self.document.assets[operand_index]
-            .mesh_in_frame_of(&self.document.assets[active_index]);
-        let added = other.verts.len();
-        self.checkpoint("join");
-        if let Some(asset) = self.document.assets.get_mut(active_index) {
-            asset.mesh.join(&other);
-        }
-        self.document.assets.remove(operand_index);
-        if operand_index < active_index {
-            self.document.active = active_index - 1;
-        }
-        self.editor.tools.boolean_operand = None;
+            .position(|asset| asset.id == active_id)
+            .unwrap_or(0);
+        self.editor.selection.assets.retain(|id| *id == active_id);
         self.sync_selection();
         self.emit_mesh_changed();
         self.mark_dirty();
@@ -4888,7 +4783,18 @@ impl CommandContext<'_> {
         }
     }
 
-    /// Alterna o modo de isolamento da seleção atual (Local View / Isolate).
+    /// Ids que o isolamento mantém visíveis: a seleção de objetos e o ativo.
+    fn isolation_keep(&self) -> std::collections::HashSet<uuid::Uuid> {
+        let mut keep: std::collections::HashSet<uuid::Uuid> =
+            self.editor.selection.assets.iter().copied().collect();
+        if let Some(active) = self.document.active() {
+            keep.insert(active.id);
+        }
+        keep
+    }
+
+    /// Alterna o modo de isolamento da seleção atual (Local View / Isolate):
+    /// só os objetos selecionados (e o ativo) permanecem visíveis.
     pub fn toggle_isolate(&mut self) {
         if self.editor.isolate_active {
             // Restaura as visibilidades anteriores
@@ -4906,40 +4812,30 @@ impl CommandContext<'_> {
             self.editor.isolate_active = false;
             self.set_status("Modo de isolamento desativado".to_string());
         } else {
-            // Salva as visibilidades atuais e isola o ativo
+            // Salva as visibilidades atuais e isola a seleção
+            let keep = self.isolation_keep();
             let prev: Vec<bool> = self.document.assets.iter().map(|a| a.visible).collect();
             self.editor.isolate_prev_visibilities = Some(prev);
-            let active = self.document.active;
-            for (i, asset) in self.document.assets.iter_mut().enumerate() {
-                asset.visible = i == active;
+            for asset in &mut self.document.assets {
+                asset.visible = keep.contains(&asset.id);
             }
             self.editor.isolate_active = true;
+            let isolated = keep.len();
             let name = self
                 .document
                 .active()
                 .map(|a| a.name.clone())
                 .unwrap_or_else(|| "Ativo".to_string());
-            self.set_status(format!("Objeto '{name}' isolado na cena"));
+            self.set_status(if isolated > 1 {
+                format!("{isolated} objetos isolados na cena")
+            } else {
+                format!("Objeto '{name}' isolado na cena")
+            });
         }
         self.mark_dirty();
     }
 
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
-    ///
-    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
-    /// escondido. As visibilidades originais continuam guardadas para o
-    /// desfazer do isolamento.
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
-    ///
-    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
-    /// escondido. As visibilidades originais continuam guardadas para o
-    /// desfazer do isolamento.
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
-    ///
-    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
-    /// escondido. As visibilidades originais continuam guardadas para o
-    /// desfazer do isolamento.
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
+    /// Mantém o isolamento na seleção depois de trocar de objeto.
     ///
     /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
     /// escondido. As visibilidades originais continuam guardadas para o
@@ -4948,9 +4844,9 @@ impl CommandContext<'_> {
         if !self.editor.isolate_active {
             return;
         }
-        let active = self.document.active;
-        for (i, asset) in self.document.assets.iter_mut().enumerate() {
-            asset.visible = i == active;
+        let keep = self.isolation_keep();
+        for asset in &mut self.document.assets {
+            asset.visible = keep.contains(&asset.id);
         }
         self.mark_dirty();
     }
@@ -5673,12 +5569,7 @@ mod model_quick_action_tests {
         let state = AppState::new("en");
         assert_eq!(
             state.ui.model_quick_action_ids(),
-            vec![
-                "model.subdivide".to_string(),
-                "model.fuse".to_string(),
-                "model.cut".to_string(),
-                "model.join".to_string(),
-            ]
+            vec!["model.subdivide".to_string(), "model.join".to_string()]
         );
     }
 
@@ -5689,6 +5580,10 @@ mod model_quick_action_tests {
             !state
                 .ui
                 .set_model_quick_action_pinned("model.unknown", true)
+        );
+        assert!(
+            !state.ui.set_model_quick_action_pinned("model.fuse", true),
+            "booleanas diretas não existem mais"
         );
         assert!(state.ui.set_model_quick_action_pinned("model.merge", true));
         assert!(!state.ui.set_model_quick_action_pinned("model.merge", true));
@@ -5702,23 +5597,10 @@ mod model_quick_action_tests {
             state.ui.model_quick_action_ids(),
             vec![
                 "model.subdivide".to_string(),
-                "model.fuse".to_string(),
-                "model.cut".to_string(),
                 "model.join".to_string(),
                 "model.merge".to_string(),
                 "model.slice".to_string(),
             ]
-        );
-        assert!(
-            !state
-                .ui
-                .set_model_quick_action_pinned("model.intersect", true)
-        );
-        assert!(state.ui.set_model_quick_action_pinned("model.merge", false));
-        assert!(
-            state
-                .ui
-                .set_model_quick_action_pinned("model.intersect", true)
         );
         assert!(state.ui.reset_model_quick_actions());
         assert!(!state.ui.reset_model_quick_actions());

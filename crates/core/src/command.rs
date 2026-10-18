@@ -877,29 +877,9 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
-                "model.fuse",
-                "Fuse",
-                "Combine the active object with the boolean operand into one",
-                CommandCategory::Model,
-            )
-            .with_docs(DocsTopic::Modeling),
-            BooleanOpCmd::new(petunia_mesh::boolean::BooleanOp::Union),
-        );
-        d.register_with_meta(
-            CommandMetadata::new(
-                "model.cut",
-                "Cut",
-                "Subtract the boolean operand from the active object",
-                CommandCategory::Model,
-            )
-            .with_docs(DocsTopic::Modeling),
-            BooleanOpCmd::new(petunia_mesh::boolean::BooleanOp::Difference),
-        );
-        d.register_with_meta(
-            CommandMetadata::new(
                 "model.join",
                 "Join",
-                "Merge the operand into the active object keeping both topologies",
+                "Merge the other selected objects into the active object keeping every topology",
                 CommandCategory::Model,
             )
             .with_docs(DocsTopic::Modeling),
@@ -907,13 +887,23 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
-                "model.intersect",
-                "Intersect",
-                "Keep only the volume shared with the boolean operand",
+                "scene.group",
+                "Group",
+                "Gather the selected objects into a new group of the scene structure",
                 CommandCategory::Model,
             )
             .with_docs(DocsTopic::Modeling),
-            BooleanOpCmd::new(petunia_mesh::boolean::BooleanOp::Intersection),
+            crate::scene_commands::GroupSelectionCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "scene.ungroup",
+                "Ungroup",
+                "Dissolve the group of the active object, keeping its objects",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::scene_commands::UngroupCmd::default(),
         );
         d.register_with_meta(
             CommandMetadata::new(
@@ -4538,85 +4528,8 @@ impl Command for KnifeToolCmd {
     }
 }
 
-/// Operação booleana entre o ativo e o operando escolhido (Fuse/Cut/Intersect).
-#[derive(Debug, Clone, Copy)]
-pub struct BooleanOpCmd {
-    pub op: petunia_mesh::boolean::BooleanOp,
-}
-
-impl BooleanOpCmd {
-    pub const fn new(op: petunia_mesh::boolean::BooleanOp) -> Self {
-        Self { op }
-    }
-
-    const fn label_for(self) -> &'static str {
-        match self.op {
-            petunia_mesh::boolean::BooleanOp::Union => "fuse",
-            petunia_mesh::boolean::BooleanOp::Difference => "cut",
-            petunia_mesh::boolean::BooleanOp::Intersection => "intersect",
-        }
-    }
-}
-
-impl Command for BooleanOpCmd {
-    fn label(&self) -> &'static str {
-        self.label_for()
-    }
-
-    /// Sem checkpoint do dispatcher: `apply_boolean` captura a transação única.
-    /// Com os dois, cada operação empilharia duas entradas de undo.
-    fn is_destructive(&self) -> bool {
-        false
-    }
-
-    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if state.document.active_mesh().is_none() {
-            return Err("No active mesh");
-        }
-        let Some(operand) = state.editor.tools.boolean_operand else {
-            return Err("Choose a boolean operand first");
-        };
-        if !state
-            .document
-            .assets
-            .iter()
-            .any(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand no longer exists");
-        }
-        if state
-            .document
-            .active()
-            .is_some_and(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand cannot be the active object");
-        }
-        Ok(())
-    }
-
-    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        match state.apply_boolean(self.op) {
-            Ok(verts) => {
-                let detail = match &state.editor.tools.boolean_report {
-                    Some(r) if r.fell_back => format!(
-                        "{} triangles (cleanup refused: kernel result kept)",
-                        r.faces
-                    ),
-                    Some(r) => format!(
-                        "{} faces: {} quads, {} n-gons, {} triangles (was {} triangles)",
-                        r.faces, r.quads, r.ngons, r.triangles, r.kernel_triangles
-                    ),
-                    None => format!("{verts} vertices"),
-                };
-                state.set_status(format!("{}: {detail}", self.label_for()));
-                Ok(())
-            }
-            Err(error) => Err(CommandError::Execution(error.to_string())),
-        }
-    }
-}
-
-/// **Join**: funde o operando no ativo preservando as duas topologias.
+/// **Join**: funde os demais objetos selecionados no ativo preservando todas as
+/// topologias lado a lado (sem kernel booleano; booleanas são só por nós).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JoinObjectsCmd;
 
@@ -4625,38 +4538,30 @@ impl Command for JoinObjectsCmd {
         "join"
     }
 
-    /// Sem checkpoint do dispatcher: `join_active_with_operand` captura a única.
+    /// Sem checkpoint do dispatcher: `join_selected_into_active` captura a única.
     fn is_destructive(&self) -> bool {
         false
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if state.document.active_mesh().is_none() {
+        let Some(active) = state.document.active() else {
             return Err("No active mesh");
-        }
-        let Some(operand) = state.editor.tools.boolean_operand else {
-            return Err("Choose a boolean operand first");
         };
-        if !state
-            .document
+        let others = state
+            .selection
             .assets
             .iter()
-            .any(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand no longer exists");
-        }
-        if state
-            .document
-            .active()
-            .is_some_and(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand cannot be the active object");
+            .filter(|id| **id != active.id)
+            .filter(|id| state.document.assets.iter().any(|asset| asset.id == **id))
+            .count();
+        if others == 0 {
+            return Err("Select the objects to join and keep one active");
         }
         Ok(())
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        match state.join_active_with_operand() {
+        match state.join_selected_into_active() {
             Ok(verts) => {
                 state.set_status(format!("Join: {verts} vertices merged"));
                 Ok(())

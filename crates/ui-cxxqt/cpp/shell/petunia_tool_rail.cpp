@@ -63,11 +63,11 @@ void PetuniaToolRail::applyMetrics() {
     const int icon = theme.iconPx();
     m_expand->setIcon(PetuniaIcons::get(m_expanded ? QStringLiteral("chevron_left") : QStringLiteral("chevron_right")));
     m_expand->setIconSize(QSize(icon, icon));
-    m_expand->setMinimumHeight(theme.controlHeight());
+    m_expand->setMinimumHeight(theme.compactControlHeight());
     for (auto *button : m_buttons) {
         button->setIconSize(QSize(icon, icon));
-        button->setMinimumHeight(theme.controlHeight());
-        button->setMaximumHeight(theme.controlHeight());
+        button->setMinimumHeight(theme.compactControlHeight());
+        button->setMaximumHeight(theme.compactControlHeight());
         button->setToolButtonStyle(m_expanded ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     }
