@@ -212,7 +212,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         mesh: petunia_core::Mesh,
         cuts: usize,
     ) -> bool {
-        self.state.freeze_active_primitive();
+        if self
+            .state
+            .project
+            .active()
+            .is_some_and(|asset| asset.geometry_source.is_some())
+        {
+            self.state
+                .set_status("Make Editable explicitly before Loop Cut");
+            return false;
+        }
         let initial_cuts = if self.loop_cut_balanced && cuts < 2 {
             2
         } else {

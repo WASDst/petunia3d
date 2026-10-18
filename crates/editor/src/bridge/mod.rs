@@ -33,8 +33,14 @@ mod references;
 mod slice_knife;
 mod snapping;
 mod tool_gestures;
-mod tool_preview;
+pub(crate) mod tool_preview;
 mod tools;
 mod transform;
 mod uv;
 mod view_options;
+
+mod draw_workspace;
+
+pub(crate) mod profile_draft;
+
+pub(crate) mod planar_primitives;

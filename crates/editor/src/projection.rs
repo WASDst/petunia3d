@@ -349,7 +349,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         let Some(asset) = state.project.active() else {
             return model;
         };
-        if asset.mesh.verts.is_empty() {
+        if asset.source_mesh().verts.is_empty() {
             return model;
         };
         state.session.tools.modal.as_ref().map_or_else(

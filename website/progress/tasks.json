@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-15",
+  "updated": "2026-10-18",
   "phases": [
     {
       "id": "integrity",
@@ -355,6 +355,11 @@
       "revision": "codex/qt-integration working tree",
       "document": "09-ui/qt-integration.md",
       "summary": "Abandono e remocao total do Slint: crate crates/editor (petunia_editor) extraido com controlador neutro e 116 testes unitarios passando. Crate crates/ui-slint e dependencias slint / i-slint-* purgadas do Cargo.toml e Cargo.lock. crates/ui-cxxqt adaptado diretamente para petunia_editor (21 testes de paridade + 10 testes de bridge passando). src/main.rs despachando para petunia_ui_cxxqt::widgets::run(). cargo check --workspace e testes de core/mesh/project/application/render passando."
+    },
+    "draw-qt-refactor-gates-20261018": {
+      "revision": "codex/qt-integration working tree sobre 92c22caa (não commitado)",
+      "document": "03-geometry/draw-workspace-implementation.md",
+      "summary": "Gates finais da refatoração DRAW (G05/G06/G07/G08/G12/G14/G15), Rust 1.98.1, CARGO_BUILD_JOBS=1: cargo fmt --all --check pass; cargo clippy -D warnings em config/mesh/project/core/module_model/render/editor/ui_cxxqt --all-targets pass; cargo test desses 7 crates de domínio 1167 pass / 0 fail; editor_parity 33/33 pass; bridge_test 10/10 pass (window_creation pulado); qt_parity_acceptance offscreen pass com 62 checks, incluindo 12 de DRAW e capturas draw-points/shape/volume-preview/generated inspecionadas. Corrigido no fechamento: clique sem arrasto do Draw Profile deixava o nó preso na prévia sem confirmar. Pendentes: aceitação visual em GPU real, Windows, leitor de tela, DPI, hardware modesto; grade de 20 m termina quando a câmera planar enquadra formas longe da origem; aba Gerador desabilita, mas não oculta, campos de outros tipos de gerador."
     }
   },
   "tasks": [
@@ -1304,8 +1309,8 @@
       "title": "DRAW/POLY",
       "description": "Um Modeling Engine, commands/Undo/selection/snap/sessions comuns; aposentar ProfileState transitório duplicado; DRAW planar sem mover Workplane/objeto ao trocar câmera.",
       "document": "03-geometry/draw-unification-proposal.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Migração pendente. crates/core/src/state.rs:168, crates/core/src/poly_pen.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1332,7 +1337,8 @@
       "documents": [
         "03-geometry/draw-unification-proposal.md",
         "03-geometry/modeling-workspaces.md",
-        "03-geometry/splines-planar-shapes.md"
+        "03-geometry/splines-planar-shapes.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -1341,8 +1347,8 @@
       "title": "Spline/PlanarShape",
       "description": "Bezier Pen deve editar SplineResource direto; aposentar BezierPath autoral; ProfileResource→PlanarShape, outer e holes via SplineId; thickness explícito, shapes persistentes e Bezier on Surface.",
       "document": "03-geometry/splines-planar-shapes.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Parcial. crates/project/src/spline.rs:148, crates/project/src/profile.rs:146. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1375,7 +1381,8 @@
         "03-geometry/splines-planar-shapes.md",
         "03-geometry/draw-unification-proposal.md",
         "03-geometry/modeling-workspaces.md",
-        "03-geometry/object-geometry-source.md"
+        "03-geometry/object-geometry-source.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -1384,8 +1391,8 @@
       "title": "Workplane e inference",
       "description": "Workplane global/session congelado por gesto, modos Auto/Ground/View/Face/Selection/Custom/Reference; unificar inference/snap/spline snap e flags; integrar scene-wide IDs/transforms, HUD/locks/midplane e caches por revisão.",
       "document": "03-geometry/snapping-inference-workplane.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Parcial. crates/core/src/inference.rs, crates/core/src/snap.rs, crates/project/src/spline.rs:868. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1413,7 +1420,8 @@
         "03-geometry/snapping-inference-workplane.md",
         "03-geometry/draw-unification-proposal.md",
         "03-geometry/modeling-workspaces.md",
-        "03-geometry/snapping-inference-attachments.md"
+        "03-geometry/snapping-inference-attachments.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -1422,8 +1430,8 @@
       "title": "Spatial queries/attachments",
       "description": "Compartilhar BVH/picking/snap/raycast; targets estáveis versus visual-only; SurfaceAttachment com ObjectId, triângulo autoral/corners e topology revision; remap inequívoco ou NeedsReattach.",
       "document": "03-geometry/snapping-inference-attachments.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Parcial. crates/project/src/surface_attachment.rs:15. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1455,7 +1463,8 @@
       "documents": [
         "03-geometry/snapping-inference-attachments.md",
         "03-geometry/snapping-inference-workplane.md",
-        "06-paint/architecture-decision.md"
+        "06-paint/architecture-decision.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -1552,8 +1561,8 @@
       "title": "Generators",
       "description": "Contrato único Primitive/Extrude/Revolve/Sweep: source IDs, Preview/Final, diagnostics, cache/dependencies/revisions, UV/materials e criação/Inspector/Undo; Make Editable explícito. Reutilizar kernels, não reescrever todos.",
       "document": "03-geometry/generators-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Migração pendente. crates/project/src/path_generator.rs:87, crates/project/src/lib.rs:452. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1576,7 +1585,8 @@
         "03-geometry/generators-implementation.md",
         "03-geometry/generators-redesign.md",
         "03-geometry/object-geometry-source.md",
-        "03-geometry/splines-planar-shapes.md"
+        "03-geometry/splines-planar-shapes.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -1623,8 +1633,8 @@
       "title": "Shape Builder",
       "description": "Preservar planar/surface; Solid V1 com dois operandos, A_ONLY/INTERSECTION/B_ONLY, connected regions e Unite/Remove/Extract; cache por operand revision, hover só picking, commit/Cancel/Undo e atributos.",
       "document": "03-geometry/shape-builder-3d.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Parcial. crates/core/src/shape_builder.rs, crates/mesh/src/boolean.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1649,7 +1659,8 @@
         }
       ],
       "documents": [
-        "03-geometry/shape-builder-3d.md"
+        "03-geometry/shape-builder-3d.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -1658,8 +1669,8 @@
       "title": "Push/Pull/Extrude",
       "description": "Distinguir mover boundary, imprint/pocket e Extrude Generator de PlanarShape; holes, collision limit/Cut Through explícito, materiais laterais e negative extrude sem flip global.",
       "document": "03-geometry/direct-modeling-semantics.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "Delta semântico pendente. crates/mesh/src/ops.rs:550, crates/core/src/region_push.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
@@ -1679,7 +1690,8 @@
         }
       ],
       "documents": [
-        "03-geometry/direct-modeling-semantics.md"
+        "03-geometry/direct-modeling-semantics.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     },
     {
@@ -3308,8 +3320,8 @@
       "title": "Gramática consistente nas famílias de modelagem",
       "description": "Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia. Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo. Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-18",
       "baseline": "P2. Auditoria de 2026-10-15: Tools/comandos/previews existem; aceite por família pendente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
       "checkpoints": [
         {
@@ -3335,7 +3347,8 @@
       ],
       "documents": [
         "02-application/tools-interaction-implementation.md",
-        "03-geometry/transforms-origin-pivot-gizmos.md"
+        "03-geometry/transforms-origin-pivot-gizmos.md",
+        "03-geometry/draw-workspace-implementation.md"
       ]
     }
   ]

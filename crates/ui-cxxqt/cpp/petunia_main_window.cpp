@@ -37,6 +37,7 @@ extern "C" size_t petunia_qt_software_frame_rgba(uint64_t, uint32_t, uint32_t,
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonDocument>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -2431,8 +2432,8 @@ void PetuniaMainWindow::updateToolRail(const QString &mode,
         QStringList tools;
         if (mode == "DRAW")
             tools = {"select",        "move",      "rotate",
-                     "scale",         "transform", "draw_profile",
-                     "shape_builder", "cursor",    "measure"};
+                     "scale",         "transform", "draw_profile", "draw_rectangle", "draw_circle", "draw_ellipse", "draw_polygon",
+                     "shape_builder", "push_pull", "cursor", "measure"};
         else if (mode == "POLY")
             tools = {"select",    "lasso_select", "move",     "rotate",
                      "scale",     "transform",    "cursor",   "measure",
@@ -2453,7 +2454,11 @@ void PetuniaMainWindow::updateToolRail(const QString &mode,
             {"rotate", tr("Rotacionar")},
             {"scale", tr("Escalar")},
             {"transform", tr("Transformar")},
-            {"draw_profile", tr("Desenhar perfil")},
+            {"draw_profile", tr("Caneta Bézier")},
+            {"draw_rectangle", tr("Retângulo")},
+            {"draw_circle", tr("Círculo")},
+            {"draw_ellipse", tr("Elipse")},
+            {"draw_polygon", tr("Polígono")},
             {"shape_builder", "Shape Builder"},
             {"cursor", "Cursor 3D"},
             {"measure", tr("Medir")},
@@ -2483,6 +2488,10 @@ void PetuniaMainWindow::updateToolRail(const QString &mode,
             {"measure", "measure"},
             {"primitive", "cube"},
             {"draw_profile", "draw_profile"},
+            {"draw_rectangle", "paint_rect"},
+            {"draw_circle", "paint_circle"},
+            {"draw_ellipse", "paint_circle"},
+            {"draw_polygon", "poly_pen"},
             {"shape_builder", "shape_layer"},
             {"lasso_select", "select_lasso"},
             {"poly_pen", "tool_poly_pen"},
@@ -2818,6 +2827,55 @@ extern "C" const char *petunia_qt_native_acceptance(const char *directory) {
             break;
         }
     check("software-renders-scene", varied);
+    window.resize(1280,800);
+    window.setWorkspace("DRAW");
+    petuniaRequest("draw_plane_component", {{"field","origin_x"},{"value",6.0}});
+    petuniaRequest("workplane_look");
+    petuniaRequest("profile_rectangle", {{"width",4.0},{"height",3.0}});
+    flush();
+    check("draw-shape-persistent", !petuniaRequest("snapshot")["draw"].toObject()["shapes"].toArray().isEmpty());
+    QDoubleSpinBox *shapeWidth=nullptr;
+    for (auto *field:window.findChildren<QDoubleSpinBox *>()) if (field->accessibleName()==QStringLiteral("Largura") && field->isVisible()) {shapeWidth=field;break;}
+    check("draw-native-width-field",shapeWidth!=nullptr);
+    if (shapeWidth) {
+        auto *edit=shapeWidth->findChild<QLineEdit *>();
+        QWidget *input = edit ? static_cast<QWidget *>(edit) : static_cast<QWidget *>(shapeWidth);
+        const QPointF start=input->rect().center();
+        const QPointF finish=start+QPointF(30,0);
+        shapeWidth->setFocus();
+        QMouseEvent down(QEvent::MouseButtonPress,start,QPointF(input->mapToGlobal(start.toPoint())),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+        QApplication::sendEvent(input,&down);
+        QMouseEvent move(QEvent::MouseMove,finish,QPointF(input->mapToGlobal(finish.toPoint())),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
+        QApplication::sendEvent(input,&move);
+        flush();
+        check("draw-native-scrub-transient",petuniaRequest("snapshot")["profile_width"].toDouble()>4.0);
+        QKeyEvent cancel(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);
+        QApplication::sendEvent(input,&cancel);
+        flush();
+        check("draw-native-scrub-cancel",qAbs(petuniaRequest("snapshot")["profile_width"].toDouble()-4.0)<0.001);
+    }
+    petuniaRequest("draw_edit_context", {{"id","points"}}); flush();
+    QListWidget *drawPoints = nullptr;
+    for (auto *list : window.findChildren<QListWidget *>()) if (list->accessibleName() == QStringLiteral("Pontos do contorno") && list->isVisible()) { drawPoints = list; break; }
+    check("draw-keyboard-point-list", drawPoints != nullptr);
+    if (drawPoints) {
+        drawPoints->setFocus(); drawPoints->setCurrentRow(1);
+        QKeyEvent activatePoint(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QApplication::sendEvent(drawPoints, &activatePoint); flush();
+        check("draw-keyboard-selects-point", petuniaRequest("snapshot")["draw"].toObject()["can_edit_point"].toBool());
+        check("capture-draw-points",window.grab().save(QString::fromUtf8(directory)+"/draw-points.png"));
+    }
+    petuniaRequest("draw_edit_context", {{"id","shape"}}); flush();
+    check("capture-draw-shape",window.grab().save(QString::fromUtf8(directory)+"/draw-shape.png"));
+    petuniaRequest("enter_profile_volume", {{"mode_str","extrude"}});
+    petuniaRequest("set_profile_depth", {{"depth",2.0}});
+    flush();
+    check("draw-preview-live",petuniaRequest("snapshot")["draw"].toObject()["volume_live"].toBool());
+    check("capture-draw-volume-preview",window.grab().save(QString::fromUtf8(directory)+"/draw-volume-preview.png"));
+    petuniaRequest("commit_profile_volume");
+    flush();
+    check("draw-generator-editable",petuniaRequest("snapshot")["draw"].toObject()["can_make_editable"].toBool());
+    check("capture-draw-generated",window.grab().save(QString::fromUtf8(directory)+"/draw-generated.png"));
     output =
         QJsonDocument(QJsonObject{{"pass", passed},
                                   {"checks", checks},

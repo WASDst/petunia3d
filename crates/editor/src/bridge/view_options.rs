@@ -122,7 +122,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Define diretamente o preset de visualização da câmera e notifica o estado.
     pub fn set_view_preset(&mut self, preset: petunia_core::ViewPreset) -> bool {
-        self.state.session.camera.set_preset(preset);
+        self.leave_planar_navigation_for_view_change();
+        if let Err(error) = self
+            .state
+            .dispatch(&petunia_core::command::SetViewPresetCmd(preset))
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_VIEW),
             &[("0", preset.title().to_string())],
@@ -133,6 +140,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Alterna a visualização para a vista oposta (ex: Front -> Back, Top -> Bottom).
     pub fn toggle_view_opposite(&mut self) -> bool {
+        self.leave_planar_navigation_for_view_change();
         use petunia_core::ViewPreset;
         let next = match self.state.session.camera.view_preset() {
             Some(ViewPreset::Front) => ViewPreset::Back,
@@ -142,6 +150,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(ViewPreset::Top) => ViewPreset::Bottom,
             Some(ViewPreset::Bottom) => ViewPreset::Top,
             _ => {
+                self.state.session.camera.planar_basis = None;
                 self.state.session.camera.yaw = (self.state.session.camera.yaw
                     + std::f32::consts::PI)
                     .rem_euclid(std::f32::consts::TAU);
@@ -162,5 +171,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "Orientação de faces desativada"
         });
         enabled
+    }
+}
+
+impl<V: PetuniaViewport> SlintUiBridge<V> {
+    /// An explicit camera change enters free navigation, retaining the current
+    /// view and the construction plane. Align View re-enters planar navigation.
+    pub(crate) fn leave_planar_navigation_for_view_change(&mut self) {
+        if self.planar_navigation_active() {
+            self.state.session.draw_planar_navigation = false;
+            self.state.session.planar_saved_camera = None;
+        }
     }
 }

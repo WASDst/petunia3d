@@ -297,7 +297,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .active_profile_resources()
                     .is_some_and(|(_, spline)| !spline.closed);
                 if (!drawing || self.state.session.tools.active_tool != "draw_profile")
-                    && (self.active_profile_id != Some(profile_id)
+                    && (self.state.session.active_shape != Some(profile_id)
                         || self.state.session.tools.active_tool != "draw_profile")
                 {
                     self.activate_profile(profile_id);
@@ -427,7 +427,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let hit = self.pick_viewport_target(normalized_x, normalized_y);
         match hit {
             Target::Object(index) => {
-                self.active_profile_id = None;
+                self.state.session.active_shape = None;
                 self.state.select_object(Some(index), extend);
                 let name = self.state.project.assets[index].name.clone();
                 self.state.set_status(crate::tr::fill(
@@ -515,7 +515,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 ];
                 let shape_hit = self.profile_hit_at(pixel).or_else(|| {
                     self.shape_hit_at(pixel).and_then(|h| {
-                        let planes = self.shape_planes_cached();
+                        let planes = self.shape_planes_cached()?;
                         planes
                             .iter()
                             .find(|sp| sp.plane == h.plane)
@@ -548,7 +548,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.state.selection_domain() == SelectionDomain::Object {
                     self.state.select_object(None, extend);
                 }
-                self.active_profile_id = None;
+                self.state.session.active_shape = None;
                 if !extend && self.state.selection_domain().is_component() {
                     self.clear_component_selection();
                 }

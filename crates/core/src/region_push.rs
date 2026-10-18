@@ -245,89 +245,7 @@ impl<'a> EditorView<'a> {
     /// Generator (como perfil ou como caminho) ficam de fora: o Shape Builder não
     /// pode substituí-los sem quebrar o gerador.
     pub(crate) fn profile_groups(self, editable_only: bool) -> Vec<ProfileGroup> {
-        let project = &self.document.project;
-        let in_use = |profile: &petunia_project::ProfileResource| {
-            project.path_generators.iter().any(|generator| {
-                generator.profile_id == profile.id || generator.path_id == profile.spline_id
-            })
-        };
-        let mut groups: Vec<ProfileGroup> = Vec::new();
-        for profile in &project.profiles {
-            if editable_only && in_use(profile) {
-                continue;
-            }
-            let Some(spline) = project.get_spline(profile.spline_id) else {
-                continue;
-            };
-            let Ok(table) = spline.arc_length_table(PROFILE_TOLERANCE) else {
-                continue;
-            };
-            let wp = profile.workplane;
-            let [origin, right, up, normal] =
-                [wp.origin, wp.right, wp.up, wp.normal].map(|v| DVec3::from_array(v).as_vec3());
-            if !(origin.is_finite() && right.is_finite() && up.is_finite() && normal.is_finite())
-                || normal.length_squared() < 0.5
-            {
-                continue;
-            }
-            let world: Vec<Vec3> = table
-                .polyline()
-                .into_iter()
-                .map(|p| origin + right * p[0] as f32 + up * p[1] as f32)
-                .collect();
-            let normal = normal.normalize();
-            let index = groups.iter().position(|group| {
-                group.plane.normal.dot(normal).abs() > 0.9999
-                    && (origin - group.plane.origin).dot(group.plane.normal).abs() < 1.0e-4
-            });
-            let index = index.unwrap_or_else(|| {
-                groups.push(ProfileGroup {
-                    plane: RegionPlane {
-                        origin,
-                        right: right.normalize_or_zero(),
-                        up: up.normalize_or_zero(),
-                        normal,
-                    },
-                    profiles: Vec::new(),
-                    lines: Vec::new(),
-                    shapes: Vec::new(),
-                });
-                groups.len() - 1
-            });
-            let plane = groups[index].plane;
-            let outer: Vec<_> = world.iter().map(|p| plane.to_plane(*p)).collect();
-            let mut holes: Vec<Vec<[f64; 2]>> = profile
-                .holes
-                .iter()
-                .map(|hole| {
-                    hole.iter()
-                        .map(|p| plane.to_plane(origin + right * p[0] as f32 + up * p[1] as f32))
-                        .collect()
-                })
-                .collect();
-            for hole in &mut holes {
-                if petunia_mesh::arrangement::signed_area(hole) > 0.0 {
-                    hole.reverse();
-                }
-            }
-            let mut shape_outer = outer;
-            if shape_outer.len() > 1 && shape_outer.first() == shape_outer.last() {
-                shape_outer.pop();
-            }
-            if petunia_mesh::arrangement::signed_area(&shape_outer) < 0.0 {
-                shape_outer.reverse();
-            }
-            groups[index].shapes.push(spline.closed.then_some(Region2 {
-                outer: shape_outer,
-                holes,
-            }));
-            groups[index].profiles.push(profile.id);
-            groups[index].lines.push(Polyline2 {
-                points: world.iter().map(|p| plane.to_plane(*p)).collect(),
-                closed: spline.closed,
-            });
-        }
-        groups
+        profile_groups_for_project(&self.document.project, editable_only)
     }
 
     /// Região de perfil mais próxima atravessada pelo raio do cursor.
@@ -377,6 +295,112 @@ impl<'a> EditorView<'a> {
             )
         })
     }
+}
+
+/// Shared region query for committed documents and transient authoring previews.
+pub fn planar_region_planes(project: &petunia_project::Project) -> RegionPlanes {
+    profile_groups_for_project(project, false)
+        .into_iter()
+        .map(|group| (group.plane, group.regions()))
+        .filter(|(_, regions)| !regions.is_empty())
+        .collect()
+}
+fn profile_groups_for_project(
+    project: &petunia_project::Project,
+    editable_only: bool,
+) -> Vec<ProfileGroup> {
+    let in_use = |profile: &petunia_project::ProfileResource| {
+        project.assets.iter().any(|asset| {
+            asset.geometry_source.as_ref().is_some_and(|g| {
+                g.depends_on_shape(profile.id)
+                    || g.depends_on_spline(profile.spline_id)
+                    || profile
+                        .hole_splines
+                        .iter()
+                        .any(|id| g.depends_on_spline(*id))
+            })
+        }) || project.path_generators.iter().any(|generator| {
+            generator.profile_id == profile.id || generator.path_id == profile.spline_id
+        })
+    };
+    let mut groups: Vec<ProfileGroup> = Vec::new();
+    for profile in project.profiles.iter().filter(|p| p.visible) {
+        if editable_only && (profile.locked || in_use(profile)) {
+            continue;
+        }
+        let Some(spline) = project.get_spline(profile.spline_id) else {
+            continue;
+        };
+        let Ok(table) = spline.arc_length_table(PROFILE_TOLERANCE) else {
+            continue;
+        };
+        let wp = profile.workplane;
+        let [origin, right, up, normal] =
+            [wp.origin, wp.right, wp.up, wp.normal].map(|v| DVec3::from_array(v).as_vec3());
+        if !(origin.is_finite() && right.is_finite() && up.is_finite() && normal.is_finite())
+            || normal.length_squared() < 0.5
+        {
+            continue;
+        }
+        let world: Vec<Vec3> = table
+            .polyline()
+            .into_iter()
+            .map(|p| origin + right * p[0] as f32 + up * p[1] as f32)
+            .collect();
+        let normal = normal.normalize();
+        let index = groups.iter().position(|group| {
+            group.plane.normal.dot(normal).abs() > 0.9999
+                && (origin - group.plane.origin).dot(group.plane.normal).abs() < 1.0e-4
+        });
+        let index = index.unwrap_or_else(|| {
+            groups.push(ProfileGroup {
+                plane: RegionPlane {
+                    origin,
+                    right: right.normalize_or_zero(),
+                    up: up.normalize_or_zero(),
+                    normal,
+                },
+                profiles: Vec::new(),
+                lines: Vec::new(),
+                shapes: Vec::new(),
+            });
+            groups.len() - 1
+        });
+        let plane = groups[index].plane;
+        let outer: Vec<_> = world.iter().map(|p| plane.to_plane(*p)).collect();
+        let mut holes: Vec<Vec<[f64; 2]>> = project
+            .shape_hole_contours(profile, PROFILE_TOLERANCE)
+            .unwrap_or_default()
+            .iter()
+            .map(|hole| {
+                hole.iter()
+                    .map(|p| plane.to_plane(origin + right * p[0] as f32 + up * p[1] as f32))
+                    .collect()
+            })
+            .collect();
+        for hole in &mut holes {
+            if petunia_mesh::arrangement::signed_area(hole) > 0.0 {
+                hole.reverse();
+            }
+        }
+        let mut shape_outer = outer;
+        if shape_outer.len() > 1 && shape_outer.first() == shape_outer.last() {
+            shape_outer.pop();
+        }
+        if petunia_mesh::arrangement::signed_area(&shape_outer) < 0.0 {
+            shape_outer.reverse();
+        }
+        groups[index].shapes.push(spline.closed.then_some(Region2 {
+            outer: shape_outer,
+            holes,
+        }));
+        groups[index].profiles.push(profile.id);
+        groups[index].lines.push(Polyline2 {
+            points: world.iter().map(|p| plane.to_plane(*p)).collect(),
+            closed: spline.closed,
+        });
+    }
+    groups
 }
 
 #[cfg(test)]

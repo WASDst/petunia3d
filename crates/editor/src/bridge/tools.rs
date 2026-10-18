@@ -47,6 +47,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 Some(GrammarTool::ShapeBuilder)
             }
             "draw_profile" => Some(GrammarTool::DrawProfile),
+            "draw_rectangle" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Rectangle)),
+            "draw_circle" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Circle)),
+            "draw_ellipse" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Ellipse)),
+            "draw_polygon" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Polygon)),
             "cut" => Some(GrammarTool::Knife),
             "loop_cut" => Some(GrammarTool::LoopCut),
             "slice" => Some(GrammarTool::Slice),

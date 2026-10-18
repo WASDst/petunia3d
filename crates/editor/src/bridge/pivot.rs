@@ -34,7 +34,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 continue;
             }
             let world = asset.world_matrix();
-            for v in &asset.mesh.verts {
+            for v in &asset.source_mesh().verts {
                 let p = world.transform_point3(v.vec());
                 let v_rel = p - origin;
                 let t = v_rel.dot(dir);

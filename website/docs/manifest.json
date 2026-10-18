@@ -143,6 +143,10 @@
         {
           "path": "03-geometry/transforms-origin-pivot-gizmos.md",
           "title": "Transforms, Origin, Pivot & Gizmos — aprovado"
+        },
+        {
+          "path": "03-geometry/draw-workspace-implementation.md",
+          "title": "DRAW: integração atual e evidências"
         }
       ]
     },

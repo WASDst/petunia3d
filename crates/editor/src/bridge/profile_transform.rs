@@ -12,8 +12,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.active_tool.as_str(),
                 "move" | "transform" | "rotate" | "scale"
             )
-            && self.active_profile_id.is_some()
-            && self.profile_hit_at([x, y]) == self.active_profile_id
+            && self.state.session.active_shape.is_some()
+            && self.profile_hit_at([x, y]) == self.state.session.active_shape
     }
 
     pub(crate) fn begin_profile_transform(
@@ -24,26 +24,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_some() {
             return false;
         }
-        let Some((profile, spline)) = self.active_profile_resources() else {
+        let Some((profile, spline)) = self.active_contour_resources() else {
             return false;
         };
         let count = spline.points.len();
-        if count == 0 {
+        if count == 0 || profile.locked {
             return false;
         }
         // Point move só o nó; Curve, os dois nós do segmento; Shape, a forma toda.
-        let selected: std::collections::HashSet<_> = if let Some(id) = self.profile_selected_point {
-            [id].into_iter().collect()
-        } else if let Some(segment) = self.profile_selected_segment
-            && segment < spline.segment_count()
-        {
-            let next = (segment + 1) % count;
-            [spline.points[segment].id, spline.points[next].id]
-                .into_iter()
-                .collect()
-        } else {
-            std::collections::HashSet::new()
-        };
+        let selected: std::collections::HashSet<_> =
+            if let Some(id) = self.state.session.planar_selection.point {
+                [id].into_iter().collect()
+            } else if let Some(segment) = self.state.session.planar_selection.segment
+                && segment < spline.segment_count()
+            {
+                let next = (segment + 1) % count;
+                [spline.points.get(segment), spline.points.get(next)]
+                    .into_iter()
+                    .flatten()
+                    .map(|p| p.id)
+                    .collect()
+            } else {
+                std::collections::HashSet::new()
+            };
         let mut cx = 0.0f64;
         let mut cy = 0.0f64;
         let mut used = 0usize;
@@ -59,7 +62,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let gesture = ProfileTransformGesture {
             project_before: self.state.project.project.clone(),
-            profile_id: profile.id,
+            selected_points: selected,
             spline: spline.clone(),
             profile: profile.clone(),
             kind,
@@ -68,6 +71,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             constraint: petunia_core::ModalConstraint::Free,
             components: glam::Vec3::ZERO,
         };
+        if !self.begin_profile_authoring_preview() {
+            return false;
+        }
         self.profile_transform_gesture = Some(gesture);
         self.tool_gesture = Some(ToolGesture::Transform { gizmo: false });
         self.tool_session.clear_numeric();
@@ -142,7 +148,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         let kind = source.kind;
-        let (profile_id, spline_id) = (source.profile_id, source.spline.id);
         let Some((delta, scalar)) = self.profile_transform_delta(source, current, snap) else {
             return false;
         };
@@ -213,6 +218,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 position[2] = 0.0;
             };
         for point in &mut spline.points {
+            if !gesture.selected_points.is_empty() && !gesture.selected_points.contains(&point.id) {
+                continue;
+            }
             apply_point(
                 &mut point.position,
                 &mut point.handle_in,
@@ -228,77 +236,58 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 *point = [position[0], position[1]];
             }
         }
-        if profile.validate_authoring(&spline).is_err() {
+        let mut contour_shape = profile.clone();
+        contour_shape.spline_id = spline.id;
+        if contour_shape.validate_authoring(&spline).is_err() {
             return false;
         }
-        let spline_revision = self
-            .state
-            .project
-            .project
-            .get_spline(spline_id)
-            .map_or(gesture.spline.revision, |current| current.revision);
-        let profile_revision = self
-            .state
-            .project
-            .project
-            .get_profile(profile_id)
-            .map_or(gesture.profile.revision, |current| current.revision);
-        spline.revision = spline_revision;
-        profile.revision = profile_revision;
-        if let Some(target) = self.state.project.project.get_spline_mut(spline_id) {
-            *target = spline;
+        let Some(draft) = self.profile_authoring_preview.as_mut() else {
+            return false;
+        };
+        let is_outer = draft.spline.id == spline.id;
+        if is_outer {
+            draft.spline = spline;
+        } else if let Some(contour) = draft.inner.iter_mut().find(|s| s.id == spline.id) {
+            *contour = spline;
         }
-        if let Some(target) = self.state.project.project.get_profile_mut(profile_id) {
-            *target = profile;
+        draft.profile = profile;
+        // Each update starts from the fixed authoring source, including holes.
+        for contour in &mut draft.inner {
+            if !is_outer || !gesture.selected_points.is_empty() {
+                continue;
+            }
+            if let Some(source) = gesture.project_before.get_spline(contour.id) {
+                *contour = source.clone();
+            }
+            for point in &mut contour.points {
+                apply_point(
+                    &mut point.position,
+                    &mut point.handle_in,
+                    &mut point.handle_out,
+                );
+            }
         }
         if let Some(gesture) = self.profile_transform_gesture.as_mut() {
             gesture.components = components;
         }
-        self.state
-            .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
+        self.refresh_profile_authoring_preview();
+        self.state.mark_dirty();
         true
     }
 
     pub(crate) fn commit_profile_transform(&mut self) -> bool {
-        let Some(gesture) = self.profile_transform_gesture.take() else {
+        if self.profile_transform_gesture.take().is_none() {
             return false;
-        };
-        let current = self
-            .active_profile_resources()
-            .map(|(profile, spline)| (profile.clone(), spline.clone()));
-        let clock = self.state.project.project.revision_clock();
-        self.state.project.project = gesture.project_before;
-        self.state
-            .project
-            .project
-            .rebase_revisions_after_restore(clock);
+        }
         self.tool_session.clear_numeric();
-        let Some((mut profile, mut spline)) = current else {
-            return false;
-        };
-        profile.revision = gesture.profile.revision;
-        spline.revision = gesture.spline.revision;
-        if profile == gesture.profile && spline == gesture.spline {
-            return true;
-        }
-        if let Err(error) = self
-            .state
-            .dispatch(&draw_shapes::TransformProfileCmd { profile, spline })
-        {
-            self.state.set_status(error.to_string());
-            return false;
-        }
-        true
+        self.commit_profile_authoring_preview()
     }
 
     pub(crate) fn cancel_profile_transform(&mut self) -> bool {
-        let Some(gesture) = self.profile_transform_gesture.take() else {
+        if self.profile_transform_gesture.take().is_none() {
             return false;
-        };
-        self.state.project.project = gesture.project_before;
+        }
         self.tool_session.clear_numeric();
-        self.state.sync_selection();
-        self.state.mark_dirty();
-        true
+        self.cancel_profile_authoring_preview()
     }
 }

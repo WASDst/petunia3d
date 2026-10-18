@@ -30,6 +30,103 @@
 #include <QTimer>
 #include <QWheelEvent>
 #include <cmath>
+#include <functional>
+#include <QFocusEvent>
+
+// Draw lists expose the same action to mouse, Enter and Space.
+class PetuniaActionList final : public QListWidget {
+public:
+    using QListWidget::QListWidget;
+    std::function<void(QListWidgetItem *)> activate;
+protected:
+    void keyPressEvent(QKeyEvent *event) override {
+        if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter || event->key() == Qt::Key_Space) && currentItem() && activate) {
+            activate(currentItem()); event->accept(); return;
+        }
+        QListWidget::keyPressEvent(event);
+    }
+};
+
+// Numeric recognition stays native; authoring preview/commit stays in Rust.
+class PetuniaNumericField final : public QDoubleSpinBox {
+public:
+    explicit PetuniaNumericField(QWidget *parent) : QDoubleSpinBox(parent) {
+        setFocusPolicy(Qt::StrongFocus); setMinimumHeight(28);
+        lineEdit()->installEventFilter(this);
+    }
+    std::function<void(int)> phase;
+    std::function<void(double)> preview;
+    bool scrubbing() const { return m_scrubbing; }
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (object == lineEdit()) {
+            if (event->type() == QEvent::MouseButtonPress) {
+                auto *mouse = static_cast<QMouseEvent *>(event);
+                m_press = mouse->position() + QPointF(lineEdit()->pos());
+                m_original = value(); m_pressed = mouse->button() == Qt::LeftButton;
+            } else if (event->type() == QEvent::MouseMove && m_pressed) {
+                auto *mouse = static_cast<QMouseEvent *>(event);
+                const QPointF position = mouse->position() + QPointF(lineEdit()->pos());
+                const QPointF delta = position - m_press;
+                if (m_scrubbing || (std::abs(delta.x()) >= QApplication::startDragDistance() && std::abs(delta.x()) > std::abs(delta.y()))) {
+                    QMouseEvent forwarded(event->type(), position, mouse->globalPosition(), mouse->button(), mouse->buttons(), mouse->modifiers());
+                    mouseMoveEvent(&forwarded); return true;
+                }
+            } else if (event->type() == QEvent::MouseButtonRelease) {
+                auto *mouse = static_cast<QMouseEvent *>(event);
+                if (m_scrubbing) {
+                    QMouseEvent forwarded(event->type(), mouse->position() + QPointF(lineEdit()->pos()), mouse->globalPosition(), mouse->button(), mouse->buttons(), mouse->modifiers());
+                    mouseReleaseEvent(&forwarded); return true;
+                }
+                m_pressed = false;
+            } else if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Escape) {
+                keyPressEvent(static_cast<QKeyEvent *>(event)); return true;
+            }
+        }
+        return QDoubleSpinBox::eventFilter(object, event);
+    }
+    void focusInEvent(QFocusEvent *event) override { m_original = value(); QDoubleSpinBox::focusInEvent(event); }
+    void wheelEvent(QWheelEvent *event) override {
+        if (!hasFocus()) { event->ignore(); return; }
+        QDoubleSpinBox::wheelEvent(event);
+    }
+    void mousePressEvent(QMouseEvent *event) override {
+        m_press = event->position(); m_original = value();
+        m_pressed = event->button() == Qt::LeftButton && lineEdit()->geometry().contains(m_press.toPoint());
+        QDoubleSpinBox::mousePressEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent *event) override {
+        const auto delta = event->position() - m_press;
+        if (m_pressed && !m_scrubbing && std::abs(delta.x()) >= QApplication::startDragDistance() && std::abs(delta.x()) > std::abs(delta.y())) {
+            m_scrubbing = true; setCursor(Qt::SizeHorCursor); if (phase) phase(0);
+        }
+        if (!m_scrubbing) { QDoubleSpinBox::mouseMoveEvent(event); return; }
+        const double precision = event->modifiers().testFlag(Qt::ShiftModifier) ? 0.1 : 1.0;
+        setValue(m_original + delta.x() * singleStep() * precision);
+        event->accept();
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override {
+        m_pressed = false;
+        if (!m_scrubbing) { QDoubleSpinBox::mouseReleaseEvent(event); return; }
+        m_scrubbing = false; unsetCursor();
+        if (phase) { phase(1); setProperty("inputChanged", false); }
+        else emit editingFinished();
+        event->accept();
+    }
+    void keyPressEvent(QKeyEvent *event) override {
+        if (event->key() == Qt::Key_Escape) {
+            const bool wasScrubbing = m_scrubbing; m_scrubbing = false; m_pressed = false; unsetCursor();
+            setValue(m_original); lineEdit()->setText(prefix() + textFromValue(m_original) + suffix());
+            setProperty("inputChanged", false); if (wasScrubbing && phase) phase(2);
+            event->accept(); return;
+        }
+        QDoubleSpinBox::keyPressEvent(event);
+    }
+private:
+    QPointF m_press;
+    double m_original{0.0};
+    bool m_pressed{false}, m_scrubbing{false};
+};
 
 QPainterPath petuniaPath(const QString &commands) {
     QPainterPath path;
@@ -325,6 +422,7 @@ QFormLayout *PetuniaEditorPanel::page(const QString &title) {
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     scroll->setWidget(content);
+    scroll->setProperty("sourceTitle", title);
     m_tabs->addTab(scroll, title);
     if (m_mode == "MODEL") {
         const QHash<QString, QString> sections{
@@ -359,7 +457,7 @@ void PetuniaEditorPanel::number(QFormLayout *form, const QString &label,
                                 const QString &key, const QString &action,
                                 const QString &arg, qreal min, qreal max,
                                 qreal step, QJsonObject args) {
-    auto *widget = new QDoubleSpinBox(this);
+    auto *widget = new PetuniaNumericField(this);
     widget->setRange(min, max);
     widget->setSingleStep(step);
     widget->setDecimals(4);
@@ -376,6 +474,16 @@ void PetuniaEditorPanel::number(QFormLayout *form, const QString &label,
                 args.insert(arg, widget->value());
                 send(action, args);
             });
+    if (action == "profile_dimension" || action == "draw_generator_distance" || action == "draw_generator_parameter") {
+        const QString gesture = action == "profile_dimension" ? "profile_dimension_gesture" : "draw_generator_gesture";
+        widget->phase = [this, gesture](int phase) { send(gesture, {{"phase", phase}}); };
+    }
+    if (action == "profile_dimension" || action.startsWith("draw_generator_") || action == "set_profile_depth" || action == "set_profile_revolve_angle") {
+        connect(widget, &QDoubleSpinBox::valueChanged, this, [=, this](double value) mutable {
+            if (!widget->scrubbing()) return;
+            args.insert(arg, value); send(action, args);
+        });
+    }
     m_bindings.append({widget, key, {}, {}});
 }
 void PetuniaEditorPanel::check(QFormLayout *form, const QString &label,
@@ -532,15 +640,16 @@ void PetuniaEditorPanel::xyz(QFormLayout *form, const QString &label,
 void PetuniaEditorPanel::rows(QFormLayout *form, const QString &label,
                               const QString &key, const QString &action,
                               const QString &arg, QJsonObject args) {
-    auto *widget = new QListWidget(this);
+    QListWidget *widget = key.startsWith("draw.") ? static_cast<QListWidget *>(new PetuniaActionList(this)) : new QListWidget(this);
     widget->setAccessibleName(label);
     widget->setMinimumHeight(90);
     form->addRow(label, widget);
-    connect(widget, &QListWidget::itemClicked, this,
-            [=, this](QListWidgetItem *item) mutable {
-                args.insert(arg, item->data(Qt::UserRole).toString());
-                send(action, args);
-            });
+    auto activate = [=, this](QListWidgetItem *item) mutable {
+        if (!item || !(item->flags() & Qt::ItemIsEnabled)) return;
+        args.insert(arg, item->data(Qt::UserRole).toString()); send(action, args);
+    };
+    connect(widget, &QListWidget::itemClicked, this, activate);
+    if (key.startsWith("draw.")) static_cast<PetuniaActionList *>(widget)->activate = activate;
     m_rows.append({widget, key, action, arg, args});
 }
 void PetuniaEditorPanel::fileButton(QFormLayout *form, const QString &label,
@@ -565,6 +674,36 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
         return;
     m_syncing = true;
     m_state = state;
+    if (m_mode == "MODEL") {
+        const bool draw = state["draw"].toObject()["active"].toBool();
+        const bool changed = m_tabs->property("drawWorkspace").toBool() != draw;
+        if (changed) {
+            m_tabs->setProperty("drawWorkspace",draw);
+            m_tabs->setStyleSheet(draw ? QStringLiteral("QWidget { font-size: 12px; } QTabBar::tab, QPushButton, QComboBox, QDoubleSpinBox, QLineEdit { min-height: 28px; }") : QString());
+        }
+        int shapeTab=-1, generatorTab=-1;
+        const bool solid = state["draw"].toObject()["solid_active"].toBool() || state["draw"].toObject()["can_prepare_solid"].toBool();
+        for (int index=0; index<m_tabs->count(); ++index) {
+            const auto title=m_tabs->widget(index)->property("sourceTitle").toString();
+            const bool shared = title == tr("Transformação") || title == tr("Material");
+            const bool shape = title == tr("Forma") || title == tr("Gerador");
+            const bool composition = title == tr("Compor sólidos");
+            if (title == tr("Forma")) shapeTab=index;
+            if (title == tr("Gerador")) generatorTab=index;
+            const bool selectedShape=state["draw"].toObject()["shape_available"].toBool();
+            m_tabs->setTabVisible(index, draw ? ((shared && !(title == tr("Transformação") && selectedShape)) || shape || (composition && solid)) : !shape && !composition);
+        }
+        if (changed && draw && shapeTab>=0) m_tabs->setCurrentIndex(shapeTab);
+        const QString generatorKind=state["draw"].toObject()["generator_kind"].toString();
+        if (draw && generatorKind != "none" && m_tabs->property("generatorKind").toString()!=generatorKind && generatorTab>=0) m_tabs->setCurrentIndex(generatorTab);
+        m_tabs->setProperty("generatorKind",generatorKind);
+    }
+    for (auto *widget:findChildren<QWidget *>()) {
+        const auto rule=widget->property("drawVisibility").toString();
+        if (rule.isEmpty()) continue;
+        const auto draw=state["draw"].toObject();
+        widget->setVisible(rule=="points" ? (draw["edit_context"].toString()==QStringLiteral("points") || draw["edit_context"].toString()==QStringLiteral("segments")) : rule=="custom-plane" ? draw["workplane_mode"].toString()==QStringLiteral("custom") : draw["has_primitive_dimensions"].toBool());
+    }
     for (const auto &binding : m_bindings) {
         const QSignalBlocker block(binding.widget);
         const auto refAxis =
@@ -625,10 +764,13 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
             w->setText(value.isString()
                            ? value.toString()
                            : QString::number(value.toDouble(), 'g', 8));
+        else if (auto *w = qobject_cast<QLabel *>(binding.widget))
+            w->setText(value.toString());
         else if (auto *w = qobject_cast<QComboBox *>(binding.widget)) {
             const auto index =
                 w->findData(value.isString() ? value.toString()
-                                             : QString::number(value.toInt()));
+                              : value.isBool() ? (value.toBool() ? QStringLiteral("true") : QStringLiteral("false"))
+                              : QString::number(value.toInt()));
             if (index >= 0)
                 w->setCurrentIndex(index);
         }
@@ -639,6 +781,7 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
         if (binding.widget->property("snapshot").toByteArray() == bytes)
             continue;
         const QSignalBlocker block(binding.widget);
+        const QString focusedRegion = binding.key == "draw.solid_regions" && binding.widget->currentItem() ? binding.widget->currentItem()->data(Qt::UserRole).toString() : QString();
         binding.widget->setProperty("snapshot", bytes);
         binding.widget->clear();
         for (const auto &value : array) {
@@ -653,6 +796,10 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
                 }
             }
             item->setData(Qt::UserRole, obj["id"].toString());
+            if (binding.key == "draw.solid_regions") {
+                item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                item->setCheckState(obj["active"].toBool() ? Qt::Checked : Qt::Unchecked);
+            }
             item->setToolTip(
                 obj["detail"].toString(obj["disabled_reason"].toString()));
             if ((obj.contains("available") && !obj["available"].toBool()) ||
@@ -661,6 +808,10 @@ void PetuniaEditorPanel::sync(const QJsonObject &state) {
                 item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
             if (obj["selected"].toBool() || obj["active"].toBool())
                 binding.widget->setCurrentItem(item);
+        }
+        if (!focusedRegion.isEmpty()) for (int row = 0; row < binding.widget->count(); ++row) {
+            auto *item = binding.widget->item(row);
+            if (item->data(Qt::UserRole).toString() == focusedRegion) { binding.widget->setCurrentItem(item); break; }
         }
     }
     updateDynamic(state);
@@ -821,40 +972,117 @@ void PetuniaEditorPanel::setupModel() {
     button(tool, tr("Cancelar faca"), "cancel_knife");
 
     // 6. Perfil
-    auto *draw = page(tr("Perfil"));
-    fileButton(draw, tr("Importar SVG"), "import_svg", tr("SVG (*.svg)"));
-    button(draw, tr("Retângulo"), "profile_rectangle",
-           {{"width", 1.}, {"height", 1.}});
-    button(draw, tr("Círculo"), "profile_circle",
-           {{"radius", 0.5}, {"segments", 32}});
-    button(draw, tr("Fechar perfil"), "close_profile");
-    choice(draw, tr("Plano"), "profile_workplane", "profile_workplane", "id",
-           {"auto", "ground", "face", "view", "selection"});
-    button(draw, tr("Olhar para o plano"), "workplane_look");
-    number(draw, tr("Largura"), "profile_width", "profile_dimension", "value",
+    auto *draw = page(tr("Forma"));
+    rows(draw, tr("Formas · selecionar para reeditar"), "draw.shapes", "draw_shape");
+    text(draw,tr("Nome da forma"),"draw.shape_name","draw_shape_name","name");m_bindings.last().enabledKey="draw.can_edit_shape";
+    auto *dimensionsContent=new QWidget(this);dimensionsContent->setProperty("drawVisibility","primitive-dimensions");auto *dimensions=new QFormLayout(dimensionsContent);dimensions->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);dimensions->setRowWrapPolicy(QFormLayout::WrapLongRows);draw->addRow(dimensionsContent);
+    number(dimensions, tr("Largura"), "profile_width", "profile_dimension", "value",
            0.001, 10000, 0.01, {{"field", "width"}});
-    number(draw, tr("Altura"), "profile_height", "profile_dimension", "value",
+    m_bindings.last().enabledKey = "draw.can_edit_dimensions";
+    number(dimensions, tr("Altura"), "profile_height", "profile_dimension", "value",
            0.001, 10000, 0.01, {{"field", "height"}});
-    number(draw, tr("Segmentos"), "profile_segments", "profile_dimension",
-           "value", 3, 4096, 1, {{"field", "segments"}});
-    number(draw, tr("Profundidade"), "profile_depth", "set_profile_depth",
-           "depth", 0, 10000);
-    number(draw, tr("Parede"), "profile_wall_thickness",
-           "set_profile_wall_thickness", "thickness", 0, 10000);
-    number(draw, tr("Revolução"), "profile_revolve_angle",
-           "set_profile_revolve_angle", "angle_deg", -360, 360, 1);
-    number(draw, tr("Suavidade"), "profile_smoothness",
+    m_bindings.last().enabledKey = "draw.can_edit_dimensions";
+    number(dimensions, tr("Segmentos"), "profile_segments", "profile_dimension",
+           "value", 3, 512, 1, {{"field", "segments"}});
+    m_bindings.last().enabledKey = "draw.can_edit_dimensions";
+    button(draw, tr("Nova curva Bézier"), "draw_curve_new");
+    button(draw, tr("Concluir curva sem gerar volume"), "draw_curve_finish", {}, "draw.can_finish_curve");
+    fileButton(draw, tr("Importar SVG"), "import_svg", tr("SVG (*.svg)"));
+    button(draw, tr("Mostrar / ocultar forma"), "draw_shape_flag", {{"field", "visible"}}, "draw.shape_available");
+    button(draw, tr("Bloquear / desbloquear forma"), "draw_shape_flag", {{"field", "locked"}}, "draw.shape_available");
+    rows(draw, tr("Contorno para edição"), "draw.contours", "draw_contour");
+    choice(draw, tr("Editar na forma selecionada"), "draw.edit_context", "draw_edit_context", "id", {"shape", "points", "segments", "regions"}, {tr("Forma inteira"), tr("Pontos"), tr("Segmentos"), tr("Regiões")});
+    auto *pointContent=new QWidget(this); pointContent->setProperty("drawVisibility","points");
+    auto *pointControls=new QFormLayout(pointContent); pointControls->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow); pointControls->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    draw->addRow(pointContent);
+    rows(pointControls,tr("Pontos do contorno"),"draw.points","draw_point");
+    for (const QString field : {"x","y","in_x","in_y","out_x","out_y"}) {
+        const QString label=(field.startsWith("in_")?tr("Alça de entrada"):field.startsWith("out_")?tr("Alça de saída"):tr("Ponto"))+" "+field.right(1).toUpper();
+        const QString key="draw.point_"+field;
+        number(pointControls,label,key,"draw_point_parameter","value",-100000,100000,0.01,{{"field",field}});
+        m_bindings.last().enabledKey="draw.can_edit_point";
+    }
+    choice(pointControls,tr("Modo das alças"),"draw.point_mode","draw_point_mode","id",{"broken","aligned","mirrored"},{tr("Independentes"),tr("Alinhadas"),tr("Espelhadas")});
+    m_bindings.last().enabledKey="draw.can_edit_point";
+    auto *transformToggle=new QPushButton(tr("Transformar forma"),this);transformToggle->setCheckable(true);draw->addRow(transformToggle);
+    auto *transformContent=new QWidget(this);auto *shapeTransform=new QFormLayout(transformContent);shapeTransform->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);shapeTransform->setRowWrapPolicy(QFormLayout::WrapLongRows);draw->addRow(transformContent);transformContent->hide();
+    connect(transformToggle,&QPushButton::toggled,transformContent,&QWidget::setVisible);
+    for (const QString axis : {"x","y","z"}) {
+        number(shapeTransform,tr("Deslocar forma")+" "+axis.toUpper(),"draw.rotation_delta","draw_shape_transform","value",-100000,100000,0.1,{{"field","translate_"+axis}});
+        m_bindings.last().enabledKey="draw.can_edit_shape";
+        number(shapeTransform,tr("Girar forma (graus)")+" "+axis.toUpper(),"draw.rotation_delta","draw_shape_transform","value",-360,360,1,{{"field","rotate_"+axis}});
+        m_bindings.last().enabledKey="draw.can_edit_shape";
+    }
+    for (const QString axis : {"x","y"}) {
+        number(shapeTransform,tr("Escalar no plano (fator)")+" "+axis.toUpper(),"draw.scale_factor","draw_shape_transform","value",-1000,1000,0.01,{{"field","scale_"+axis}});
+        m_bindings.last().enabledKey="draw.can_edit_shape";
+    }
+    button(draw, tr("Fechar contorno"), "close_profile", {}, "draw.can_close");
+    choice(draw, tr("Plano"), "draw.workplane_mode", "profile_workplane", "id",
+           {"auto", "ground", "face", "view", "selection", "custom", "reference"},
+           {tr("Automático"), tr("Chão (XZ)"), tr("Face"), tr("Vista"), tr("Seleção / plano médio"), tr("Personalizado"), tr("Referência")});
+    button(draw, tr("Olhar para o plano"), "workplane_look");
+    auto *customContent=new QWidget(this);customContent->setProperty("drawVisibility","custom-plane");auto *customPlane=new QFormLayout(customContent);customPlane->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);customPlane->setRowWrapPolicy(QFormLayout::WrapLongRows);draw->addRow(customContent);
+    for (const QString axis : {"x", "y", "z"}) {
+        number(customPlane, tr("Origem do plano") + " " + axis.toUpper(), "draw.origin_" + axis, "draw_plane_component", "value", -100000, 100000, 0.1, {{"field", "origin_" + axis}});
+        number(customPlane, tr("Girar plano (graus)") + " " + axis.toUpper(), "draw.rotation_delta", "draw_plane_component", "value", -360, 360, 1, {{"field", "rotate_" + axis}});
+    }
+    number(draw, tr("Passo angular"), "draw.angle_step", "draw_angle_step", "value", 1, 180, 1);
+    button(draw, tr("Travar / liberar guia de inferência"), "draw_inference_lock");
+    auto *volume = page(tr("Gerador"));
+    choice(volume, tr("Eixo da revolução"), "draw.revolve_axis", "draw_volume_option", "value", {"vertical", "horizontal"}, {tr("Vertical do plano"),tr("Horizontal do plano")}, {{"field","axis"}});
+    choice(volume, tr("Tampa inicial"), "draw.cap_start", "draw_volume_option", "value", {"true","false"}, {tr("Sim"),tr("Não")}, {{"field","cap_start"}});
+    choice(volume, tr("Tampa final"), "draw.cap_end", "draw_volume_option", "value", {"true","false"}, {tr("Sim"),tr("Não")}, {{"field","cap_end"}});
+    number(volume, tr("Profundidade"), "profile_depth", "set_profile_depth",
+           "depth", -10000, 10000);
+    auto *innerDistance = new PetuniaNumericField(this);
+    innerDistance->setRange(0.001, 10000); innerDistance->setValue(0.1); innerDistance->setDecimals(3);
+    innerDistance->setAccessibleName(tr("Distância do contorno interno"));
+    draw->addRow(tr("Distância do contorno interno"), innerDistance);
+    auto *innerApply = new QPushButton(tr("Criar contorno interno"), this);
+    innerApply->setMinimumHeight(28); draw->addRow(innerApply);
+    m_bindings.append({innerApply, {}, "draw.can_extrude", {}});
+    connect(innerApply, &QPushButton::clicked, this, [this,innerDistance] { send("draw_offset_inner", {{"distance", innerDistance->value()}}); });
+    number(volume, tr("Revolução"), "profile_revolve_angle",
+           "set_profile_revolve_angle", "angle_deg", 0.01, 360, 1);
+    number(volume, tr("Suavidade"), "profile_smoothness",
            "set_profile_smoothness", "smoothness", 0, 1);
-    button(draw, tr("Suavizar curvas"), "profile_smooth_curves");
-    button(draw, tr("Remover curvas"), "profile_clear_curves");
-    button(draw, tr("Volume por extrusão"), "generate_profile_extrude");
-    button(draw, tr("Volume por revolução"), "generate_profile_revolve");
-    button(draw, tr("Volume por sweep"), "generate_profile_sweep");
-    button(draw, tr("Confirmar volume"), "commit_profile_volume");
-    button(draw, tr("Cancelar volume"), "cancel_profile_volume");
+    button(volume, tr("Suavizar curvas"), "profile_smooth_curves");
+    button(volume, tr("Remover curvas"), "profile_clear_curves");
+    button(volume, tr("Prévia de extrusão"), "enter_profile_volume", {{"mode_str", "extrude"}}, "draw.can_extrude");
+    button(volume, tr("Prévia de revolução"), "enter_profile_volume", {{"mode_str", "revolve"}}, "draw.can_revolve");
+    rows(volume, tr("Caminho explícito do sweep"), "draw.paths", "draw_sweep_path");
+    button(volume, tr("Prévia de sweep"), "enter_profile_volume", {{"mode_str", "sweep"}}, "draw.can_sweep");
+    button(volume, tr("Confirmar volume"), "commit_profile_volume", {}, "draw.volume_live");
+    button(volume, tr("Cancelar volume"), "cancel_profile_volume", {}, "draw.volume_live");
+    number(volume, tr("Altura da extrusão selecionada"), "draw.generator_distance", "draw_generator_distance", "depth", -10000, 10000);
+    m_bindings.last().enabledKey = "draw.is_extrude";
+    number(volume, tr("Ângulo da revolução selecionada"), "draw.generator_angle", "draw_generator_parameter", "value", 0.01, 360, 1, {{"field", "angle"}});
+    m_bindings.last().enabledKey = "draw.is_revolve";
+    number(volume, tr("Segmentos da revolução selecionada"), "draw.generator_segments", "draw_generator_parameter", "value", 3, 512, 1, {{"field", "segments"}});
+    m_bindings.last().enabledKey = "draw.is_revolve";
+    button(volume, tr("Converter volume em malha editável"), "draw_make_editable", {}, "draw.can_make_editable");
+    auto *drawStatus = new QLabel(this);
+    drawStatus->setWordWrap(true);
+    drawStatus->setTextFormat(Qt::PlainText);
+    drawStatus->setAccessibleName(tr("Estado da forma e do volume"));
+    volume->addRow(drawStatus);
+    m_bindings.append({drawStatus, "draw.diagnostic", {}, {}});
+
+    auto *solid = page(tr("Compor sólidos"));
+    button(solid, tr("Preparar os dois sólidos selecionados"), "draw_solid_begin", {}, "draw.can_prepare_solid");
+    choice(solid, tr("Ação nas regiões"), "draw.solid_intent", "draw_solid_intent", "id", {"unite", "remove", "extract"}, {tr("Unir"), tr("Remover"), tr("Extrair")});
+    rows(solid, tr("Selecionar regiões"), "draw.solid_regions", "draw_solid_toggle");
+    button(solid, tr("Próxima região sob o cursor"), "draw_solid_cycle", {}, "draw.solid_active");
+    button(solid, tr("Revelar regiões internas"), "draw_solid_xray", {}, "draw.solid_active");
+    button(solid, tr("Confirmar composição"), "draw_solid_commit", {}, "draw.solid_can_commit");
+    button(solid, tr("Cancelar composição"), "draw_solid_cancel", {}, "draw.solid_active");
+    auto *solidStatus = new QLabel(this); solidStatus->setWordWrap(true); solidStatus->setTextFormat(Qt::PlainText);
+    solidStatus->setAccessibleName(tr("Regiões da composição sólida")); solid->addRow(solidStatus);
+    m_bindings.append({solidStatus, "draw.solid_summary", {}, {}});
 
     // 8. Operações DRAW
-    auto *extensions = page(tr("Operações DRAW"));
+    auto *extensions = draw;
     for (auto pair : QList<QPair<QString, int>>{{"radius", 0},
                                                 {"length", 1},
                                                 {"angle", 2},

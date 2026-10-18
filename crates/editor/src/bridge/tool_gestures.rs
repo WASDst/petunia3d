@@ -151,7 +151,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 face @ petunia_core::HoverTarget::Face(_) => face,
                 _ => petunia_core::HoverTarget::None,
             };
-            let mut mask = if self.state.session.snap_enabled || self.state.profile.snap {
+            let mut mask = if self.state.session.snap_settings.enabled {
                 petunia_core::SnapMask::for_target(self.state.session.snap_settings.target)
             } else {
                 petunia_core::SnapMask {
@@ -224,6 +224,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::ShapeBuilder) => {
                 self.shape_builder_click(at)
+            }
+            Effect::Click { at }
+                if matches!(self.grammar_tool(), Some(GrammarTool::PlanarPrimitive(_))) =>
+            {
+                let effect = self
+                    .tool_session
+                    .begin_latched(at, petunia_core::PressTarget::Surface);
+                self.apply_tool_effect(effect, fine, snap)
             }
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::DrawProfile) => {
                 self.draw_profile_click(at)
@@ -317,6 +325,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             GrammarTool::PolyPen => self.begin_poly_pen_drag(anchor),
             GrammarTool::ShapeBuilder => self.begin_shape_builder(anchor),
             GrammarTool::DrawProfile => self.begin_draw_profile_gesture(anchor, target),
+            GrammarTool::PlanarPrimitive(kind) => self.begin_planar_primitive(kind, anchor),
             // O Knife é por cliques: arrastar não abre gesto.
             GrammarTool::Knife => false,
             GrammarTool::LoopCut => {
@@ -432,14 +441,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if width <= 1.0 || height <= 1.0 || !pixel[0].is_finite() || !pixel[1].is_finite() {
             return None;
         }
-        if self.shape_cache().planes.is_empty() {
+        let cache = self.shape_cache()?;
+        if cache.planes.is_empty() {
             return None;
         }
         let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
         let camera = &self.state.session.camera;
         let (origin, direction) = camera.ray(ndc.x, ndc.y);
         let hit = petunia_core::region_at_ray(
-            &self.shape_cache().planes,
+            &cache.planes,
             origin,
             direction,
             camera.proj == petunia_core::Projection::Perspective,
@@ -467,6 +477,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.tool_session.clear_numeric();
         if self.state.primitive_session_valid() {
             self.state.finalize_primitive_session();
+        }
+        if self.state.view().region_host_face(hit).is_none() {
+            if !self.begin_free_region_volume(hit) {
+                return false;
+            }
+            self.tool_gesture = Some(ToolGesture::ProfileDepth {
+                start: self.state.profile.depth,
+                anchor_y: anchor[1],
+            });
+            return true;
         }
         if let Err(error) = self.state.begin_region_push_pull(hit) {
             self.state.set_status(error.to_string());
@@ -499,36 +519,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Shape (Object) continua no caminho de formas inteiras. Clique no vazio
     /// limpa a seleção do domínio.
     pub(crate) fn select_draw_component(&mut self, pixel: [f32; 2]) -> bool {
-        if self.state.session.tools.active_tool == "draw_profile" {
+        if self.state.session.tools.active_tool == "draw_profile"
+            || self.state.selection_domain() != SelectionDomain::Object
+        {
             return false;
         }
-        let domain = self.state.selection_domain();
-        let found = match domain {
-            SelectionDomain::Edge => self.profile_segment_hit(pixel).map(|hit| {
-                self.profile_selected_segment = Some(hit.segment);
-                self.profile_selected_point = None;
+        let found = match self.draw_component_context.as_str() {
+            "segments" => self.profile_segment_hit(pixel).map(|hit| {
+                self.state.session.planar_selection.segment = Some(hit.segment);
+                self.state.session.planar_selection.point = None;
                 self.region_selected = None;
                 petunia_config::text_id::STATUS_CURVE_SELECTED
             }),
-            SelectionDomain::Vertex => match self.hit_test_profile(pixel[0], pixel[1]) {
+            "points" => match self.hit_test_profile(pixel[0], pixel[1]) {
                 Some(ProfileHitTarget::Anchor(id)) => {
-                    self.profile_selected_point = Some(id);
-                    self.profile_selected_segment = None;
+                    self.state.session.planar_selection.point = Some(id);
+                    self.state.session.planar_selection.segment = None;
                     self.region_selected = None;
                     Some(petunia_config::text_id::STATUS_PROFILE_POINT_SELECTED)
                 }
                 _ => None,
             },
-            SelectionDomain::Face => self.region_hit_at(pixel).map(|hit| {
+            "regions" => self.region_hit_at(pixel).map(|hit| {
                 self.region_selected = Some(hit);
-                self.profile_selected_point = None;
-                self.profile_selected_segment = None;
+                self.state.session.planar_selection.point = None;
+                self.state.session.planar_selection.segment = None;
                 petunia_config::text_id::STATUS_REGION_SELECTED
             }),
-            SelectionDomain::Object => return false,
+            _ => return false,
         };
         let Some(message) = found else {
-            let had = self.profile_selected_segment.take().is_some()
+            let had = self.state.session.planar_selection.segment.take().is_some()
                 | self.region_selected.take().is_some();
             if had {
                 self.state.mark_dirty();
@@ -544,10 +565,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Segmento selecionado (domínio Curve) em comandos de tela.
     pub(crate) fn profile_selection_commands(&self) -> String {
         let mut commands = String::new();
-        let Some(segment) = self.profile_selected_segment else {
+        let Some(segment) = self.state.session.planar_selection.segment else {
             return commands;
         };
-        let Some((profile, spline)) = self.active_profile_resources() else {
+        let Some((profile, spline)) = self.active_contour_resources() else {
             return commands;
         };
         if segment >= spline.segment_count() {
@@ -573,6 +594,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub(crate) fn region_hover_commands(&self) -> String {
+        if self.solid_shape_builder.is_some() {
+            return self.solid_region_commands();
+        }
         let mut commands = String::new();
         // A região selecionada (domínio Region) fica destacada sem hover.
         if let Some(hit) = &self.region_selected {
@@ -682,6 +706,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.update_profile_transform(current, snap);
         }
         match self.tool_gesture {
+            Some(ToolGesture::PlanarPrimitive { kind, anchor }) => {
+                self.update_planar_primitive(kind, anchor, current)
+            }
             Some(ToolGesture::Transform { .. }) => {
                 self.update_viewport_transform_modified(current[0], current[1], fine, snap)
             }
@@ -722,10 +749,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 )
             }
             Some(ToolGesture::ProfileDepth { start, anchor_y }) => {
+                if !self.tool_session.numeric_text().is_empty() {
+                    return false;
+                }
                 let rate = if fine { 0.005 } else { 0.02 };
-                self.set_profile_depth((start + (anchor_y - current[1]) * rate).max(0.05))
+                self.set_profile_depth(start + (anchor_y - current[1]) * rate)
             }
             Some(ToolGesture::ProfileRevolve { start, anchor_x }) => {
+                if !self.tool_session.numeric_text().is_empty() {
+                    return false;
+                }
                 let rate = if fine { 0.2 } else { 1.0 };
                 self.set_profile_revolve_angle(
                     (start + (current[0] - anchor_x) * rate).clamp(1.0, 360.0),
@@ -747,6 +780,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.commit_profile_transform();
         }
         match self.tool_gesture.take() {
+            Some(ToolGesture::PlanarPrimitive { .. }) => self.commit_profile_authoring_preview(),
             Some(ToolGesture::Decal) => self.commit_decal_gesture(),
             Some(ToolGesture::SurfacePaint) => {
                 self.surface_paint.anchor = None;
@@ -760,8 +794,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             Some(ToolGesture::ProfileDepth { .. } | ToolGesture::ProfileRevolve { .. }) => {
-                self.state.mark_dirty();
-                true
+                self.commit_profile_volume()
             }
             Some(ToolGesture::LoopSlide { .. }) => self.commit_loop_cut(),
             // O plano fica em prévia até o clique de confirmação (ou Esc).
@@ -797,6 +830,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.cancel_profile_transform();
         }
         match self.tool_gesture.take() {
+            Some(ToolGesture::PlanarPrimitive { .. }) => self.cancel_profile_authoring_preview(),
             Some(ToolGesture::Transform { gizmo }) => {
                 if gizmo {
                     self.gizmo_drag = None;
@@ -810,9 +844,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(ToolGesture::ProfilePoint | ToolGesture::ProfileHandlePull) => {
                 self.cancel_profile_point_drag()
             }
-            Some(ToolGesture::ProfileDepth { start, .. }) => self.set_profile_depth(start),
+            Some(ToolGesture::ProfileDepth { start, .. }) => {
+                self.state.profile.depth = start;
+                self.cancel_profile_volume()
+            }
             Some(ToolGesture::ProfileRevolve { start, .. }) => {
-                self.set_profile_revolve_angle(start)
+                self.state.profile.revolve_angle = start;
+                self.cancel_profile_volume()
             }
             Some(ToolGesture::LoopSlide { .. }) => self.cancel_loop_cut(),
             Some(ToolGesture::Slice) => self.cancel_slice(),

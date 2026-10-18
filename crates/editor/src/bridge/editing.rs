@@ -5,21 +5,22 @@ use crate::*;
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Exclui ou dissolve elementos selecionados ou o ativo ativo se em Object Mode.
     pub fn delete_or_dissolve_selection(&mut self) -> bool {
-        if self.state.session.tools.active_tool == "draw_profile"
-            && self.profile_selected_point.is_some()
+        if (self.state.session.tools.active_tool == "draw_profile"
+            || self.draw_component_context == "points")
+            && self.state.session.planar_selection.point.is_some()
         {
             return self.delete_selected_profile_point();
         }
 
         // Se houver um perfil ativo em DRAW sem ponto selecionado, apaga a forma 2D inteira!
-        if let Some(profile_id) = self.active_profile_id
+        if let Some(profile_id) = self.state.session.active_shape
             && self
                 .state
                 .dispatch(&petunia_core::DeleteProfileCmd { profile_id })
                 .is_ok()
         {
-            self.active_profile_id = None;
-            self.profile_selected_point = None;
+            self.state.session.active_shape = None;
+            self.state.session.planar_selection = Default::default();
             self.profile_drag_target = None;
             self.state.set_status(
                 self.state

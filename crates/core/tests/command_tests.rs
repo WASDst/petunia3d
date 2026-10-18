@@ -211,6 +211,8 @@ fn test_delete_selection_in_edit_and_object_modes() {
     assert!(state.undo());
     assert_eq!(state.project.assets.len(), 2);
 
+    assert!(state.project.active().unwrap().geometry_source.is_some());
+    assert!(state.freeze_active_primitive());
     // 2. Em Edit Mode, DeleteSelectionCmd remove sub-elementos da malha
     state.set_edit_mode(EditMode::Edit);
     let initial_verts = state.project.active_mesh().unwrap().verts.len();
@@ -1076,6 +1078,7 @@ fn test_command_dispatcher_registry() {
         .expect("deve executar add_sphere");
     assert_eq!(state.project.assets.len(), 2);
 
+    assert!(state.freeze_active_primitive());
     // Executa seleção via dispatcher (em Edit Mode para malha ativa)
     state.set_edit_mode(EditMode::Edit);
     dispatcher
@@ -1124,6 +1127,7 @@ fn test_headless_full_modeling_session() {
         .expect("adiciona cilindro");
     assert_eq!(state.project.assets.len(), 2);
 
+    assert!(state.freeze_active_primitive());
     // 2. Entra em modo de edição
     state.set_edit_mode(EditMode::Edit);
 
@@ -1158,7 +1162,10 @@ fn test_headless_full_modeling_session() {
         initial_count
     );
 
-    // 6. Undo desfaz a criação do cilindro
+    // 6. Undo reverses the explicit conversion before removing creation.
+    assert!(state.undo());
+    assert_eq!(state.project.assets.len(), 2);
+    assert!(state.project.active().unwrap().geometry_source.is_some());
     assert!(state.undo());
     assert_eq!(state.project.assets.len(), 1);
 }
@@ -2123,6 +2130,7 @@ fn no_op_command_creates_no_history_entry_and_keeps_session() {
     let had_session = state.session.primitive_session.is_some();
     assert!(had_session);
     state.finalize_primitive_session();
+    assert!(state.freeze_active_primitive());
     // Com uma única face selecionada nenhuma aresta compartilhada entra no
     // filtro de costura, então o comando não tem o que alterar.
     let mesh = state.project.active_mesh().unwrap().clone();

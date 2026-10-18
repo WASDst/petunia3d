@@ -277,11 +277,11 @@ PetuniaToolOptionsBar::PetuniaToolOptionsBar(QWidget *parent) : QFrame(parent) {
     transLayout->addWidget(m_snapBtn);
 
     m_snapTargetCombo = new QComboBox(m_transformGroup);
-    m_snapTargetCombo->addItems({QStringLiteral("Grade"), QStringLiteral("Vértice"),
-                                  QStringLiteral("Aresta"), QStringLiteral("Face")});
+    m_snapTargetCombo->addItems({tr("Smart"), tr("Grade"), tr("Incremento"), tr("Ponto"), tr("Aresta"), tr("Face")});
     m_snapTargetCombo->setToolTip(QStringLiteral("Alvo do Snap"));
-    for (int i = 0; i < 4; ++i)
-        m_snapTargetCombo->setItemData(i, QStringList{"grid", "vertex", "edge", "face"}[i]);
+    const QStringList snapIds{"smart", "grid", "increment", "vertex", "edge", "face"};
+    for (int i = 0; i < snapIds.size(); ++i)
+        m_snapTargetCombo->setItemData(i, snapIds[i]);
     connect(m_snapTargetCombo, &QComboBox::activated, this, [this](int i) {
         emit snapTargetChanged(m_snapTargetCombo->itemData(i).toString());
     });
@@ -678,28 +678,15 @@ void PetuniaToolOptionsBar::sync(const QJsonObject &state) {
     const bool isPaint = (ws == "Paint");
 
     // Domain Adaptability
-    if (isDraw) {
+    if (isDraw || isPoly) {
         m_domainGroup->show();
         m_sepDomain->show();
-        m_domainObjBtn->setToolTip(QStringLiteral("Modo Shape (Atalho 1)"));
-        m_domainVertBtn->setToolTip(QStringLiteral("Modo Ponto (Atalho 1 em DRAW)"));
-        m_domainEdgeBtn->setToolTip(QStringLiteral("Modo Curva (Atalho 2)"));
-        m_domainFaceBtn->setToolTip(QStringLiteral("Modo Região (Atalho 3)"));
-        m_domainObjBtn->show();
-        m_domainVertBtn->show();
-        m_domainEdgeBtn->show();
-        m_domainFaceBtn->show();
-    } else if (isPoly) {
-        m_domainGroup->show();
-        m_sepDomain->show();
-        m_domainObjBtn->setToolTip(QStringLiteral("Modo Objeto (Atalho 1)"));
-        m_domainVertBtn->setToolTip(QStringLiteral("Modo Vértice (Atalho 1 em POLY)"));
-        m_domainEdgeBtn->setToolTip(QStringLiteral("Modo Aresta (Atalho 2)"));
-        m_domainFaceBtn->setToolTip(QStringLiteral("Modo Face (Atalho 3)"));
-        m_domainObjBtn->show();
-        m_domainVertBtn->show();
-        m_domainEdgeBtn->show();
-        m_domainFaceBtn->show();
+        m_domainObjBtn->setToolTip(tr("Objeto · domínio compartilhado de malha"));
+        m_domainVertBtn->setToolTip(tr("Vértice · domínio compartilhado de malha"));
+        m_domainEdgeBtn->setToolTip(tr("Aresta · domínio compartilhado de malha"));
+        m_domainFaceBtn->setToolTip(tr("Face · domínio compartilhado de malha"));
+        m_domainObjBtn->show(); m_domainVertBtn->show();
+        m_domainEdgeBtn->show(); m_domainFaceBtn->show();
     } else if (isPaint) {
         m_domainGroup->show();
         m_sepDomain->show();
@@ -900,7 +887,7 @@ PetuniaFloatingContextBar::PetuniaFloatingContextBar(QWidget *parent) : QFrame(p
     rectBtn->setIconSize(QSize(18, 18));
     rectBtn->setToolTip(QStringLiteral("Retângulo (Desenhar perfil retangular)"));
     connect(rectBtn, &QPushButton::clicked, this, [this]() {
-        emit actionTriggered(QStringLiteral("profile_rectangle"));
+        emit actionTriggered(QStringLiteral("draw_rectangle_tool"));
     });
     drawLayout->addWidget(rectBtn);
 
@@ -910,7 +897,7 @@ PetuniaFloatingContextBar::PetuniaFloatingContextBar(QWidget *parent) : QFrame(p
     circleBtn->setIconSize(QSize(18, 18));
     circleBtn->setToolTip(QStringLiteral("Círculo (Desenhar perfil circular)"));
     connect(circleBtn, &QPushButton::clicked, this, [this]() {
-        emit actionTriggered(QStringLiteral("profile_circle"));
+        emit actionTriggered(QStringLiteral("draw_circle_tool"));
     });
     drawLayout->addWidget(circleBtn);
 

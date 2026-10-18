@@ -51,7 +51,7 @@ fn test_editor_session_isolated_lifecycle() {
     assert_eq!(session.edit_mode(), EditMode::Object);
     assert_eq!(session.locked_axes, [false; 3]);
     assert!(
-        session.snap_enabled,
+        session.snap_settings.enabled,
         "Smart Snap ligado por padrão (cap. 01)"
     );
     assert!(!session.isolate_active);
@@ -290,13 +290,13 @@ fn test_viewport_session_isolated_lifecycle() {
     let mut vs = ViewportSession::new();
     assert_eq!(vs.shading, Shading::Solid);
     assert_eq!(vs.cursor_3d, [0.0, 0.0, 0.0]);
-    assert!(vs.snap_enabled);
+    assert!(vs.snap_settings.enabled);
     assert!(vs.show_grid);
 
     // Modificar configurações na sessão da viewport
     vs.shading = Shading::Wireframe;
     vs.cursor_3d = [1.0, 2.0, 3.0];
-    vs.snap_enabled = false;
+    vs.snap_settings.enabled = false;
     vs.camera.distance = 15.0;
 
     let mut session = EditorSession::new();
@@ -304,7 +304,7 @@ fn test_viewport_session_isolated_lifecycle() {
 
     assert_eq!(session.shading, Shading::Wireframe);
     assert_eq!(session.cursor_3d, [1.0, 2.0, 3.0]);
-    assert!(!session.snap_enabled);
+    assert!(!session.snap_settings.enabled);
     assert_eq!(session.camera.distance, 15.0);
 
     let retrieved_vs = session.viewport_session();

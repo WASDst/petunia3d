@@ -151,6 +151,7 @@ impl QtEditor {
             let key = format!("reference_{axis}");
             v[&key]["revision"] = json!(r.revision);
         }
+        v["draw"] = self.controller.draw_workspace_snapshot();
         v["recovery_available"] = json!(self.controller.pending_recovery.is_some());
         // Feedback do pincel e do gizmo de decalque (mesma projeção do Slint).
         let (brush_squash, brush_tilt) = self
@@ -520,7 +521,7 @@ impl QtEditor {
                         .and_then(|id| b.state.project.assets.iter().position(|a| a.id == id))
                     {
                         b.state.select_object(Some(index), true);
-                        b.active_profile_id = None;
+                        b.state.session.active_shape = None;
                     }
                 }
                 if let Some(active) = request["active"]
@@ -742,6 +743,31 @@ impl QtEditor {
                 let index = b.active_brush_preset.ok_or("Selecione um preset")?;
                 return Ok(b.delete_brush_preset(index));
             }
+            "profile_dimension_gesture" => {
+                b.profile_dimension_gesture(
+                    i32::try_from(integer(request, "phase")?).map_err(|e| e.to_string())?,
+                );
+                return Ok(true);
+            }
+            "draw_generator_gesture" => {
+                return Ok(b.generator_parameter_gesture(
+                    i32::try_from(integer(request, "phase")?).map_err(|e| e.to_string())?,
+                ));
+            }
+            "draw_generator_parameter" => {
+                return Ok(b.edit_selected_generator_parameter(
+                    string(request, "field")?,
+                    number(request, "value")?,
+                ));
+            }
+            "draw_rectangle_tool" => {
+                b.apply(UiIntent::SetActiveTool("draw_rectangle".into()));
+                return Ok(true);
+            }
+            "draw_circle_tool" => {
+                b.apply(UiIntent::SetActiveTool("draw_circle".into()));
+                return Ok(true);
+            }
             "profile_dimension" => {
                 let vm = b.view_model();
                 let value = number(request, "value")?;
@@ -764,17 +790,77 @@ impl QtEditor {
                     },
                 ));
             }
-            "profile_workplane" => {
-                b.apply(match string(request, "id")? {
-                    "auto" => UiIntent::ProfileSetWorkplaneAuto,
-                    "ground" => UiIntent::ProfileSetWorkplaneGround,
-                    "face" => UiIntent::ProfileSetWorkplaneFace,
-                    "view" => UiIntent::ProfileSetWorkplaneView,
-                    "selection" => UiIntent::ProfileSetWorkplaneSelection,
-                    _ => return Err("Plano inválido".into()),
-                });
-                return Ok(true);
+            "draw_curve_finish" => return Ok(b.finish_draw_curve()),
+            "draw_curve_new" => return Ok(b.start_new_draw_curve()),
+            "draw_solid_begin" => return Ok(b.begin_solid_shape_builder()),
+            "draw_solid_intent" => return Ok(b.set_solid_shape_intent(string(request, "id")?)),
+            "draw_solid_toggle" => {
+                return Ok(b.toggle_solid_region_id(
+                    string(request, "id")?
+                        .parse()
+                        .map_err(|_| "Invalid region id".to_string())?,
+                ));
             }
+            "draw_solid_cycle" => return Ok(b.cycle_solid_region()),
+            "draw_solid_xray" => return Ok(b.toggle_solid_xray()),
+            "draw_solid_commit" => return Ok(b.commit_solid_shape_builder()),
+            "draw_solid_cancel" => return Ok(b.cancel_solid_shape_builder()),
+            "draw_shape_flag" => return Ok(b.toggle_selected_shape_flag(string(request, "field")?)),
+            "draw_contour" => {
+                let id =
+                    uuid::Uuid::parse_str(string(request, "id")?).map_err(|e| e.to_string())?;
+                return Ok(b.select_draw_contour(id));
+            }
+            "draw_edit_context" => return Ok(b.set_draw_edit_context(string(request, "id")?)),
+            "draw_generator_distance" => {
+                return Ok(b.edit_selected_generator_distance(number(request, "depth")?));
+            }
+            "profile_workplane" => return Ok(b.set_draw_workplane(string(request, "id")?)),
+            "draw_shape" => {
+                let id =
+                    uuid::Uuid::parse_str(string(request, "id")?).map_err(|e| e.to_string())?;
+                return Ok(b.select_draw_shape(id));
+            }
+            "draw_sweep_path" => {
+                let id =
+                    uuid::Uuid::parse_str(string(request, "id")?).map_err(|e| e.to_string())?;
+                return Ok(b.set_profile_sweep_path(id));
+            }
+            "draw_shape_name" => return Ok(b.rename_draw_shape(string(request, "name")?)),
+            "draw_point" => {
+                return Ok(b.select_draw_point(
+                    uuid::Uuid::parse_str(string(request, "id")?).map_err(|e| e.to_string())?,
+                ));
+            }
+            "draw_point_parameter" => {
+                return Ok(b.set_draw_point_parameter(
+                    string(request, "field")?,
+                    number(request, "value")?,
+                ));
+            }
+            "draw_point_mode" => return Ok(b.set_draw_point_mode(string(request, "id")?)),
+            "draw_shape_transform" => {
+                return Ok(
+                    b.transform_draw_shape(string(request, "field")?, number(request, "value")?)
+                );
+            }
+            "draw_angle_step" => return Ok(b.set_draw_angle_step(number(request, "value")?)),
+            "draw_inference_lock" => return Ok(b.toggle_draw_inference()),
+            "draw_plane_component" => {
+                return Ok(b.set_draw_plane_component(
+                    string(request, "field")?,
+                    number(request, "value")?,
+                ));
+            }
+            "draw_volume_option" => {
+                return Ok(
+                    b.set_draw_volume_option(string(request, "field")?, string(request, "value")?)
+                );
+            }
+            "draw_offset_inner" => {
+                return Ok(b.set_profile_wall_thickness(number(request, "distance")?));
+            }
+            "draw_make_editable" => return Ok(b.make_selected_generated_editable()),
             "uv_selection_sync" => {
                 b.state.set_uv_sync(boolean(request, "value")?);
                 return Ok(true);
@@ -1089,6 +1175,13 @@ impl QtEditor {
             other => return dispatch_controller(b, other, request),
         };
         b.apply(intent);
+        if action == "workspace" {
+            match request["id"].as_str() {
+                Some("DRAW") => b.apply(UiIntent::SetModelingMode(ModelingMode::Draw)),
+                Some("POLY") => b.apply(UiIntent::SetModelingMode(ModelingMode::Poly)),
+                _ => {}
+            }
+        }
         Ok(true)
     }
 }

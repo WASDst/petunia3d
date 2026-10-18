@@ -402,6 +402,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if text == "Enter" && !ctrl && !alt {
             return self.confirm_active_operation();
         }
+        if !ctrl && !alt && self.draw_numeric_input(text) {
+            return true;
+        }
+        if text == "Backspace"
+            && !ctrl
+            && !alt
+            && self.state.session.tools.active_tool == "draw_profile"
+            && !self.active_profile_closed()
+            && let Some(id) = self
+                .active_contour_resources()
+                .and_then(|(_, s)| s.points.last())
+                .map(|p| p.id)
+        {
+            self.state.session.planar_selection.point = Some(id);
+            return self.delete_selected_profile_point();
+        }
         if self.decal_gesture.is_some() && !ctrl && !alt {
             // Buffer numérico do gesto de decalque (constituição 11).
             if text == "Tab" {
