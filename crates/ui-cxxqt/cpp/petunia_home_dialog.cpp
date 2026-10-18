@@ -1,4 +1,7 @@
 #include "petunia_home_dialog.h"
+#include "petunia_icons.h"
+#include "petunia_theme.h"
+#include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QKeyEvent>
 
@@ -7,180 +10,119 @@ PetuniaHomeDialog::PetuniaHomeDialog(QWidget *parent)
     setupUi();
 }
 
+// Aparência vem do tema (papéis da folha de estilo global): segue claro, escuro,
+// alto contraste e densidade sem cores fixas.
 void PetuniaHomeDialog::setupUi() {
-    resize(580, 480);
-    setMinimumSize(280, 220);
+    const auto &theme = PetuniaTheme::instance();
+    setWindowTitle(tr("Petunia3D — Início"));
+    resize(theme.scaled(580), theme.scaled(480));
+    setMinimumSize(theme.scaled(320), theme.scaled(240));
     setAttribute(Qt::WA_TranslucentBackground);
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setContentsMargins(theme.space(3), theme.space(3), theme.space(3), theme.space(3));
 
-    auto *card = new QWidget(this);
-    card->setObjectName(QStringLiteral("HomeCard"));
-    card->setStyleSheet(
-        QStringLiteral("#HomeCard { background-color: #202020; border: 1px "
-                       "solid #383838; border-radius: 8px; }"));
-
+    auto *card = new QFrame(this);
+    card->setProperty("role", QStringLiteral("card"));
     auto *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(28);
-    shadow->setColor(QColor(0, 0, 0, 190));
+    shadow->setColor(QColor(0, 0, 0, 160));
     shadow->setOffset(0, 8);
     card->setGraphicsEffect(shadow);
 
     auto *cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(24, 24, 24, 24);
-    cardLayout->setSpacing(14);
+    cardLayout->setContentsMargins(theme.space(6), theme.space(6), theme.space(6), theme.space(6));
+    cardLayout->setSpacing(theme.space(3));
 
-    // Header: Título & Subtítulo
     auto *headerLayout = new QHBoxLayout();
     auto *titleCol = new QVBoxLayout();
-
-    auto *titleLabel = new QLabel(QStringLiteral("Petunia3D Studio"), card);
-    titleLabel->setStyleSheet(
-        QStringLiteral("font-size: 20px; font-weight: bold; color: #b58cff;"));
+    auto *titleLabel = new QLabel(QStringLiteral("Petunia3D"), card);
+    titleLabel->setProperty("role", QStringLiteral("title"));
     titleCol->addWidget(titleLabel);
-
-    auto *subLabel = new QLabel(
-        QStringLiteral("Modelagem 3D, Pintura de Texturas e Animação Low-Poly"),
-        card);
-    subLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #a0a0a0;"));
+    auto *subLabel = new QLabel(tr("Modelagem 3D, pintura de texturas e animação"), card);
+    subLabel->setProperty("role", QStringLiteral("muted"));
     titleCol->addWidget(subLabel);
-
     headerLayout->addLayout(titleCol);
     headerLayout->addStretch();
 
-    m_closeBtn = new QPushButton(QStringLiteral("✕"), card);
-    m_closeBtn->setFixedSize(28, 28);
-    m_closeBtn->setCursor(Qt::PointingHandCursor);
-    m_closeBtn->setStyleSheet(QStringLiteral(
-        "QPushButton { background: transparent; color: #888888; font-size: "
-        "14px; border: none; border-radius: 4px; }"
-        "QPushButton:hover { background-color: #333333; color: #ffffff; }"));
+    m_closeBtn = new QPushButton(PetuniaIcons::get(QStringLiteral("close")), QString(), card);
+    m_closeBtn->setProperty("role", QStringLiteral("quiet"));
+    m_closeBtn->setFixedSize(theme.minHitTarget(), theme.minHitTarget());
+    m_closeBtn->setToolTip(tr("Fechar (Esc)"));
+    m_closeBtn->setAccessibleName(tr("Fechar a tela inicial"));
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     headerLayout->addWidget(m_closeBtn);
-
     cardLayout->addLayout(headerLayout);
 
-    // Divisor
-    auto *sep1 = new QFrame(card);
-    sep1->setFrameShape(QFrame::HLine);
-    sep1->setStyleSheet(
-        QStringLiteral("background-color: #303030; max-height: 1px;"));
-    cardLayout->addWidget(sep1);
+    auto separator = [card] {
+        auto *line = new QFrame(card);
+        line->setProperty("role", QStringLiteral("separator"));
+        line->setFixedHeight(1);
+        return line;
+    };
+    cardLayout->addWidget(separator());
 
-    // Ações Rápidas (Novo, Abrir, Recuperar)
     auto *actionsLayout = new QHBoxLayout();
-    actionsLayout->setSpacing(10);
-
-    m_newBtn = new QPushButton(QStringLiteral("+ Novo Projeto"), card);
-    m_newBtn->setFixedHeight(36);
-    m_newBtn->setCursor(Qt::PointingHandCursor);
-    m_newBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #b58cff; color: "
-                       "#121212; font-weight: bold; font-size: 13px; border: "
-                       "none; border-radius: 4px; padding: 0 16px; }"
-                       "QPushButton:hover { background-color: #c9abff; }"));
+    actionsLayout->setSpacing(theme.space(2));
+    m_newBtn = new QPushButton(PetuniaIcons::get(QStringLiteral("plus")), tr("Novo projeto"), card);
+    m_newBtn->setProperty("role", QStringLiteral("primary"));
+    m_newBtn->setMinimumHeight(theme.controlHeight());
+    m_newBtn->setDefault(true);
     connect(m_newBtn, &QPushButton::clicked, this, [this]() {
         emit newProjectRequested();
         accept();
     });
     actionsLayout->addWidget(m_newBtn);
 
-    m_openBtn = new QPushButton(QStringLiteral("Abrir Projeto..."), card);
-    m_openBtn->setFixedHeight(36);
-    m_openBtn->setCursor(Qt::PointingHandCursor);
-    m_openBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #292929; color: "
-                       "#eeeeee; font-size: 13px; border: 1px solid #404040; "
-                       "border-radius: 4px; padding: 0 16px; }"
-                       "QPushButton:hover { background-color: #353535; "
-                       "border-color: #555555; }"));
+    m_openBtn = new QPushButton(tr("Abrir projeto…"), card);
+    m_openBtn->setMinimumHeight(theme.controlHeight());
     connect(m_openBtn, &QPushButton::clicked, this, [this]() {
         emit openProjectRequested();
         accept();
     });
     actionsLayout->addWidget(m_openBtn);
 
-    m_recoverBtn = new QPushButton(QStringLiteral("Recuperar Sessão..."), card);
-    m_recoverBtn->setFixedHeight(36);
-    m_recoverBtn->setCursor(Qt::PointingHandCursor);
+    m_recoverBtn = new QPushButton(tr("Recuperar sessão…"), card);
+    m_recoverBtn->setMinimumHeight(theme.controlHeight());
+    m_recoverBtn->setProperty("role", QStringLiteral("danger"));
+    m_recoverBtn->setToolTip(tr("Há um salvamento automático de uma sessão interrompida"));
     m_recoverBtn->setVisible(false);
-    m_recoverBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #e96a00; color: "
-                       "#ffffff; font-weight: bold; font-size: 13px; border: "
-                       "none; border-radius: 4px; padding: 0 16px; }"
-                       "QPushButton:hover { background-color: #ff8522; }"));
     connect(m_recoverBtn, &QPushButton::clicked, this, [this]() {
         emit recoverProjectRequested();
         accept();
     });
     actionsLayout->addWidget(m_recoverBtn);
-
     actionsLayout->addStretch();
     cardLayout->addLayout(actionsLayout);
 
-    // Seção de Projetos Recentes
-    auto *recentTitle = new QLabel(QStringLiteral("Projetos Recentes"), card);
-    recentTitle->setStyleSheet(QStringLiteral(
-        "font-size: 13px; font-weight: 600; color: #dddddd; margin-top: 4px;"));
+    auto *recentTitle = new QLabel(tr("Projetos recentes"), card);
+    recentTitle->setProperty("role", QStringLiteral("caption"));
     cardLayout->addWidget(recentTitle);
 
     m_recentList = new QListWidget(card);
-    m_recentList->setStyleSheet(QStringLiteral(
-        "QListWidget { background-color: #1a1a1a; border: 1px solid #2e2e2e; "
-        "border-radius: 6px; padding: 4px; }"
-        "QListWidget::item { height: 36px; padding: 4px 8px; border-radius: "
-        "4px; color: #dddddd; }"
-        "QListWidget::item:hover { background-color: #2a2a2a; color: #ffffff; }"
-        "QListWidget::item:selected { background-color: #383838; color: "
-        "#b58cff; font-weight: bold; }"));
-    connect(m_recentList, &QListWidget::itemDoubleClicked, this,
-            &PetuniaHomeDialog::onRecentItemDoubleClicked);
+    m_recentList->setAccessibleName(tr("Projetos recentes"));
+    m_recentList->setToolTip(tr("Enter ou duplo clique abre o projeto"));
+    // Enter e duplo clique: `itemActivated` cobre os dois (teclado incluído).
+    connect(m_recentList, &QListWidget::itemActivated, this, &PetuniaHomeDialog::onRecentItemDoubleClicked);
+    recentTitle->setBuddy(m_recentList);
     cardLayout->addWidget(m_recentList);
 
-    m_noRecentLabel =
-        new QLabel(QStringLiteral("Nenhum projeto recente."), card);
-    m_noRecentLabel->setStyleSheet(
-        QStringLiteral("color: #777777; font-size: 12px; font-style: italic;"));
+    m_noRecentLabel = new QLabel(tr("Nenhum projeto recente."), card);
+    m_noRecentLabel->setProperty("role", QStringLiteral("muted"));
     m_noRecentLabel->setAlignment(Qt::AlignCenter);
-    m_noRecentLabel->setVisible(true);
     cardLayout->addWidget(m_noRecentLabel);
 
-    // Divisor
-    auto *sep2 = new QFrame(card);
-    sep2->setFrameShape(QFrame::HLine);
-    sep2->setStyleSheet(
-        QStringLiteral("background-color: #303030; max-height: 1px;"));
-    cardLayout->addWidget(sep2);
+    cardLayout->addWidget(separator());
 
-    // Rodapé
     auto *footerLayout = new QHBoxLayout();
-
-    m_showOnStartCheck =
-        new QCheckBox(QStringLiteral("Mostrar tela inicial ao iniciar"), card);
+    m_showOnStartCheck = new QCheckBox(tr("Mostrar esta tela ao iniciar"), card);
     m_showOnStartCheck->setChecked(true);
-    m_showOnStartCheck->setStyleSheet(QStringLiteral(
-        "QCheckBox { color: #aaaaaa; font-size: 12px; }"
-        "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid "
-        "#505050; border-radius: 3px; background: #222; }"
-        "QCheckBox::indicator:checked { background: #b58cff; border-color: "
-        "#b58cff; }"));
     footerLayout->addWidget(m_showOnStartCheck);
-
     footerLayout->addStretch();
-
-    m_settingsBtn = new QPushButton(QStringLiteral("Configurações"), card);
-    m_settingsBtn->setCursor(Qt::PointingHandCursor);
-    m_settingsBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background: transparent; color: #aaaaaa; "
-                       "font-size: 12px; border: 1px solid #404040; "
-                       "border-radius: 4px; padding: 4px 12px; }"
-                       "QPushButton:hover { background: #2a2a2a; color: "
-                       "#ffffff; border-color: #555555; }"));
-    connect(m_settingsBtn, &QPushButton::clicked, this,
-            [this]() { emit settingsRequested(); });
+    m_settingsBtn = new QPushButton(PetuniaIcons::get(QStringLiteral("settings")), tr("Preferências"), card);
+    m_settingsBtn->setProperty("role", QStringLiteral("quiet"));
+    connect(m_settingsBtn, &QPushButton::clicked, this, [this]() { emit settingsRequested(); });
     footerLayout->addWidget(m_settingsBtn);
-
     cardLayout->addLayout(footerLayout);
     mainLayout->addWidget(card);
 }
@@ -190,10 +132,10 @@ void PetuniaHomeDialog::setRecentProjects(const QStringList &projectNames,
     m_recentList->clear();
     int count = std::min(projectNames.size(), projectPaths.size());
     for (int i = 0; i < count; ++i) {
-        auto *item = new QListWidgetItem(
-            QStringLiteral("%1  (%2)").arg(projectNames[i], projectPaths[i]),
-            m_recentList);
+        auto *item = new QListWidgetItem(projectNames[i], m_recentList);
         item->setData(Qt::UserRole, projectPaths[i]);
+        item->setToolTip(projectPaths[i]);
+        item->setData(Qt::AccessibleDescriptionRole, projectPaths[i]);
         m_recentList->addItem(item);
     }
 

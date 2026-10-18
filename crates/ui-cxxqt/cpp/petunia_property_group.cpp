@@ -1,4 +1,5 @@
 #include "petunia_property_group.h"
+#include "petunia_theme.h"
 #include <QStyle>
 
 PropertyRow::PropertyRow(const QString &label, QWidget *editorWidget, QWidget *parent)
@@ -32,19 +33,20 @@ PropertyGroup::PropertyGroup(const QString &title, QWidget *parent)
     m_headerWidget->setCursor(Qt::PointingHandCursor);
 
     auto *headerLayout = new QHBoxLayout(m_headerWidget);
-    headerLayout->setContentsMargins(4, 4, 4, 4);
-    headerLayout->setSpacing(4);
+    const auto &theme = PetuniaTheme::instance();
+    headerLayout->setContentsMargins(theme.space(1), theme.space(1), theme.space(1), theme.space(1));
+    headerLayout->setSpacing(theme.space(1));
 
     m_toggleButton = new QToolButton(m_headerWidget);
     m_toggleButton->setText(QStringLiteral("▼"));
     m_toggleButton->setAutoRaise(true);
-    m_toggleButton->setFixedSize(16, 16);
+    m_toggleButton->setFixedSize(theme.minHitTarget(), theme.minHitTarget());
     headerLayout->addWidget(m_toggleButton);
 
     m_titleLabel = new QLabel(title, m_headerWidget);
     QFont font = m_titleLabel->font();
     font.setBold(true);
-    font.setPointSize(10);
+    font.setPixelSize(theme.fontPx(PetuniaTheme::TextRole::Body));
     m_titleLabel->setFont(font);
     headerLayout->addWidget(m_titleLabel, 1);
 

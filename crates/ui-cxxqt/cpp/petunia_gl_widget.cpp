@@ -1,7 +1,12 @@
 #include "petunia_gl_widget.h"
 #include "petunia_editor_panel.h"
+#include "petunia_icons.h"
+#include "petunia_theme.h"
+#include "shell/petunia_i18n.h"
+#include <QContextMenuEvent>
 #include <QDebug>
 #include <QGuiApplication>
+#include <QHash>
 #include <QJsonDocument>
 #include <QKeySequence>
 #include <QMenu>
@@ -11,6 +16,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <vector>
 
 // Declarado no lado Rust (crates/ui-cxxqt/src/render/opengl_viewport.rs)
@@ -228,30 +234,33 @@ void PetuniaGlWidget::drawViewportHud(QPainter &painter) {
         viewName = QString::fromUtf8(buf);
     }
 
+    // Tipografia e cores do tema: legível em alto contraste e com escala.
+    const auto &theme = PetuniaTheme::instance();
     QFont font = painter.font();
-    font.setPointSize(10);
+    font.setPixelSize(theme.fontPx(PetuniaTheme::TextRole::Body));
     font.setBold(true);
     painter.setFont(font);
 
     QFontMetrics fm(font);
     int textWidth = fm.horizontalAdvance(viewName);
-    QRect badgeRect(12, 12, textWidth + 18, 26);
+    QRect badgeRect(12, 12, textWidth + 18, std::max(theme.minHitTarget() - 2, fm.height() + 8));
 
-    // Fundo do badge
-    painter.setPen(QColor(64, 64, 64, 180));
-    painter.setBrush(QColor(24, 24, 24, 200));
+    QColor badgeFill = theme.bgPanel();
+    badgeFill.setAlpha(theme.isHighContrast() ? 255 : 215);
+    painter.setPen(theme.borderStrong());
+    painter.setBrush(badgeFill);
     painter.drawRoundedRect(badgeRect, 4, 4);
 
-    // Texto da vista
-    painter.setPen(QColor(181, 140, 255)); // Roxo accent Petunia
+    painter.setPen(theme.accentPrimary());
     painter.drawText(badgeRect, Qt::AlignCenter, viewName);
 
     // Sub-legenda de status
-    font.setPointSize(8);
+    font.setPixelSize(theme.fontPx(PetuniaTheme::TextRole::Caption));
     font.setBold(false);
     painter.setFont(font);
-    painter.setPen(QColor(140, 140, 140));
-    painter.drawText(14, 52, m_overlayState["context_hint"].toString());
+    painter.setPen(theme.textSecondary());
+    painter.drawText(14, badgeRect.bottom() + 6 + QFontMetrics(font).ascent(),
+                     m_overlayState["context_hint"].toString());
 }
 
 void PetuniaGlWidget::drawShadingPill(QPainter &painter) {
@@ -276,7 +285,7 @@ void PetuniaGlWidget::drawShadingPill(QPainter &painter) {
 
     int segWidth = pillWidth / 4;
     QFont font = painter.font();
-    font.setPointSize(11);
+    font.setPixelSize(PetuniaTheme::instance().fontPx(PetuniaTheme::TextRole::Body));
     painter.setFont(font);
 
     for (int i = 0; i < 4; ++i) {
@@ -373,7 +382,7 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
               });
 
     QFont font = painter.font();
-    font.setPointSize(8);
+    font.setPixelSize(PetuniaTheme::instance().fontPx(PetuniaTheme::TextRole::Caption));
     font.setBold(true);
     painter.setFont(font);
 
@@ -529,45 +538,7 @@ void PetuniaGlWidget::mousePressEvent(QMouseEvent *event) {
     m_pressPoint = event->position();
     m_overlayState = petuniaRequest("snapshot");
     if (event->button() == Qt::RightButton) {
-        petuniaRequest(
-            "open_viewport_context_menu",
-            {{"x", event->position().x()}, {"y", event->position().y()}});
-        petunia_qt_view_activate(1);
-        QMenu menu(this);
-        QHash<QAction *, QString> actions;
-        const QStringList ids{"select_all",
-                              "clear_selection",
-                              "invert_selection",
-                              "frame",
-                              "duplicate",
-                              "delete",
-                              "extrude",
-                              "inset",
-                              "bevel",
-                              "loop_cut",
-                              "slice",
-                              "edge_loop",
-                              "edge_ring",
-                              "face_loop",
-                              "mark_seam",
-                              "workplane_from_selection",
-                              "origin_to_geometry",
-                              "origin_to_cursor",
-                              "shade_smooth",
-                              "shade_flat"};
-        for (const auto &id : ids)
-            actions.insert(
-                menu.addAction(QString(id).replace(QString("_"), QString(" "))),
-                id);
-        auto *picked = menu.exec(event->globalPosition().toPoint());
-        petunia_qt_view_activate(m_surfaceId);
-        if (picked)
-            petuniaRequest("context_menu_action",
-                           {{"target", actions[picked]}});
-        else
-            petuniaRequest("close_context_menu");
-        emit selectionChanged();
-        update();
+        // O menu abre em contextMenuEvent (também pela tecla Menu/Shift+F10).
         event->accept();
         return;
     }
@@ -688,6 +659,76 @@ void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
                       {"y", event->position().y() / qMax(1, height())}});
         pointer(1, event->position(), event->modifiers());
     }
+    update();
+    event->accept();
+}
+
+/// Menu de contexto da vista: seleção universal + as ações contextuais do domínio
+/// atual (mesma tabela da barra de ações), com atalho e motivo quando
+/// desabilitadas. Abre pelo botão direito ou pelo teclado (centro da vista).
+void PetuniaGlWidget::contextMenuEvent(QContextMenuEvent *event) {
+    PetuniaViewScope scope(m_surfaceId);
+    const bool keyboard = event->reason() == QContextMenuEvent::Keyboard;
+    const QPointF local = keyboard ? QPointF(width() / 2.0, height() / 2.0) : QPointF(event->pos());
+    const QPoint global = keyboard ? mapToGlobal(local.toPoint()) : event->globalPos();
+    petuniaRequest("open_viewport_context_menu", {{"x", local.x()}, {"y", local.y()}});
+    const auto state = petuniaRequest("snapshot");
+    QMenu menu(this);
+    menu.setAccessibleName(tr("Ações da vista"));
+    menu.setToolTipsVisible(true);
+    QHash<QAction *, std::function<void()>> run;
+    const struct { const char *id; const char *label; } universal[] = {
+        {"select_all", QT_TR_NOOP("Selecionar tudo")},
+        {"clear_selection", QT_TR_NOOP("Limpar seleção")},
+        {"invert_selection", QT_TR_NOOP("Inverter seleção")},
+        {"frame", QT_TR_NOOP("Enquadrar seleção")},
+    };
+    for (const auto &item : universal) {
+        const QString id = QLatin1String(item.id);
+        run.insert(menu.addAction(tr(item.label)),
+                   [id] { petuniaRequest("context_menu_action", {{"target", id}}); });
+    }
+    const auto actions = state["context_actions"].toArray();
+    if (!actions.isEmpty())
+        menu.addSeparator();
+    for (const auto &value : actions) {
+        const auto action = value.toObject();
+        const QString kind = action["kind"].toString();
+        const QString target = action["target"].toString();
+        QString text = petuniaTr(action["label"].toString());
+        bool enabled = true;
+        QString reason;
+        if (kind == QLatin1String("command")) {
+            for (const auto &c : state["commands"].toArray()) {
+                const auto command = c.toObject();
+                if (command["id"].toString() == target) {
+                    enabled = command["enabled"].toBool(true);
+                    reason = command["reason"].toString();
+                }
+            }
+        }
+        const QString shortcut = action["shortcut"].toString();
+        if (!shortcut.isEmpty())
+            text += QLatin1Char('\t') + shortcut;
+        auto *menuAction = menu.addAction(PetuniaIcons::get(action["icon"].toString()), text);
+        menuAction->setEnabled(enabled);
+        if (!enabled && !reason.isEmpty())
+            menuAction->setToolTip(reason);
+        run.insert(menuAction, [kind, target] {
+            if (kind == QLatin1String("command"))
+                petuniaRequest("command", {{"id", target}});
+            else if (kind == QLatin1String("tool"))
+                petuniaRequest("tool", {{"id", target}});
+            else
+                petuniaRequest(target);
+        });
+    }
+    auto *picked = menu.exec(global);
+    if (picked && run.contains(picked))
+        run.value(picked)();
+    else
+        petuniaRequest("close_context_menu");
+    emit selectionChanged();
     update();
     event->accept();
 }
@@ -909,7 +950,7 @@ void PetuniaGlWidget::drawTransformGizmo(QPainter &painter) {
             if (label.size() == 2) {
                 painter.setPen(colors[i]);
                 QFont font = painter.font();
-                font.setPointSize(9);
+                font.setPixelSize(PetuniaTheme::instance().fontPx(PetuniaTheme::TextRole::Caption));
                 font.setBold(true);
                 painter.setFont(font);
                 painter.drawText(QPointF(label[0].toDouble(), label[1].toDouble()),

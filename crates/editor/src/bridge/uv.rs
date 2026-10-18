@@ -165,6 +165,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         let islands = mesh.uv_islands();
+        let island_rows = islands
+            .iter()
+            .take(UV_ISLAND_ROWS_MAX)
+            .enumerate()
+            .map(|(index, island)| {
+                let area = island.area();
+                UvIslandRowModel {
+                    index,
+                    face_count: island.faces.len(),
+                    area: if area.is_finite() { area } else { 0.0 },
+                    selected: !island.faces.is_empty()
+                        && island.faces.iter().all(|fi| uv_faces.contains(fi)),
+                }
+            })
+            .collect();
         UvEditorModel {
             layout_commands: commands,
             seam_commands,
@@ -181,7 +196,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .unwrap_or(-1),
             uv_selected_count: uv_faces.len(),
             truncated: face_count > MAX_FACES,
+            islands: island_rows,
         }
+    }
+
+    /// Seleciona em UV todas as faces da ilha `index` (ordem de
+    /// `Mesh::uv_islands`). Índice inválido ou malha sem UV: `false`.
+    pub fn uv_select_island(&mut self, index: usize, extend: bool) -> bool {
+        let Some(faces) = self
+            .state
+            .project
+            .active_mesh()
+            .and_then(|mesh| mesh.uv_islands().into_iter().nth(index))
+            .map(|island| island.faces)
+        else {
+            return false;
+        };
+        if !self.state.uv_select_faces(&faces, extend) {
+            return false;
+        }
+        self.state.mark_dirty();
+        true
     }
 
     /// Clique no editor UV 2D: seleciona a face cuja ilha contém o ponto.

@@ -93,6 +93,22 @@ void PetuniaBoundForm::text(QFormLayout *form, const QString &label,
     });
     m_bindings.append({widget, key, {}, {}});
 }
+void PetuniaBoundForm::disabledReason(const QString &reason) {
+    if (m_bindings.isEmpty())
+        return;
+    auto *widget = m_bindings.last().widget;
+    widget->setProperty("petuniaTip", widget->toolTip());
+    widget->setProperty("petuniaDisabledReason", reason);
+}
+
+void PetuniaBoundForm::paintSwatch(QPushButton *button, const QColor &color) {
+    if (!button || !color.isValid())
+        return;
+    button->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid %2; border-radius: 3px;")
+                              .arg(color.name(), PetuniaTheme::instance().borderStrong().name()));
+    button->setAccessibleDescription(color.name().toUpper());
+}
+
 void PetuniaBoundForm::colorField(QFormLayout *form, const QString &label,
                                     const QString &key, const QString &action,
                                     const QString &arg, QJsonObject args) {
@@ -106,19 +122,17 @@ void PetuniaBoundForm::colorField(QFormLayout *form, const QString &label,
     layout->addWidget(edit, 1);
 
     auto *btn = new QPushButton(container);
-    btn->setFixedSize(26, 24);
+    const int target = PetuniaTheme::instance().minHitTarget();
+    btn->setFixedSize(target, target);
+    btn->setAccessibleName(tr("Escolher cor: %1").arg(label));
     btn->setToolTip(tr("Selecionar cor na roda de cores"));
     btn->setCursor(Qt::PointingHandCursor);
     layout->addWidget(btn);
 
     form->addRow(label, container);
 
-    auto updateBtn = [btn, edit]() {
-        QColor c(edit->text());
-        if (c.isValid()) {
-            btn->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid #555555; border-radius: 3px;").arg(c.name()));
-        }
-    };
+    edit->setProperty("petuniaSwatch", QVariant::fromValue<QObject *>(btn));
+    auto updateBtn = [btn, edit]() { paintSwatch(btn, QColor(edit->text())); };
 
     connect(edit, &QLineEdit::editingFinished, this, [=, this]() mutable {
         updateBtn();
@@ -229,15 +243,25 @@ void PetuniaBoundForm::sync(const QJsonObject &state) {
                 signature) {
                 binding.widget->setProperty("referenceSnapshot", signature);
                 auto *label = qobject_cast<QLabel *>(binding.widget);
+                if (!label)
+                    continue;
                 const auto image = petuniaImage("reference", refAxis);
                 label->setPixmap(QPixmap::fromImage(image).scaled(
                     240, 140, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             }
         }
 
-        if (!binding.enabledKey.isEmpty())
-            binding.widget->setEnabled(
-                petuniaValue(state, binding.enabledKey).toBool());
+        if (!binding.enabledKey.isEmpty()) {
+            const bool enabled = petuniaValue(state, binding.enabledKey).toBool();
+            binding.widget->setEnabled(enabled);
+            // Desabilitado nunca fica mudo: o motivo vira dica e descrição acessível.
+            const auto reason = binding.widget->property("petuniaDisabledReason").toString();
+            if (!reason.isEmpty()) {
+                const auto tip = binding.widget->property("petuniaTip").toString();
+                binding.widget->setToolTip(enabled ? tip : reason);
+                binding.widget->setAccessibleDescription(enabled ? QString() : reason);
+            }
+        }
         const auto command = binding.widget->property("commandId").toString();
         if (!command.isEmpty()) {
             bool found = false;
@@ -288,10 +312,14 @@ void PetuniaBoundForm::sync(const QJsonObject &state) {
             w->setValue(value.toDouble());
         else if (auto *w = qobject_cast<QCheckBox *>(binding.widget))
             w->setChecked(value.toBool());
-        else if (auto *w = qobject_cast<QLineEdit *>(binding.widget))
+        else if (auto *w = qobject_cast<QLineEdit *>(binding.widget)) {
             w->setText(value.isString()
                            ? value.toString()
                            : QString::number(value.toDouble(), 'g', 8));
+            // Campo de cor: a amostra acompanha o valor vindo do documento.
+            if (auto *swatch = qobject_cast<QPushButton *>(w->property("petuniaSwatch").value<QObject *>()))
+                paintSwatch(swatch, QColor(w->text()));
+        }
         else if (auto *w = qobject_cast<QComboBox *>(binding.widget)) {
             const auto index =
                 w->findData(value.isString() ? value.toString()

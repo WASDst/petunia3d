@@ -4162,5 +4162,1005 @@
   "Painel %1": {
     "pt-BR": "Painel %1",
     "en": "%1 panel"
+  },
+  "Escolher cor: %1": {
+    "pt-BR": "Escolher cor: %1",
+    "en": "Choose color: %1"
+  },
+  "Roda de cores": {
+    "pt-BR": "Roda de cores",
+    "en": "Color wheel"
+  },
+  "Setas esquerda e direita mudam o matiz; Shift com setas muda saturação e brilho": {
+    "pt-BR": "Setas esquerda e direita mudam o matiz; Shift com setas muda saturação e brilho",
+    "en": "Left and right arrows change the hue; Shift with arrows changes saturation and brightness"
+  },
+  "Matiz": {
+    "pt-BR": "Matiz",
+    "en": "Hue"
+  },
+  "Saturação": {
+    "pt-BR": "Saturação",
+    "en": "Saturation"
+  },
+  "Valor (brilho)": {
+    "pt-BR": "Valor (brilho)",
+    "en": "Value (brightness)"
+  },
+  "Cor atual": {
+    "pt-BR": "Cor atual",
+    "en": "Current color"
+  },
+  "&Hex": {
+    "pt-BR": "&Hex",
+    "en": "&Hex"
+  },
+  "Cor em hexadecimal": {
+    "pt-BR": "Cor em hexadecimal",
+    "en": "Hexadecimal color"
+  },
+  "Buscar comando… (ex.: cubo, duplicar, desfazer)": {
+    "pt-BR": "Buscar comando… (ex.: cubo, duplicar, desfazer)",
+    "en": "Search command… (e.g. cube, duplicate, undo)"
+  },
+  "Nenhum comando encontrado.": {
+    "pt-BR": "Nenhum comando encontrado.",
+    "en": "No command found."
+  },
+  ", atalho %1": {
+    "pt-BR": ", atalho %1",
+    "en": ", shortcut %1"
+  },
+  ", indisponível: %1": {
+    "pt-BR": ", indisponível: %1",
+    "en": ", unavailable: %1"
+  },
+  "Ações da vista": {
+    "pt-BR": "Ações da vista",
+    "en": "View actions"
+  },
+  "Petunia3D — Início": {
+    "pt-BR": "Petunia3D — Início",
+    "en": "Petunia3D — Home"
+  },
+  "Modelagem 3D, pintura de texturas e animação": {
+    "pt-BR": "Modelagem 3D, pintura de texturas e animação",
+    "en": "3D modeling, texture painting and animation"
+  },
+  "Fechar (Esc)": {
+    "pt-BR": "Fechar (Esc)",
+    "en": "Close (Esc)"
+  },
+  "Fechar a tela inicial": {
+    "pt-BR": "Fechar a tela inicial",
+    "en": "Close the home screen"
+  },
+  "Abrir projeto…": {
+    "pt-BR": "Abrir projeto…",
+    "en": "Open project…"
+  },
+  "Há um salvamento automático de uma sessão interrompida": {
+    "pt-BR": "Há um salvamento automático de uma sessão interrompida",
+    "en": "There is an autosave from an interrupted session"
+  },
+  "Projetos recentes": {
+    "pt-BR": "Projetos recentes",
+    "en": "Recent projects"
+  },
+  "Enter ou duplo clique abre o projeto": {
+    "pt-BR": "Enter ou duplo clique abre o projeto",
+    "en": "Enter or double-click opens the project"
+  },
+  "Nenhum projeto recente.": {
+    "pt-BR": "Nenhum projeto recente.",
+    "en": "No recent projects."
+  },
+  "Mostrar esta tela ao iniciar": {
+    "pt-BR": "Mostrar esta tela ao iniciar",
+    "en": "Show this screen on startup"
+  },
+  "Recuperar sessão": {
+    "pt-BR": "Recuperar sessão",
+    "en": "Recover session"
+  },
+  "Recuperar sessão não salva": {
+    "pt-BR": "Recuperar sessão não salva",
+    "en": "Recover unsaved session"
+  },
+  "Foi encontrado um salvamento automático de uma sessão anterior interrompida.": {
+    "pt-BR": "Foi encontrado um salvamento automático de uma sessão anterior interrompida.",
+    "en": "An autosave from a previous interrupted session was found."
+  },
+  "Deseja restaurar as modificações ou descartar a recuperação?": {
+    "pt-BR": "Deseja restaurar as modificações ou descartar a recuperação?",
+    "en": "Do you want to restore the changes or discard the recovery?"
+  },
+  "Descartar": {
+    "pt-BR": "Descartar",
+    "en": "Discard"
+  },
+  "Apaga o salvamento automático; não pode ser desfeito": {
+    "pt-BR": "Apaga o salvamento automático; não pode ser desfeito",
+    "en": "Deletes the autosave; cannot be undone"
+  },
+  "Decidir depois": {
+    "pt-BR": "Decidir depois",
+    "en": "Decide later"
+  },
+  "Mantém o salvamento automático para recuperar mais tarde": {
+    "pt-BR": "Mantém o salvamento automático para recuperar mais tarde",
+    "en": "Keeps the autosave to recover later"
+  },
+  "Recuperar": {
+    "pt-BR": "Recuperar",
+    "en": "Recover"
+  },
+  "Alvo da pintura": {
+    "pt-BR": "Alvo da pintura",
+    "en": "Paint target"
+  },
+  "Efeitos": {
+    "pt-BR": "Efeitos",
+    "en": "Effects"
+  },
+  "Projeção e superfície": {
+    "pt-BR": "Projeção e superfície",
+    "en": "Projection and surface"
+  },
+  "Canvas": {
+    "pt-BR": "Canvas",
+    "en": "Canvas"
+  },
+  "Seleção UV": {
+    "pt-BR": "Seleção UV",
+    "en": "UV selection"
+  },
+  "Desdobrar": {
+    "pt-BR": "Desdobrar",
+    "en": "Unwrap"
+  },
+  "Costuras e pins": {
+    "pt-BR": "Costuras e pins",
+    "en": "Seams and pins"
+  },
+  "Empacotar e relaxar": {
+    "pt-BR": "Empacotar e relaxar",
+    "en": "Pack and relax"
+  },
+  "Motion": {
+    "pt-BR": "Motion",
+    "en": "Motion"
+  },
+  "Pose do osso": {
+    "pt-BR": "Pose do osso",
+    "en": "Bone pose"
+  },
+  "Camadas de animação": {
+    "pt-BR": "Camadas de animação",
+    "en": "Animation layers"
+  },
+  "Keyframes e curvas": {
+    "pt-BR": "Keyframes e curvas",
+    "en": "Keyframes and curves"
+  },
+  "3D": {
+    "pt-BR": "3D",
+    "en": "3D"
+  },
+  "Só a vista 3D": {
+    "pt-BR": "Só a vista 3D",
+    "en": "3D view only"
+  },
+  "Dividido": {
+    "pt-BR": "Dividido",
+    "en": "Split"
+  },
+  "Vista 3D e superfície 2D lado a lado": {
+    "pt-BR": "Vista 3D e superfície 2D lado a lado",
+    "en": "3D view and 2D surface side by side"
+  },
+  "2D": {
+    "pt-BR": "2D",
+    "en": "2D"
+  },
+  "Só a superfície 2D (maximizada)": {
+    "pt-BR": "Só a superfície 2D (maximizada)",
+    "en": "2D surface only (maximized)"
+  },
+  "Superfície de trabalho": {
+    "pt-BR": "Superfície de trabalho",
+    "en": "Work surface"
+  },
+  "Pintar cor de vértice": {
+    "pt-BR": "Pintar cor de vértice",
+    "en": "Paint vertex color"
+  },
+  "Só onde está selecionado": {
+    "pt-BR": "Só onde está selecionado",
+    "en": "Only where selected"
+  },
+  "Restringir a": {
+    "pt-BR": "Restringir a",
+    "en": "Restrict to"
+  },
+  "Sem restrição": {
+    "pt-BR": "Sem restrição",
+    "en": "No restriction"
+  },
+  "Primeiro objeto": {
+    "pt-BR": "Primeiro objeto",
+    "en": "First object"
+  },
+  "Primeira face": {
+    "pt-BR": "Primeira face",
+    "en": "First face"
+  },
+  "Faces selecionadas": {
+    "pt-BR": "Faces selecionadas",
+    "en": "Selected faces"
+  },
+  "Preenchimento atinge": {
+    "pt-BR": "Preenchimento atinge",
+    "en": "Fill reaches"
+  },
+  "Pixels conectados": {
+    "pt-BR": "Pixels conectados",
+    "en": "Connected pixels"
+  },
+  "Ilha UV": {
+    "pt-BR": "Ilha UV",
+    "en": "UV island"
+  },
+  "Resolução da textura (px)": {
+    "pt-BR": "Resolução da textura (px)",
+    "en": "Texture resolution (px)"
+  },
+  "Verificar UVs para pintura": {
+    "pt-BR": "Verificar UVs para pintura",
+    "en": "Check UVs for painting"
+  },
+  "Cor do pincel…": {
+    "pt-BR": "Cor do pincel…",
+    "en": "Brush color…"
+  },
+  "Redonda": {
+    "pt-BR": "Redonda",
+    "en": "Round"
+  },
+  "Quadrada": {
+    "pt-BR": "Quadrada",
+    "en": "Square"
+  },
+  "Losango": {
+    "pt-BR": "Losango",
+    "en": "Diamond"
+  },
+  "Normal": {
+    "pt-BR": "Normal",
+    "en": "Normal"
+  },
+  "Multiplicar": {
+    "pt-BR": "Multiplicar",
+    "en": "Multiply"
+  },
+  "Tela": {
+    "pt-BR": "Tela",
+    "en": "Screen"
+  },
+  "Somar": {
+    "pt-BR": "Somar",
+    "en": "Add"
+  },
+  "Escurecer": {
+    "pt-BR": "Escurecer",
+    "en": "Darken"
+  },
+  "Clarear": {
+    "pt-BR": "Clarear",
+    "en": "Lighten"
+  },
+  "Avançado": {
+    "pt-BR": "Avançado",
+    "en": "Advanced"
+  },
+  "Presets e paleta": {
+    "pt-BR": "Presets e paleta",
+    "en": "Presets and palette"
+  },
+  "Presets do pincel": {
+    "pt-BR": "Presets do pincel",
+    "en": "Brush presets"
+  },
+  "Salvar preset como": {
+    "pt-BR": "Salvar preset como",
+    "en": "Save preset as"
+  },
+  "Paleta mais clara": {
+    "pt-BR": "Paleta mais clara",
+    "en": "Lighter palette"
+  },
+  "Paleta mais escura": {
+    "pt-BR": "Paleta mais escura",
+    "en": "Darker palette"
+  },
+  "Paleta normal": {
+    "pt-BR": "Paleta normal",
+    "en": "Normal palette"
+  },
+  "Importar paleta…": {
+    "pt-BR": "Importar paleta…",
+    "en": "Import palette…"
+  },
+  "Paletas (*.json *.gpl *.ase)": {
+    "pt-BR": "Paletas (*.json *.gpl *.ase)",
+    "en": "Palettes (*.json *.gpl *.ase)"
+  },
+  "Exportar paleta…": {
+    "pt-BR": "Exportar paleta…",
+    "en": "Export palette…"
+  },
+  "Paleta (*.gpl *.json)": {
+    "pt-BR": "Paleta (*.gpl *.json)",
+    "en": "Palette (*.gpl *.json)"
+  },
+  "Travar alfa": {
+    "pt-BR": "Travar alfa",
+    "en": "Lock alpha"
+  },
+  "Pixel perfeito": {
+    "pt-BR": "Pixel perfeito",
+    "en": "Pixel perfect"
+  },
+  "Pontilhado (dithering)": {
+    "pt-BR": "Pontilhado (dithering)",
+    "en": "Dithering"
+  },
+  "Nenhuma camada ativa. Crie ou selecione uma camada na Estrutura.": {
+    "pt-BR": "Nenhuma camada ativa. Crie ou selecione uma camada na Estrutura.",
+    "en": "No active layer. Create or select a layer in Structure."
+  },
+  "Camada: %1 · %2": {
+    "pt-BR": "Camada: %1 · %2",
+    "en": "Layer: %1 · %2"
+  },
+  "Opacidade da camada": {
+    "pt-BR": "Opacidade da camada",
+    "en": "Layer opacity"
+  },
+  "Modo de mistura": {
+    "pt-BR": "Modo de mistura",
+    "en": "Blend mode"
+  },
+  "Adiciona uma camada de ajuste não destrutiva acima da camada ativa.": {
+    "pt-BR": "Adiciona uma camada de ajuste não destrutiva acima da camada ativa.",
+    "en": "Adds a non-destructive adjustment layer above the active layer."
+  },
+  "Projeção do pincel": {
+    "pt-BR": "Projeção do pincel",
+    "en": "Brush projection"
+  },
+  "Na superfície": {
+    "pt-BR": "Na superfície",
+    "en": "On surface"
+  },
+  "Da tela": {
+    "pt-BR": "Da tela",
+    "en": "From screen"
+  },
+  "Traçados e estêncil": {
+    "pt-BR": "Traçados e estêncil",
+    "en": "Paths and stencil"
+  },
+  "Imagens de referência": {
+    "pt-BR": "Imagens de referência",
+    "en": "Reference images"
+  },
+  "Projetar referência na textura": {
+    "pt-BR": "Projetar referência na textura",
+    "en": "Project reference onto texture"
+  },
+  "Imagem de referência ajustada": {
+    "pt-BR": "Imagem de referência ajustada",
+    "en": "Adjusted reference image"
+  },
+  "Esquerda": {
+    "pt-BR": "Esquerda",
+    "en": "Left"
+  },
+  "Direita": {
+    "pt-BR": "Direita",
+    "en": "Right"
+  },
+  "Base": {
+    "pt-BR": "Base",
+    "en": "Base"
+  },
+  "Imagem": {
+    "pt-BR": "Imagem",
+    "en": "Image"
+  },
+  " (diminuir)": {
+    "pt-BR": " (diminuir)",
+    "en": " (decrease)"
+  },
+  " (aumentar)": {
+    "pt-BR": " (aumentar)",
+    "en": " (increase)"
+  },
+  "Ativo quando a camada selecionada é um decalque.": {
+    "pt-BR": "Ativo quando a camada selecionada é um decalque.",
+    "en": "Active when the selected layer is a decal."
+  },
+  "Importar imagem do decalque…": {
+    "pt-BR": "Importar imagem do decalque…",
+    "en": "Import decal image…"
+  },
+  "Imagem (*.png *.jpg *.jpeg *.webp *.bmp)": {
+    "pt-BR": "Imagem (*.png *.jpg *.jpeg *.webp *.bmp)",
+    "en": "Image (*.png *.jpg *.jpeg *.webp *.bmp)"
+  },
+  "Arrastar na vista": {
+    "pt-BR": "Arrastar na vista",
+    "en": "Drag in view"
+  },
+  "Automático (alças)": {
+    "pt-BR": "Automático (alças)",
+    "en": "Automatic (handles)"
+  },
+  "Escalonar": {
+    "pt-BR": "Escalonar",
+    "en": "Scale"
+  },
+  "Aplicar decalque na textura (bake)": {
+    "pt-BR": "Aplicar decalque na textura (bake)",
+    "en": "Apply decal to texture (bake)"
+  },
+  "Variantes e animação": {
+    "pt-BR": "Variantes e animação",
+    "en": "Variants and animation"
+  },
+  "Adicionar variante…": {
+    "pt-BR": "Adicionar variante…",
+    "en": "Add variant…"
+  },
+  "Quadro": {
+    "pt-BR": "Quadro",
+    "en": "Frame"
+  },
+  "Duração (quadros)": {
+    "pt-BR": "Duração (quadros)",
+    "en": "Length (frames)"
+  },
+  "Quadros por segundo": {
+    "pt-BR": "Quadros por segundo",
+    "en": "Frames per second"
+  },
+  "Inserir key do decalque": {
+    "pt-BR": "Inserir key do decalque",
+    "en": "Insert decal key"
+  },
+  "Remover key do decalque": {
+    "pt-BR": "Remover key do decalque",
+    "en": "Remove decal key"
+  },
+  "Tocar/pausar decalque": {
+    "pt-BR": "Tocar/pausar decalque",
+    "en": "Play/pause decal"
+  },
+  "Exportar quadros…": {
+    "pt-BR": "Exportar quadros…",
+    "en": "Export frames…"
+  },
+  "PNG (*.png)": {
+    "pt-BR": "PNG (*.png)",
+    "en": "PNG (*.png)"
+  },
+  "Canvas principal com 3D em miniatura": {
+    "pt-BR": "Canvas principal com 3D em miniatura",
+    "en": "Main canvas with 3D thumbnail"
+  },
+  "UVs sobre a pintura": {
+    "pt-BR": "UVs sobre a pintura",
+    "en": "UVs over the painting"
+  },
+  "Zoom do canvas": {
+    "pt-BR": "Zoom do canvas",
+    "en": "Canvas zoom"
+  },
+  "Vértices": {
+    "pt-BR": "Vértices",
+    "en": "Vertices"
+  },
+  "Arestas": {
+    "pt-BR": "Arestas",
+    "en": "Edges"
+  },
+  "Faces": {
+    "pt-BR": "Faces",
+    "en": "Faces"
+  },
+  "Ilhas": {
+    "pt-BR": "Ilhas",
+    "en": "Islands"
+  },
+  "Sincronizar com a seleção 3D": {
+    "pt-BR": "Sincronizar com a seleção 3D",
+    "en": "Sync with 3D selection"
+  },
+  "Resumo dos UVs": {
+    "pt-BR": "Resumo dos UVs",
+    "en": "UV summary"
+  },
+  "%1 ilhas · %2 faces · %3 selecionados · %4 fixados": {
+    "pt-BR": "%1 ilhas · %2 faces · %3 selecionados · %4 fixados",
+    "en": "%1 islands · %2 faces · %3 selected · %4 pinned"
+  },
+  "Desdobrar automaticamente": {
+    "pt-BR": "Desdobrar automaticamente",
+    "en": "Unwrap automatically"
+  },
+  "Projetar da vista": {
+    "pt-BR": "Projetar da vista",
+    "en": "Project from view"
+  },
+  "Projeção planar": {
+    "pt-BR": "Projeção planar",
+    "en": "Planar projection"
+  },
+  "Projeção em cubo": {
+    "pt-BR": "Projeção em cubo",
+    "en": "Cube projection"
+  },
+  "Projetar da referência": {
+    "pt-BR": "Projetar da referência",
+    "en": "Project from reference"
+  },
+  "Marcar ou remover costura na seleção": {
+    "pt-BR": "Marcar ou remover costura na seleção",
+    "en": "Mark or clear seam on selection"
+  },
+  "Limpar todas as costuras": {
+    "pt-BR": "Limpar todas as costuras",
+    "en": "Clear all seams"
+  },
+  "Fixar ou soltar pins na seleção": {
+    "pt-BR": "Fixar ou soltar pins na seleção",
+    "en": "Pin or unpin selection"
+  },
+  "Limpar todos os pins": {
+    "pt-BR": "Limpar todos os pins",
+    "en": "Clear all pins"
+  },
+  "Separar ilha": {
+    "pt-BR": "Separar ilha",
+    "en": "Split island"
+  },
+  "Empacotar ilhas": {
+    "pt-BR": "Empacotar ilhas",
+    "en": "Pack islands"
+  },
+  "Relaxar": {
+    "pt-BR": "Relaxar",
+    "en": "Relax"
+  },
+  "Costurar (stitch)": {
+    "pt-BR": "Costurar (stitch)",
+    "en": "Stitch"
+  },
+  "Igualar densidade de texels": {
+    "pt-BR": "Igualar densidade de texels",
+    "en": "Equalize texel density"
+  },
+  "Valores relativos aplicados à seleção UV.": {
+    "pt-BR": "Valores relativos aplicados à seleção UV.",
+    "en": "Relative values applied to the UV selection."
+  },
+  "Mover em U": {
+    "pt-BR": "Mover em U",
+    "en": "Move in U"
+  },
+  "Mover em V": {
+    "pt-BR": "Mover em V",
+    "en": "Move in V"
+  },
+  "Escalar por": {
+    "pt-BR": "Escalar por",
+    "en": "Scale by"
+  },
+  "Girar (°)": {
+    "pt-BR": "Girar (°)",
+    "en": "Rotate (°)"
+  },
+  "Xadrez de verificação": {
+    "pt-BR": "Xadrez de verificação",
+    "en": "Checker pattern"
+  },
+  "Mostrar textura": {
+    "pt-BR": "Mostrar textura",
+    "en": "Show texture"
+  },
+  "Quadros em degraus (stepped)": {
+    "pt-BR": "Quadros em degraus (stepped)",
+    "en": "Stepped frames"
+  },
+  "Movimento da raiz": {
+    "pt-BR": "Movimento da raiz",
+    "en": "Root motion"
+  },
+  "Bake e manter o Motion": {
+    "pt-BR": "Bake e manter o Motion",
+    "en": "Bake and keep the Motion"
+  },
+  "Bake e substituir o Motion": {
+    "pt-BR": "Bake e substituir o Motion",
+    "en": "Bake and replace the Motion"
+  },
+  "Mostrar parâmetros avançados": {
+    "pt-BR": "Mostrar parâmetros avançados",
+    "en": "Show advanced parameters"
+  },
+  "Parâmetros do Motion": {
+    "pt-BR": "Parâmetros do Motion",
+    "en": "Motion parameters"
+  },
+  "Selecione um osso na Estrutura ou na vista.": {
+    "pt-BR": "Selecione um osso na Estrutura ou na vista.",
+    "en": "Select a bone in Structure or in the view."
+  },
+  "Cinemática inversa (IK)": {
+    "pt-BR": "Cinemática inversa (IK)",
+    "en": "Inverse kinematics (IK)"
+  },
+  "Resetar pose do osso": {
+    "pt-BR": "Resetar pose do osso",
+    "en": "Reset bone pose"
+  },
+  "Peso de %1": {
+    "pt-BR": "Peso de %1",
+    "en": "Weight of %1"
+  },
+  "Aditiva": {
+    "pt-BR": "Aditiva",
+    "en": "Additive"
+  },
+  "Remover %1": {
+    "pt-BR": "Remover %1",
+    "en": "Remove %1"
+  },
+  "Interpolação do keyframe": {
+    "pt-BR": "Interpolação do keyframe",
+    "en": "Keyframe interpolation"
+  },
+  "Degrau": {
+    "pt-BR": "Degrau",
+    "en": "Step"
+  },
+  "Linear": {
+    "pt-BR": "Linear",
+    "en": "Linear"
+  },
+  "Cúbica": {
+    "pt-BR": "Cúbica",
+    "en": "Cubic"
+  },
+  "Limpar trilha do osso": {
+    "pt-BR": "Limpar trilha do osso",
+    "en": "Clear bone track"
+  },
+  "Canal da curva": {
+    "pt-BR": "Canal da curva",
+    "en": "Curve channel"
+  },
+  "Posição X": {
+    "pt-BR": "Posição X",
+    "en": "Position X"
+  },
+  "Posição Y": {
+    "pt-BR": "Posição Y",
+    "en": "Position Y"
+  },
+  "Posição Z": {
+    "pt-BR": "Posição Z",
+    "en": "Position Z"
+  },
+  "Rotação X": {
+    "pt-BR": "Rotação X",
+    "en": "Rotation X"
+  },
+  "Rotação Y": {
+    "pt-BR": "Rotação Y",
+    "en": "Rotation Y"
+  },
+  "Rotação Z": {
+    "pt-BR": "Rotação Z",
+    "en": "Rotation Z"
+  },
+  "Onion skin": {
+    "pt-BR": "Onion skin",
+    "en": "Onion skin"
+  },
+  "Rastros de movimento": {
+    "pt-BR": "Rastros de movimento",
+    "en": "Motion trails"
+  },
+  "Primeiro quadro": {
+    "pt-BR": "Primeiro quadro",
+    "en": "First frame"
+  },
+  "Quadro anterior": {
+    "pt-BR": "Quadro anterior",
+    "en": "Previous frame"
+  },
+  "Tocar ou pausar (Espaço)": {
+    "pt-BR": "Tocar ou pausar (Espaço)",
+    "en": "Play or pause (Space)"
+  },
+  "Próximo quadro": {
+    "pt-BR": "Próximo quadro",
+    "en": "Next frame"
+  },
+  "Último quadro": {
+    "pt-BR": "Último quadro",
+    "en": "Last frame"
+  },
+  "Inserir keyframe no osso": {
+    "pt-BR": "Inserir keyframe no osso",
+    "en": "Insert keyframe on bone"
+  },
+  "Quadro atual": {
+    "pt-BR": "Quadro atual",
+    "en": "Current frame"
+  },
+  "Tocando": {
+    "pt-BR": "Tocando",
+    "en": "Playing"
+  },
+  "Parado": {
+    "pt-BR": "Parado",
+    "en": "Stopped"
+  },
+  "Inserir keyframe no osso — selecione um osso de uma criatura primeiro": {
+    "pt-BR": "Inserir keyframe no osso — selecione um osso de uma criatura primeiro",
+    "en": "Insert keyframe on bone — select a creature bone first"
+  },
+  "Quadro %1 de %2": {
+    "pt-BR": "Quadro %1 de %2",
+    "en": "Frame %1 of %2"
+  },
+  "Fluxo": {
+    "pt-BR": "Fluxo",
+    "en": "Flow"
+  },
+  "Espaçamento": {
+    "pt-BR": "Espaçamento",
+    "en": "Spacing"
+  },
+  "Suavização do traço": {
+    "pt-BR": "Suavização do traço",
+    "en": "Stroke smoothing"
+  },
+  "Variação de tamanho": {
+    "pt-BR": "Variação de tamanho",
+    "en": "Size jitter"
+  },
+  "Variação de opacidade": {
+    "pt-BR": "Variação de opacidade",
+    "en": "Opacity jitter"
+  },
+  "Dispersão": {
+    "pt-BR": "Dispersão",
+    "en": "Scatter"
+  },
+  "Densidade do spray": {
+    "pt-BR": "Densidade do spray",
+    "en": "Spray density"
+  },
+  "Ângulo": {
+    "pt-BR": "Ângulo",
+    "en": "Angle"
+  },
+  "Arredondamento": {
+    "pt-BR": "Arredondamento",
+    "en": "Roundness"
+  },
+  "Matiz e saturação": {
+    "pt-BR": "Matiz e saturação",
+    "en": "Hue and saturation"
+  },
+  "Níveis": {
+    "pt-BR": "Níveis",
+    "en": "Levels"
+  },
+  "Brilho e contraste": {
+    "pt-BR": "Brilho e contraste",
+    "en": "Brightness and contrast"
+  },
+  "Inverter cores": {
+    "pt-BR": "Inverter cores",
+    "en": "Invert colors"
+  },
+  "Grão": {
+    "pt-BR": "Grão",
+    "en": "Grain"
+  },
+  "Pixelizar": {
+    "pt-BR": "Pixelizar",
+    "en": "Pixelate"
+  },
+  "Posterizar": {
+    "pt-BR": "Posterizar",
+    "en": "Posterize"
+  },
+  "SVG em 512 px": {
+    "pt-BR": "SVG em 512 px",
+    "en": "SVG at 512 px"
+  },
+  "SVG em 1024 px": {
+    "pt-BR": "SVG em 1024 px",
+    "en": "SVG at 1024 px"
+  },
+  "Pintar ao longo do caminho": {
+    "pt-BR": "Pintar ao longo do caminho",
+    "en": "Paint along path"
+  },
+  "Faixa ao longo do caminho": {
+    "pt-BR": "Faixa ao longo do caminho",
+    "en": "Ribbon along path"
+  },
+  "Carimbos ao longo do caminho": {
+    "pt-BR": "Carimbos ao longo do caminho",
+    "en": "Stamps along path"
+  },
+  "Usar como estêncil": {
+    "pt-BR": "Usar como estêncil",
+    "en": "Use as stencil"
+  },
+  "Estêncil por luminância": {
+    "pt-BR": "Estêncil por luminância",
+    "en": "Luminance stencil"
+  },
+  "Posicionar estêncil": {
+    "pt-BR": "Posicionar estêncil",
+    "en": "Place stencil"
+  },
+  "Projetar como decalque": {
+    "pt-BR": "Projetar como decalque",
+    "en": "Project as decal"
+  },
+  "Espelhar projeção": {
+    "pt-BR": "Espelhar projeção",
+    "en": "Mirror projection"
+  },
+  "Girar projeção": {
+    "pt-BR": "Girar projeção",
+    "en": "Rotate projection"
+  },
+  "Aumentar projeção": {
+    "pt-BR": "Aumentar projeção",
+    "en": "Grow projection"
+  },
+  "Reduzir projeção": {
+    "pt-BR": "Reduzir projeção",
+    "en": "Shrink projection"
+  },
+  "Aplicar na superfície": {
+    "pt-BR": "Aplicar na superfície",
+    "en": "Apply to surface"
+  },
+  "Cancelar projeção": {
+    "pt-BR": "Cancelar projeção",
+    "en": "Cancel projection"
+  },
+  "Mover imagem": {
+    "pt-BR": "Mover imagem",
+    "en": "Move image"
+  },
+  "Escalonar imagem": {
+    "pt-BR": "Escalonar imagem",
+    "en": "Scale image"
+  },
+  "Rotacionar imagem": {
+    "pt-BR": "Rotacionar imagem",
+    "en": "Rotate image"
+  },
+  "Centro U": {
+    "pt-BR": "Centro U",
+    "en": "Center U"
+  },
+  "Centro V": {
+    "pt-BR": "Centro V",
+    "en": "Center V"
+  },
+  "Escala U": {
+    "pt-BR": "Escala U",
+    "en": "Scale U"
+  },
+  "Escala V": {
+    "pt-BR": "Escala V",
+    "en": "Scale V"
+  },
+  "Rotação (°)": {
+    "pt-BR": "Rotação (°)",
+    "en": "Rotation (°)"
+  },
+  "Camadas de pintura": {
+    "pt-BR": "Camadas de pintura",
+    "en": "Paint layers"
+  },
+  "Mostrar só a camada ativa": {
+    "pt-BR": "Mostrar só a camada ativa",
+    "en": "Show only the active layer"
+  },
+  "Ilhas UV": {
+    "pt-BR": "Ilhas UV",
+    "en": "UV islands"
+  },
+  "Mostrar só ilhas selecionadas": {
+    "pt-BR": "Mostrar só ilhas selecionadas",
+    "en": "Show only selected islands"
+  },
+  "Ossos da criatura": {
+    "pt-BR": "Ossos da criatura",
+    "en": "Creature bones"
+  },
+  "Mostrar só ossos selecionados": {
+    "pt-BR": "Mostrar só ossos selecionados",
+    "en": "Show only selected bones"
+  },
+  "Estrutura: %1": {
+    "pt-BR": "Estrutura: %1",
+    "en": "Structure: %1"
+  },
+  "Sem ilhas UV": {
+    "pt-BR": "Sem ilhas UV",
+    "en": "No UV islands"
+  },
+  "O objeto ativo ainda não tem UVs. Desdobre para criar as ilhas.": {
+    "pt-BR": "O objeto ativo ainda não tem UVs. Desdobre para criar as ilhas.",
+    "en": "The active object has no UVs yet. Unwrap to create the islands."
+  },
+  "Buscar ilhas": {
+    "pt-BR": "Buscar ilhas",
+    "en": "Search islands"
+  },
+  "Ilha %1 · %2 faces": {
+    "pt-BR": "Ilha %1 · %2 faces",
+    "en": "Island %1 · %2 faces"
+  },
+  "%1% da área UV": {
+    "pt-BR": "%1% da área UV",
+    "en": "%1% of the UV area"
+  },
+  "Mover para cima\tAlt+↑": {
+    "pt-BR": "Mover para cima\tAlt+↑",
+    "en": "Move up\tAlt+↑"
+  },
+  "Mover para baixo\tAlt+↓": {
+    "pt-BR": "Mover para baixo\tAlt+↓",
+    "en": "Move down\tAlt+↓"
+  },
+  "+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra; setas movem a seleção UV (Shift: passo maior)": {
+    "pt-BR": "+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra; setas movem a seleção UV (Shift: passo maior)",
+    "en": "+ and − zoom, Ctrl+arrows pan the view, Home frames; arrows move the UV selection (Shift: larger step)"
+  },
+  "+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra": {
+    "pt-BR": "+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra",
+    "en": "+ and − zoom, Ctrl+arrows pan the view, Home frames"
+  },
+  "Selecione uma camada de decalque na Estrutura": {
+    "pt-BR": "Selecione uma camada de decalque na Estrutura",
+    "en": "Select a decal layer in Structure"
+  },
+  "Adicione uma criatura e selecione o modelo que ela vai animar": {
+    "pt-BR": "Adicione uma criatura e selecione o modelo que ela vai animar",
+    "en": "Add a creature and select the model it will animate"
+  },
+  "Adicione ou selecione um Motion primeiro": {
+    "pt-BR": "Adicione ou selecione um Motion primeiro",
+    "en": "Add or select a Motion first"
+  },
+  "Selecione um osso de uma criatura primeiro": {
+    "pt-BR": "Selecione um osso de uma criatura primeiro",
+    "en": "Select a creature bone first"
   }
 }

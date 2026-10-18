@@ -5,6 +5,7 @@
 #include "../petunia_theme.h"
 
 #include <QHBoxLayout>
+#include <QHash>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QJsonArray>
@@ -12,6 +13,8 @@
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace {
 class SelectedOnlyProxy : public QSortFilterProxyModel {
@@ -69,10 +72,10 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
     };
     m_filterSelected = iconButton(QStringLiteral("filter"), tr("Mostrar só partes selecionadas"), true);
     m_sort = iconButton(QStringLiteral("sort_az"), tr("Ordenar por nome (A–Z)"), true);
-    auto *separate = iconButton(QStringLiteral("separate"), tr("Separar seleção em nova parte"), false);
+    m_primary = iconButton(QStringLiteral("separate"), tr("Separar seleção em nova parte"), false);
     toolbar->addWidget(m_filterSelected);
     toolbar->addWidget(m_sort);
-    toolbar->addWidget(separate);
+    toolbar->addWidget(m_primary);
     root->addLayout(toolbar);
 
     m_model = new QStandardItemModel(this);
@@ -108,7 +111,7 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
     m_empty->setActionText(tr("Criar primitiva"));
     root->addWidget(m_empty, 1);
     m_empty->hide();
-    connect(m_empty, &PetuniaPlaceholderMessage::actionTriggered, this, &PetuniaStructurePanel::createRequested);
+    connect(m_empty, &PetuniaPlaceholderMessage::actionTriggered, this, &PetuniaStructurePanel::primaryAction);
 
     connect(m_search, &QLineEdit::textChanged, m_proxy, &QSortFilterProxyModel::setFilterFixedString);
     connect(m_filterSelected, &QPushButton::toggled, this,
@@ -119,12 +122,14 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
         else
             m_proxy->sort(-1);
     });
-    connect(separate, &QPushButton::clicked, this, [this] {
+    connect(m_primary, &QPushButton::clicked, this, [this] {
         const QString ws = m_controller->workspaceId();
         if (ws == QLatin1String("PAINT"))
             m_controller->request(QStringLiteral("add_paint_layer"));
         else if (ws == QLatin1String("ANIMATE"))
             m_controller->request(QStringLiteral("animate"), {{"id", "fit-to-model"}});
+        else if (ws == QLatin1String("UV"))
+            m_controller->command(QStringLiteral("uv.unwrap_auto"));
         else
             m_controller->command(QStringLiteral("model.separate_selection"));
     });
@@ -159,11 +164,42 @@ void PetuniaStructurePanel::buildShortcuts() {
             m_controller->request(action, args);
         }
     };
-    bind(QKeySequence(Qt::Key_Delete), [this] { m_controller->command(QStringLiteral("edit.delete")); });
-    bind(QKeySequence(Qt::Key_Backspace), [this] { m_controller->command(QStringLiteral("edit.delete")); });
-    bind(QKeySequence(Qt::SHIFT | Qt::Key_H), [this] { m_controller->request(QStringLiteral("isolate")); });
-    bind(QKeySequence(Qt::Key_H), [eachSelected] { eachSelected(QStringLiteral("visibility")); });
-    bind(QKeySequence(Qt::Key_L), [eachSelected] { eachSelected(QStringLiteral("lock")); });
+    auto modeling = [this] {
+        const QString ws = m_controller->workspaceId();
+        return ws != QLatin1String("PAINT") && ws != QLatin1String("ANIMATE") && ws != QLatin1String("UV");
+    };
+    // Mesmas teclas em todo workspace; o alvo é o item listado (parte, camada, osso).
+    bind(QKeySequence(Qt::Key_Delete), [this, modeling] {
+        if (modeling())
+            m_controller->command(QStringLiteral("edit.delete"));
+        else
+            actOnCurrent(QStringLiteral("remove"));
+    });
+    bind(QKeySequence(Qt::Key_Backspace), [this, modeling] {
+        if (modeling())
+            m_controller->command(QStringLiteral("edit.delete"));
+        else
+            actOnCurrent(QStringLiteral("remove"));
+    });
+    bind(QKeySequence(Qt::SHIFT | Qt::Key_H), [this, modeling] {
+        if (modeling())
+            m_controller->request(QStringLiteral("isolate"));
+    });
+    bind(QKeySequence(Qt::Key_H), [this, eachSelected, modeling] {
+        if (modeling())
+            eachSelected(QStringLiteral("visibility"));
+        else
+            actOnCurrent(QStringLiteral("visibility"));
+    });
+    bind(QKeySequence(Qt::Key_L), [this, eachSelected, modeling] {
+        if (modeling())
+            eachSelected(QStringLiteral("lock"));
+        else
+            actOnCurrent(QStringLiteral("lock"));
+    });
+    // Reordenar sem arrastar (alternativa de teclado ao drag-and-drop).
+    bind(QKeySequence(Qt::ALT | Qt::Key_Up), [this] { actOnCurrent(QStringLiteral("move"), -1); });
+    bind(QKeySequence(Qt::ALT | Qt::Key_Down), [this] { actOnCurrent(QStringLiteral("move"), 1); });
     bind(QKeySequence(Qt::Key_F2), [this] {
         const auto current = m_tree->currentIndex();
         if (current.isValid())
@@ -171,6 +207,73 @@ void PetuniaStructurePanel::buildShortcuts() {
     });
     bind(QKeySequence(Qt::CTRL | Qt::Key_D),
          [eachSelected] { eachSelected(QStringLiteral("scene_context"), QStringLiteral("duplicate")); });
+}
+
+void PetuniaStructurePanel::actOnCurrent(const QString &verb, int delta) {
+    const QString id = idAt(m_tree->currentIndex());
+    if (id.isEmpty())
+        return;
+    const QString ws = m_controller->workspaceId();
+    if (ws == QLatin1String("PAINT")) {
+        if (verb == QLatin1String("visibility"))
+            m_controller->request(QStringLiteral("toggle_paint_layer_visibility"), {{"id", id}});
+        else if (verb == QLatin1String("lock"))
+            m_controller->request(QStringLiteral("toggle_paint_layer_lock"), {{"id", id}});
+        else if (verb == QLatin1String("remove"))
+            m_controller->request(QStringLiteral("remove_paint_layer"), {{"id", id}});
+        else if (verb == QLatin1String("move"))
+            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", id}, {"delta", delta}});
+    } else if (ws == QLatin1String("ANIMATE")) {
+        if (verb == QLatin1String("visibility"))
+            m_controller->request(QStringLiteral("animate"), {{"id", "toggle-bones"}});
+    } else if (ws != QLatin1String("UV") && verb == QLatin1String("move")) {
+        m_controller->request(QStringLiteral("scene_move"), {{"id", id}, {"delta", delta}});
+    }
+}
+
+void PetuniaStructurePanel::primaryAction() {
+    const QString ws = m_controller->workspaceId();
+    if (ws == QLatin1String("PAINT"))
+        m_controller->request(QStringLiteral("add_paint_layer"));
+    else if (ws == QLatin1String("ANIMATE"))
+        m_controller->request(QStringLiteral("animate"), {{"id", "add-creature"}, {"arg", "Humanoid"}});
+    else if (ws == QLatin1String("UV"))
+        m_controller->command(QStringLiteral("uv.unwrap_auto"));
+    else
+        emit createRequested();
+}
+
+void PetuniaStructurePanel::updateChrome(const QString &workspace) {
+    if (m_chromeWorkspace == workspace)
+        return;
+    m_chromeWorkspace = workspace;
+    QString icon = QStringLiteral("separate");
+    QString primary = tr("Separar seleção em nova parte");
+    QString list = tr("Partes da cena");
+    QString filter = tr("Mostrar só partes selecionadas");
+    if (workspace == QLatin1String("PAINT")) {
+        icon = QStringLiteral("plus");
+        primary = tr("Nova camada");
+        list = tr("Camadas de pintura");
+        filter = tr("Mostrar só a camada ativa");
+    } else if (workspace == QLatin1String("UV")) {
+        icon = QStringLiteral("unwrap_auto");
+        primary = tr("Desdobrar automaticamente");
+        list = tr("Ilhas UV");
+        filter = tr("Mostrar só ilhas selecionadas");
+    } else if (workspace == QLatin1String("ANIMATE")) {
+        icon = QStringLiteral("bone");
+        primary = tr("Ajustar ao modelo");
+        list = tr("Ossos da criatura");
+        filter = tr("Mostrar só ossos selecionados");
+    }
+    m_primary->setIcon(PetuniaIcons::get(icon));
+    m_primary->setToolTip(primary);
+    m_primary->setAccessibleName(primary);
+    m_filterSelected->setToolTip(filter);
+    m_filterSelected->setAccessibleName(filter);
+    m_tree->setAccessibleName(list);
+    setAccessibleName(tr("Estrutura: %1").arg(list));
 }
 
 QString PetuniaStructurePanel::idAt(const QModelIndex &proxyIndex) const {
@@ -209,6 +312,8 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
             m_controller->request(QStringLiteral("animate"), {{"id", "toggle-bones"}});
         return;
     }
+    if (ws == QLatin1String("UV"))
+        return;
 
     const QString action = source.column() == Visible ? QStringLiteral("visibility") : QStringLiteral("lock");
     const auto rows = m_tree->selectionModel()->selectedRows(Name);
@@ -237,6 +342,19 @@ void PetuniaStructurePanel::onSelectionChanged() {
             m_controller->request(QStringLiteral("animate"), {{"id", "select-bone"}, {"arg", active}});
         return;
     }
+    if (ws == QLatin1String("UV")) {
+        // Ids lidos antes: cada request devolve um snapshot que ressincroniza a lista.
+        QList<int> islands;
+        for (const auto &row : m_tree->selectionModel()->selectedRows(Name))
+            islands << m_proxy->mapToSource(row).row();
+        std::sort(islands.begin(), islands.end());
+        bool extend = false;
+        for (const int island : islands) {
+            m_controller->request(QStringLiteral("uv_select_island"), {{"index", island}, {"extend", extend}});
+            extend = true;
+        }
+        return;
+    }
 
     QJsonArray ids;
     for (const auto &id : selectedIds())
@@ -252,12 +370,66 @@ void PetuniaStructurePanel::refreshIcons() {
 
 void PetuniaStructurePanel::sync(const QJsonObject &state) {
     const QString ws = m_controller->workspaceId();
+    updateChrome(ws);
     if (ws == QLatin1String("PAINT"))
         syncPaint(state);
     else if (ws == QLatin1String("ANIMATE"))
         syncAnimate(state);
+    else if (ws == QLatin1String("UV"))
+        syncUv(state);
     else
         syncScene(state);
+}
+
+void PetuniaStructurePanel::syncUv(const QJsonObject &state) {
+    const auto islands = state["uv_editor"].toObject()["islands"].toArray();
+    const bool isEmpty = islands.isEmpty();
+    m_empty->setTitle(tr("Sem ilhas UV"));
+    m_empty->setExplanation(tr("O objeto ativo ainda não tem UVs. Desdobre para criar as ilhas."));
+    m_empty->setActionText(tr("Desdobrar automaticamente"));
+    m_empty->setVisible(isEmpty);
+    m_tree->setVisible(!isEmpty);
+    m_search->setPlaceholderText(tr("Buscar ilhas"));
+    const auto &theme = PetuniaTheme::instance();
+
+    m_syncing = true;
+    // Ilhas não têm id persistente: a identidade é a posição + o tamanho.
+    bool rebuild = m_model->rowCount() != islands.size();
+    for (int i = 0; !rebuild && i < islands.size(); ++i)
+        rebuild = m_model->item(i, Name)->data(IdRole).toString() != QStringLiteral("island:%1").arg(i);
+    if (rebuild) {
+        m_model->removeRows(0, m_model->rowCount());
+        for (int i = 0; i < islands.size(); ++i) {
+            auto *name = new QStandardItem;
+            name->setData(QStringLiteral("island:%1").arg(i), IdRole);
+            name->setEditable(false);
+            name->setIcon(PetuniaIcons::get(QStringLiteral("uv_island"), theme.accentPrimary().name()));
+            auto *eye = new QStandardItem;
+            eye->setEditable(false);
+            auto *lock = new QStandardItem;
+            lock->setEditable(false);
+            m_model->appendRow({name, eye, lock});
+        }
+    }
+    const QSignalBlocker block(m_tree->selectionModel());
+    m_tree->selectionModel()->clearSelection();
+    for (int i = 0; i < islands.size(); ++i) {
+        const auto o = islands[i].toObject();
+        auto *name = m_model->item(i, Name);
+        const int faces = o["face_count"].toInt();
+        const QString label = tr("Ilha %1 · %2 faces").arg(i + 1).arg(faces);
+        if (name->text() != label)
+            name->setText(label);
+        const double area = o["area"].toDouble() * 100.0;
+        name->setToolTip(tr("%1% da área UV").arg(area, 0, 'f', 1));
+        const bool selected = o["selected"].toBool();
+        name->setData(selected, SelectedRole);
+        if (selected) {
+            const auto proxy = m_proxy->mapFromSource(m_model->index(i, Name));
+            m_tree->selectionModel()->select(proxy, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+        }
+    }
+    m_syncing = false;
 }
 
 void PetuniaStructurePanel::syncPaint(const QJsonObject &state) {
@@ -502,8 +674,8 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
         QString layerId;
         if (proxy.isValid()) {
             layerId = idAt(proxy);
-            up = menu.addAction(tr("Mover para cima"));
-            down = menu.addAction(tr("Mover para baixo"));
+            up = menu.addAction(tr("Mover para cima\tAlt+↑"));
+            down = menu.addAction(tr("Mover para baixo\tAlt+↓"));
             merge = menu.addAction(tr("Mesclar abaixo"));
             toggleVis = menu.addAction(tr("Alternar visibilidade\tH"));
             toggleLock = menu.addAction(tr("Alternar bloqueio\tL"));
@@ -550,6 +722,24 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
         return;
     }
 
+    if (ws == QLatin1String("UV")) {
+        QMenu menu(this);
+        const struct { const char *label; const char *command; } entries[] = {
+            {QT_TR_NOOP("Desdobrar automaticamente"), "uv.unwrap_auto"},
+            {QT_TR_NOOP("Empacotar ilhas"), "uv.pack_islands"},
+            {QT_TR_NOOP("Relaxar"), "uv.relax"},
+            {QT_TR_NOOP("Costurar (stitch)"), "uv.stitch"},
+            {QT_TR_NOOP("Separar ilha"), "uv.split"},
+        };
+        QHash<QAction *, QString> commands;
+        for (const auto &entry : entries)
+            commands.insert(menu.addAction(tr(entry.label)), QLatin1String(entry.command));
+        auto *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (picked && commands.contains(picked))
+            m_controller->command(commands.value(picked));
+        return;
+    }
+
     if (!proxy.isValid())
         return;
     const QString id = idAt(proxy);
@@ -568,8 +758,8 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
     auto *selectionColor = menu.addAction(tr("Cor de seleção da parte…"));
     auto *defaultColor = menu.addAction(tr("Usar a cor de seleção global"));
     menu.addSeparator();
-    auto *up = menu.addAction(tr("Mover para cima"));
-    auto *down = menu.addAction(tr("Mover para baixo"));
+    auto *up = menu.addAction(tr("Mover para cima\tAlt+↑"));
+    auto *down = menu.addAction(tr("Mover para baixo\tAlt+↓"));
     menu.addSeparator();
     auto *alignMenu = menu.addMenu(tr("Alinhar e distribuir"));
     struct Entry { const char *label; const char *command; };

@@ -103,9 +103,15 @@ void PetuniaContextActions::rebuild(const QJsonArray &actions) {
         setCompact(true);
 }
 
+int PetuniaContextActions::fullWidth() const {
+    return m_compact ? m_fullWidth : sizeHint().width();
+}
+
 void PetuniaContextActions::setCompact(bool compact) {
     if (m_compact == compact)
         return;
+    if (compact)
+        m_fullWidth = sizeHint().width();
     m_compact = compact;
     const auto style = compact ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon;
     for (auto *button : std::as_const(m_primary))

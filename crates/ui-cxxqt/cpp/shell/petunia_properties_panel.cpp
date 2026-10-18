@@ -5,6 +5,7 @@
 #include "petunia_i18n.h"
 #include "petunia_model_sections.h"
 #include "petunia_property_section.h"
+#include "petunia_workspace_sections.h"
 
 #include <QLabel>
 #include <QMenu>
@@ -25,6 +26,18 @@ PetuniaPropertiesPanel::PetuniaPropertiesPanel(PetuniaShellController *controlle
     m_stack = new QStackedWidget(this);
     root->addWidget(m_stack);
     buildModeling();
+    buildPaint();
+    buildUv();
+    buildAnimate();
+    m_layout->addStretch(1);
+}
+
+PetuniaBoundForm *PetuniaPropertiesPanel::bound(PetuniaBoundForm *form, const QString &workspace) {
+    form->setTransport([this](const QString &action, const QJsonObject &args) {
+        return m_controller->request(action, args);
+    });
+    m_forms[workspace].append(form);
+    return form;
 }
 
 void PetuniaPropertiesPanel::buildModeling() {
@@ -47,14 +60,7 @@ void PetuniaPropertiesPanel::buildModeling() {
     m_empty->setAccessibleName(tr("Nenhum objeto selecionado"));
     m_layout->addWidget(m_empty);
 
-    auto transport = [this](const QString &action, const QJsonObject &args) {
-        return m_controller->request(action, args);
-    };
-    auto bound = [&](PetuniaBoundForm *form) {
-        form->setTransport(transport);
-        m_forms.append(form);
-        return form;
-    };
+    auto bound = [this](PetuniaBoundForm *form) { return this->bound(form, QStringLiteral("DRAW")); };
 
     addSection(QStringLiteral("transform"), tr("Transformação"), bound(new PetuniaTransformForm()), true);
     addSection(QStringLiteral("geometry"), tr("Geometria"), bound(new PetuniaGeometryForm()), true);
@@ -92,34 +98,53 @@ void PetuniaPropertiesPanel::buildModeling() {
     auto *material = new PetuniaMaterialForm();
     connect(material, &PetuniaMaterialForm::nodeEditorRequested, this, &PetuniaPropertiesPanel::materialNodesRequested);
     addSection(QStringLiteral("material"), tr("Material"), bound(material), false);
-    m_layout->addStretch(1);
+}
+
+void PetuniaPropertiesPanel::buildPaint() {
+    const QStringList paint{QStringLiteral("PAINT")};
+    auto b = [this](PetuniaBoundForm *form) { return bound(form, QStringLiteral("PAINT")); };
+    addSection(QStringLiteral("paint.brush"), tr("Pincel"), b(new PetuniaBrushForm()), true, paint);
+    addSection(QStringLiteral("paint.layer"), tr("Camada ativa"), b(new PetuniaPaintLayerForm()), true, paint);
+    addSection(QStringLiteral("paint.target"), tr("Alvo da pintura"), b(new PetuniaPaintTargetForm()), false, paint);
+    addSection(QStringLiteral("paint.effects"), tr("Efeitos"), b(new PetuniaPaintEffectsForm()), false, paint);
+    addSection(QStringLiteral("paint.projection"), tr("Projeção e superfície"), b(new PetuniaPaintProjectionForm()),
+               false, paint);
+    addSection(QStringLiteral("paint.decal"), tr("Decalque"), b(new PetuniaDecalForm()), false, paint);
+    addSection(QStringLiteral("paint.canvas"), tr("Canvas"), b(new PetuniaPaintCanvasForm()), false, paint);
+}
+
+void PetuniaPropertiesPanel::buildUv() {
+    const QStringList uv{QStringLiteral("UV")};
+    auto b = [this](PetuniaBoundForm *form) { return bound(form, QStringLiteral("UV")); };
+    addSection(QStringLiteral("uv.selection"), tr("Seleção UV"), b(new PetuniaUvSelectionForm()), true, uv);
+    addSection(QStringLiteral("uv.unwrap"), tr("Desdobrar"), b(new PetuniaUvUnwrapForm()), true, uv);
+    addSection(QStringLiteral("uv.seams"), tr("Costuras e pins"), b(new PetuniaUvSeamsForm()), false, uv);
+    addSection(QStringLiteral("uv.pack"), tr("Empacotar e relaxar"), b(new PetuniaUvPackForm()), false, uv);
+    addSection(QStringLiteral("uv.transform"), tr("Transformar UV"), b(new PetuniaUvTransformForm()), false, uv);
+    addSection(QStringLiteral("uv.display"), tr("Exibição"), b(new PetuniaUvDisplayForm()), false, uv);
+}
+
+void PetuniaPropertiesPanel::buildAnimate() {
+    const QStringList animate{QStringLiteral("ANIMATE")};
+    auto b = [this](PetuniaBoundForm *form) { return bound(form, QStringLiteral("ANIMATE")); };
+    addSection(QStringLiteral("animate.creature"), tr("Criatura"), b(new PetuniaCreatureForm()), true, animate);
+    addSection(QStringLiteral("animate.motion"), tr("Motion"), b(new PetuniaMotionForm()), true, animate);
+    addSection(QStringLiteral("animate.pose"), tr("Pose do osso"), b(new PetuniaPoseForm()), false, animate);
+    addSection(QStringLiteral("animate.layers"), tr("Camadas de animação"), b(new PetuniaAnimationLayersForm()), false,
+               animate);
+    addSection(QStringLiteral("animate.timeline"), tr("Keyframes e curvas"), b(new PetuniaTimelineForm()), false,
+               animate);
 }
 
 PetuniaPropertySection *PetuniaPropertiesPanel::addSection(const QString &id, const QString &title,
-                                                           QWidget *content, bool open) {
+                                                           QWidget *content, bool open, const QStringList &workspaces) {
     auto *section = new PetuniaPropertySection(id, title, content, m_column);
     section->setOpen(open);
     connect(section, &PetuniaPropertySection::toggled, this, &PetuniaPropertiesPanel::sectionToggled);
     m_layout->addWidget(section);
     m_sectionMap.insert(id, section);
+    m_sectionWorkspaces.insert(id, workspaces);
     return section;
-}
-
-void PetuniaPropertiesPanel::setHosted(const QString &workspaceId, QWidget *widget) {
-    if (m_hosted.contains(workspaceId))
-        return;
-    m_hosted.insert(workspaceId, widget);
-    // O mínimo de um painel hospedado não pode alargar a coluna: o QStackedWidget
-    // considera TODAS as páginas, então elas ignoram a largura preferida.
-    widget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    if (auto *tabs = qobject_cast<QTabWidget *>(widget)) {
-        tabs->setUsesScrollButtons(true);
-        tabs->tabBar()->setUsesScrollButtons(true);
-        tabs->setElideMode(Qt::ElideRight);
-        // Contêineres focáveis também precisam de nome (leitor de tela anuncia a região).
-        petuniaNameTabContainers(tabs, tr("Propriedades de %1").arg(workspaceId));
-    }
-    m_stack->addWidget(widget);
 }
 
 QJsonObject PetuniaPropertiesPanel::sectionStates() const {
@@ -147,21 +172,18 @@ QStringList PetuniaPropertiesPanel::visibleSectionIds() const {
 void PetuniaPropertiesPanel::sync(const QJsonObject &state) {
     const QString workspace = m_controller->workspaceId();
     const bool modeling = workspace == QLatin1String("DRAW") || workspace == QLatin1String("POLY");
-    if (modeling) {
-        m_stack->setCurrentWidget(m_scroll);
-        const bool hasSelection = state["selected_count"].toInt() > 0;
-        m_empty->setVisible(!hasSelection);
-        for (auto it = m_sectionMap.cbegin(); it != m_sectionMap.cend(); ++it) {
-            bool visible = hasSelection;
-            if (it.key() == QLatin1String("profile"))
-                visible = workspace == QLatin1String("DRAW");
-            it.value()->setVisible(visible);
-        }
-        for (auto *form : m_forms)
-            if (form->isVisible() || form->parentWidget())
-                form->sync(state);
-        m_operations->sync(state);
-    } else if (auto *hosted = m_hosted.value(workspace)) {
-        m_stack->setCurrentWidget(hosted);
+    // Modelagem depende de um objeto selecionado; PAINT/UV/ANIMATE agem no ativo.
+    const bool hasSelection = state["selected_count"].toInt() > 0;
+    m_empty->setVisible(modeling && !hasSelection);
+    for (auto it = m_sectionMap.cbegin(); it != m_sectionMap.cend(); ++it) {
+        bool visible = m_sectionWorkspaces.value(it.key()).contains(workspace);
+        if (modeling && visible)
+            visible = hasSelection && (it.key() != QLatin1String("profile") || workspace == QLatin1String("DRAW"));
+        it.value()->setVisible(visible);
     }
+    const QString group = modeling ? QStringLiteral("DRAW") : workspace;
+    for (auto *form : m_forms.value(group))
+        form->sync(state);
+    if (modeling)
+        m_operations->sync(state);
 }

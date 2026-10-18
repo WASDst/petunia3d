@@ -62,6 +62,7 @@ class PetuniaGlWidget : public QWidget {
     void wheelEvent(QWheelEvent *event) override;
     void tabletEvent(QTabletEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
 
   private:

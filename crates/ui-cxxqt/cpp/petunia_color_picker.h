@@ -29,9 +29,13 @@ class PetuniaColorWheel : public QWidget {
     void paintEvent(QPaintEvent *) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
   private:
     void handleInteraction(const QPointF &pos);
+    /// Raios do anel e quadrado S/V proporcionais ao tamanho (escala do tema).
+    float outerRadius() const;
+    QRectF svRect() const;
     float m_hue{30.0f};
     float m_saturation{0.8f};
     float m_value{0.9f};

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QVBoxLayout>
@@ -30,4 +31,5 @@ private:
 
     QLineEdit *m_searchInput{nullptr};
     QListWidget *m_resultsList{nullptr};
+    QLabel *m_emptyLabel{nullptr};
 };

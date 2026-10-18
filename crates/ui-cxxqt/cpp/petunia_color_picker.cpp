@@ -1,10 +1,14 @@
 #include "petunia_color_picker.h"
+#include "petunia_icons.h"
 #include "petunia_theme.h"
 
 #include <QConicalGradient>
 #include <QFormLayout>
+#include <QFrame>
+#include <QGridLayout>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
@@ -18,8 +22,58 @@
 // =========================================================================
 
 PetuniaColorWheel::PetuniaColorWheel(QWidget *parent) : QWidget(parent) {
-    setFixedSize(140, 140);
+    const int side = PetuniaTheme::instance().scaled(140);
+    setFixedSize(side, side);
     setCursor(Qt::CrossCursor);
+    // Alternativa ao ponteiro: setas giram o matiz; Shift+setas movem S/V.
+    setFocusPolicy(Qt::StrongFocus);
+    setAccessibleName(tr("Roda de cores"));
+    setAccessibleDescription(tr("Setas esquerda e direita mudam o matiz; Shift com setas muda saturação e brilho"));
+}
+
+float PetuniaColorWheel::outerRadius() const {
+    return std::max(8.0f, float(std::min(width(), height())) * 0.5f - 5.0f);
+}
+
+QRectF PetuniaColorWheel::svRect() const {
+    const float half = outerRadius() * 0.49f;
+    const QPointF c = QRectF(rect()).center();
+    return {c.x() - half, c.y() - half, half * 2.0f, half * 2.0f};
+}
+
+void PetuniaColorWheel::keyPressEvent(QKeyEvent *event) {
+    const bool shift = event->modifiers() & Qt::ShiftModifier;
+    const float step = event->modifiers() & Qt::ControlModifier ? 0.01f : 0.05f;
+    bool handled = true;
+    switch (event->key()) {
+    case Qt::Key_Left:
+        if (shift)
+            m_saturation = qBound(0.0f, m_saturation - step, 1.0f);
+        else
+            m_hue = std::fmod(m_hue + 360.0f - step * 100.0f, 360.0f);
+        break;
+    case Qt::Key_Right:
+        if (shift)
+            m_saturation = qBound(0.0f, m_saturation + step, 1.0f);
+        else
+            m_hue = std::fmod(m_hue + step * 100.0f, 360.0f);
+        break;
+    case Qt::Key_Up:
+        m_value = qBound(0.0f, m_value + step, 1.0f);
+        break;
+    case Qt::Key_Down:
+        m_value = qBound(0.0f, m_value - step, 1.0f);
+        break;
+    default:
+        handled = false;
+    }
+    if (!handled) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    event->accept();
+    emit colorChanged(color());
+    update();
 }
 
 QColor PetuniaColorWheel::color() const {
@@ -39,9 +93,9 @@ void PetuniaColorWheel::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    const QPointF c = rect().center();
-    const float rOut = 65.0f;
-    const float rIn = 50.0f;
+    const QPointF c = QRectF(rect()).center();
+    const float rOut = outerRadius();
+    const float rIn = rOut * 0.77f;
 
     // 1. Hue Conical Ring
     QConicalGradient conic(c, 0.0);
@@ -68,7 +122,7 @@ void PetuniaColorWheel::paintEvent(QPaintEvent *) {
     painter.drawEllipse(markerPos, 4, 4);
 
     // 2. Inner Saturation / Value Box
-    const QRectF svRect(c.x() - 32, c.y() - 32, 64, 64);
+    const QRectF svRect = this->svRect();
 
     // Horizontal Saturation Gradient
     QLinearGradient satGrad(svRect.left(), 0, svRect.right(), 0);
@@ -92,14 +146,21 @@ void PetuniaColorWheel::paintEvent(QPaintEvent *) {
     painter.setPen(QPen(m_value > 0.5 ? Qt::black : Qt::white, 2));
     painter.setBrush(color());
     painter.drawEllipse(svPos, 4, 4);
+
+    if (hasFocus()) {
+        const auto &theme = PetuniaTheme::instance();
+        painter.setPen(QPen(theme.borderFocus(), theme.focusRingWidth()));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(c, rOut + 3.0f, rOut + 3.0f);
+    }
 }
 
 void PetuniaColorWheel::handleInteraction(const QPointF &pos) {
-    const QPointF c = rect().center();
+    const QPointF c = QRectF(rect()).center();
     const QPointF delta = pos - c;
     const float dist = std::hypot(delta.x(), delta.y());
-    const float rOut = 68.0f;
-    const float rIn = 46.0f;
+    const float rOut = outerRadius() + 3.0f;
+    const float rIn = outerRadius() * 0.77f - 4.0f;
 
     if (dist >= rIn && dist <= rOut) {
         float angle = qRadiansToDegrees(std::atan2(delta.y(), delta.x()));
@@ -109,7 +170,7 @@ void PetuniaColorWheel::handleInteraction(const QPointF &pos) {
         emit colorChanged(color());
         update();
     } else {
-        const QRectF svRect(c.x() - 32, c.y() - 32, 64, 64);
+        const QRectF svRect = this->svRect();
         if (svRect.adjusted(-6, -6, 6, 6).contains(pos)) {
             m_saturation = qBound(0.0f, float((pos.x() - svRect.left()) / svRect.width()), 1.0f);
             m_value = qBound(0.0f, float((svRect.bottom() - pos.y()) / svRect.height()), 1.0f);
@@ -136,47 +197,40 @@ void PetuniaColorWheel::mouseMoveEvent(QMouseEvent *event) {
 PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
     : QDialog(parent, Qt::Popup | Qt::FramelessWindowHint) {
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(240, 360);
+    setAccessibleName(tr("Seletor de cor"));
+    // Cromo, campos e botões herdam a folha global do tema (claro, escuro,
+    // alto contraste e densidade); só as amostras de cor pintam a própria cor.
+    const auto &t = PetuniaTheme::instance();
+    const int target = t.minHitTarget();
 
     auto *rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(8, 8, 8, 8);
+    rootLayout->setContentsMargins(t.space(2), t.space(2), t.space(2), t.space(2));
+    rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    auto *card = new QWidget(this);
+    auto *card = new QFrame(this);
     card->setObjectName(QStringLiteral("ColorPickerCard"));
-    // Cromo do popover a partir dos tokens do tema (claro, escuro e alto contraste).
-    const auto &t = PetuniaTheme::instance();
-    card->setStyleSheet(QStringLiteral(
-        "#ColorPickerCard { background-color: %1; border: 1px solid %2; border-radius: 10px; }\n"
-        "QLabel { color: %3; font-weight: bold; }\n"
-        "QLineEdit { background-color: %4; color: %3; border: 1px solid %2; border-radius: 4px; padding: 2px 6px; min-height: 20px; }\n"
-        "QLineEdit:focus { border: %6px solid %7; }\n"
-        "QPushButton { background-color: %4; color: %3; border: 1px solid %2; border-radius: 4px; padding: 3px 8px; font-weight: bold; }\n"
-        "QPushButton:hover { background-color: %5; border-color: %7; }\n"
-        "QPushButton:focus { border: %6px solid %7; }\n"
-        "QPushButton#ConfirmBtn { background-color: %7; color: %8; border: none; }\n")
-                            .arg(t.bgPanel().name(), t.borderStrong().name(), t.textPrimary().name(),
-                                 t.bgSurface().name(), t.bgSurfaceHover().name())
-                            .arg(t.focusRingWidth())
-                            .arg(t.accentPrimary().name(), t.textActive().name()));
+    card->setProperty("role", QStringLiteral("card"));
 
     auto *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(20);
-    shadow->setColor(QColor(0, 0, 0, 190));
+    shadow->setColor(QColor(0, 0, 0, 160));
     shadow->setOffset(0, 6);
     card->setGraphicsEffect(shadow);
 
     auto *layout = new QVBoxLayout(card);
-    layout->setContentsMargins(10, 8, 10, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(t.space(3), t.space(2), t.space(3), t.space(3));
+    layout->setSpacing(t.space(2));
 
     // Header
     auto *headerRow = new QHBoxLayout();
     m_titleLabel = new QLabel(tr("Seletor de cor"), card);
+    m_titleLabel->setProperty("role", QStringLiteral("caption"));
     headerRow->addWidget(m_titleLabel, 1);
 
-    auto *closeBtn = new QPushButton(QStringLiteral("✕"), card);
-    closeBtn->setFixedSize(18, 18);
-    closeBtn->setStyleSheet(QStringLiteral("background: transparent; border: none; color: %1; font-weight: bold;").arg(t.textSecondary().name()));
+    auto *closeBtn = new QPushButton(PetuniaIcons::get(QStringLiteral("close")), QString(), card);
+    closeBtn->setProperty("role", QStringLiteral("quiet"));
+    closeBtn->setFixedSize(target, target);
+    closeBtn->setToolTip(tr("Fechar (Esc)"));
     closeBtn->setAccessibleName(tr("Fechar"));
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
     headerRow->addWidget(closeBtn);
@@ -205,19 +259,22 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
     m_hueSpin = new PetuniaNumberField(QStringLiteral("H"), card);
     m_hueSpin->setRange(0, 360);
     m_hueSpin->setSuffix(QStringLiteral("°"));
-    m_hueSpin->setToolTip(QStringLiteral("Matiz (Hue)"));
+    m_hueSpin->setToolTip(tr("Matiz"));
+    m_hueSpin->setAccessibleName(tr("Matiz"));
     hsvRow->addWidget(m_hueSpin);
 
     m_satSpin = new PetuniaNumberField(QStringLiteral("S"), card);
     m_satSpin->setRange(0, 100);
     m_satSpin->setSuffix(QStringLiteral("%"));
-    m_satSpin->setToolTip(QStringLiteral("Saturação"));
+    m_satSpin->setToolTip(tr("Saturação"));
+    m_satSpin->setAccessibleName(tr("Saturação"));
     hsvRow->addWidget(m_satSpin);
 
     m_valSpin = new PetuniaNumberField(QStringLiteral("V"), card);
     m_valSpin->setRange(0, 100);
     m_valSpin->setSuffix(QStringLiteral("%"));
-    m_valSpin->setToolTip(QStringLiteral("Luminosidade / Valor"));
+    m_valSpin->setToolTip(tr("Valor (brilho)"));
+    m_valSpin->setAccessibleName(tr("Valor (brilho)"));
     hsvRow->addWidget(m_valSpin);
 
     auto onHsvChanged = [this]() {
@@ -243,15 +300,17 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
     hexRow->setSpacing(6);
 
     m_swatchPreview = new QFrame(card);
-    m_swatchPreview->setFixedSize(24, 24);
-    
+    m_swatchPreview->setFixedSize(target, target);
+    m_swatchPreview->setAccessibleName(tr("Cor atual"));
     hexRow->addWidget(m_swatchPreview);
 
-    auto *hexLabel = new QLabel(QStringLiteral("HEX:"), card);
+    auto *hexLabel = new QLabel(tr("&Hex"), card);
     hexRow->addWidget(hexLabel);
 
     m_hexEdit = new QLineEdit(QStringLiteral("#B58CFF"), card);
     m_hexEdit->setMaxLength(7);
+    m_hexEdit->setAccessibleName(tr("Cor em hexadecimal"));
+    hexLabel->setBuddy(m_hexEdit);
     connect(m_hexEdit, &QLineEdit::textEdited, this, [this](const QString &text) {
         if (m_updating)
             return;
@@ -270,20 +329,22 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
     // RGB Label
     m_rgbLabel = new QLabel(QStringLiteral("RGB: 181 / 140 / 255"), card);
     m_rgbLabel->setAlignment(Qt::AlignCenter);
-    m_rgbLabel->setStyleSheet(QStringLiteral("color: %1;").arg(t.textSecondary().name()));
+    m_rgbLabel->setProperty("role", QStringLiteral("muted"));
     layout->addWidget(m_rgbLabel);
 
     // Presets Row
-    auto *presetsRow = new QHBoxLayout();
-    presetsRow->setSpacing(3);
+    // Grade 4×2: alvos de toque ≥ 28 px sem alargar o popover.
+    auto *presetsRow = new QGridLayout();
+    presetsRow->setSpacing(t.space(1));
     const QStringList presets = {
         QStringLiteral("#e96a00"), QStringLiteral("#4fc3f7"), QStringLiteral("#b58cff"),
         QStringLiteral("#81c784"), QStringLiteral("#ffd54f"), QStringLiteral("#e53935"),
         QStringLiteral("#ffffff"), QStringLiteral("#121212")
     };
-    for (const auto &hex : presets) {
+    for (int i = 0; i < presets.size(); ++i) {
+        const QString hex = presets.value(i);
         auto *btn = new QPushButton(card);
-        btn->setFixedSize(18, 18);
+        btn->setFixedSize(target, target);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid %2; border-radius: 3px;").arg(hex, t.borderStrong().name()));
         btn->setAccessibleName(tr("Cor %1").arg(hex.toUpper()));
@@ -292,7 +353,7 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
             setColor(QColor(hex));
             emit colorChanged(color());
         });
-        presetsRow->addWidget(btn);
+        presetsRow->addWidget(btn, i / 4, i % 4);
     }
     layout->addLayout(presetsRow);
 
@@ -307,6 +368,8 @@ PetuniaColorPickerPopover::PetuniaColorPickerPopover(QWidget *parent)
 
     auto *confirmBtn = new QPushButton(tr("Confirmar"), card);
     confirmBtn->setObjectName(QStringLiteral("ConfirmBtn"));
+    confirmBtn->setProperty("role", QStringLiteral("primary"));
+    confirmBtn->setDefault(true);
     connect(confirmBtn, &QPushButton::clicked, this, &QDialog::accept);
     actionsRow->addWidget(confirmBtn);
 

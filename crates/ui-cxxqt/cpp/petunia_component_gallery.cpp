@@ -76,12 +76,13 @@ void PetuniaComponentGallery::setupTokenSwatches(QVBoxLayout *layout) {
     auto addSwatch = [&](const QString &label, const QColor &color) {
         auto *swatch = new QFrame(rowWidget);
         swatch->setFixedSize(50, 40);
-        swatch->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid #555; border-radius: 4px;").arg(color.name()));
+        swatch->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid %2; border-radius: 4px;")
+                                  .arg(color.name(), PetuniaTheme::instance().borderStrong().name()));
         auto *vbox = new QVBoxLayout();
         vbox->addWidget(swatch);
         auto *lbl = new QLabel(label, rowWidget);
         lbl->setAlignment(Qt::AlignCenter);
-        QFont f = lbl->font(); f.setPointSize(8); lbl->setFont(f);
+        lbl->setProperty("role", QStringLiteral("caption"));
         vbox->addWidget(lbl);
         rowLayout->addLayout(vbox);
     };

@@ -141,23 +141,25 @@ int PetuniaTheme::scaled(int px) const {
 }
 
 int PetuniaTheme::controlHeight() const {
+    // Alvo mínimo de 28 px lógicos mesmo com escala de interface abaixo de 100%.
     switch (m_density) {
-    case Density::Compact: return scaled(28);
-    case Density::Standard: return scaled(32);
-    case Density::Comfortable: return scaled(40);
+    case Density::Compact: return std::max(28, scaled(28));
+    case Density::Standard: return std::max(28, scaled(32));
+    case Density::Comfortable: return std::max(28, scaled(40));
     }
-    return scaled(32);
+    return std::max(28, scaled(32));
 }
 
 int PetuniaTheme::fontPx(TextRole role) const {
     const int body = m_density == Density::Compact ? 13 : m_density == Density::Standard ? 14 : 15;
+    // Texto operacional nunca abaixo de 12 px lógicos (U08), em qualquer escala.
     switch (role) {
-    case TextRole::Caption: return scaled(body - 1);
-    case TextRole::Body: return scaled(body);
-    case TextRole::Title: return scaled(body + 2);
-    case TextRole::Mono: return scaled(body - 1);
+    case TextRole::Caption: return std::max(12, scaled(body - 1));
+    case TextRole::Body: return std::max(12, scaled(body));
+    case TextRole::Title: return std::max(14, scaled(body + 2));
+    case TextRole::Mono: return std::max(12, scaled(body - 1));
     }
-    return scaled(body);
+    return std::max(12, scaled(body));
 }
 
 int PetuniaTheme::space(int step) const {

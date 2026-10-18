@@ -34,12 +34,34 @@ fn shell_v2_regions_layout_focus_and_theme() {
         .expect("relatório UTF-8")
         .to_owned();
     let report: Value = serde_json::from_str(&raw).expect("relatório JSON");
+    // Evidência ao lado das capturas: detalhes também das verificações aprovadas.
+    let _ = std::fs::write(captures.join("report.json"), &raw);
     let checks = report["checks"].as_array().expect("lista de verificações");
     assert!(
         checks.len() >= 40,
         "cobertura mínima do harness: {} verificações",
         checks.len()
     );
+    // As verificações da GUI completa (F7, V03, U07) precisam ter rodado de fato.
+    let names: Vec<&str> = checks.iter().filter_map(|c| c["name"].as_str()).collect();
+    let missing: Vec<&str> = [
+        "paint:native-property-sections",
+        "surface:2d-hides-3d-view",
+        "surface:3d-hides-canvas",
+        "surface:mode-persists-per-workspace",
+        "surface:split-shows-both",
+        "uv:native-property-sections",
+        "uv:structure-lists-islands",
+        "uv:selecting-island-row-selects-uv",
+        "animate:native-property-sections",
+        "timeline:play-button-toggles-playback",
+        "viewport:shift-f10-opens-context-menu",
+        "viewport:context-menu-has-no-raw-ids",
+    ]
+    .into_iter()
+    .filter(|name| !names.contains(name))
+    .collect();
+    assert!(missing.is_empty(), "verificações ausentes: {missing:?}");
     let failed: Vec<String> = checks
         .iter()
         .filter(|c| c["pass"] != true)

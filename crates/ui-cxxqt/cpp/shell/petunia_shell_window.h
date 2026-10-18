@@ -12,6 +12,8 @@ class PetuniaContextActions;
 class PetuniaDrawer;
 class PetuniaEditorCanvas;
 class PetuniaEditorPanel;
+class PetuniaEditorCanvas;
+class PetuniaTimelinePage;
 class PetuniaGlWidget;
 class PetuniaNodeCanvas;
 class PetuniaNodePage;
@@ -44,7 +46,8 @@ class PetuniaShellWindow : public QMainWindow {
     PetuniaViewportHeader *viewportHeader() const { return m_header; }
     PetuniaGlWidget *viewport() const { return m_viewport; }
     /// Canvas 2D de um workspace especializado (PAINT/UV/ANIMATE), se já criado.
-    QWidget *workspaceCanvas(const QString &workspace) const { return m_canvases.value(workspace); }
+    QWidget *workspaceCanvas(const QString &workspace) const;
+    PetuniaTimelinePage *timelinePage() const { return m_timelinePage; }
     PetuniaOperationHud *hud() const { return m_hud; }
     PetuniaContextActions *contextActions() const { return m_context; }
     PetuniaStructurePanel *structure() const { return m_structure; }
@@ -83,6 +86,9 @@ class PetuniaShellWindow : public QMainWindow {
     void onWorkspaceChanged(const QString &workspace);
     void retranslateUi();
     void arrangeSurface(const QString &workspace);
+    /// PAINT/UV: "3d" | "split" | "2d"; `ratio` = fração da largura da vista 3D.
+    void applySurfaceMode(const QString &mode, double ratio);
+    void updateRegions();
     void ensureSpecialized(const QString &workspace);
     void applyLayout(const QString &workspace);
     void captureLayout();
@@ -130,8 +136,11 @@ class PetuniaShellWindow : public QMainWindow {
     PetuniaRegionNavigator *m_navigator{nullptr};
     PetuniaCommandPalette *m_palette{nullptr};
 
-    QHash<QString, PetuniaEditorPanel *> m_specialized;
-    QHash<QString, QWidget *> m_canvases;
+    /// Superfícies 2D dos workspaces (canvas de pintura, editor UV).
+    QHash<QString, PetuniaEditorCanvas *> m_canvases;
+    /// ANIMATE: dope sheet dentro da página da linha do tempo (gaveta).
+    PetuniaEditorCanvas *m_timelineCanvas{nullptr};
+    PetuniaTimelinePage *m_timelinePage{nullptr};
     QWidget *m_assetsHost{nullptr};
     PetuniaNodePage *m_nodePage{nullptr};
     QPointer<QWidget> m_paletteInvoker;

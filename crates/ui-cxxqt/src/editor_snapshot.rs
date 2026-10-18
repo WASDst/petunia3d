@@ -1850,6 +1850,18 @@ fn uveditormodel(vm: &petunia_editor::UvEditorModel) -> Value {
     obj.insert("selected_face".into(), json!(&vm.selected_face));
     obj.insert("uv_selected_count".into(), json!(&vm.uv_selected_count));
     obj.insert("truncated".into(), json!(&vm.truncated));
+    obj.insert(
+        "islands".into(),
+        Value::Array(vm.islands.iter().map(uvislandrowmodel).collect()),
+    );
+    Value::Object(obj)
+}
+fn uvislandrowmodel(vm: &petunia_editor::UvIslandRowModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("index".into(), json!(&vm.index));
+    obj.insert("face_count".into(), json!(&vm.face_count));
+    obj.insert("area".into(), json!(&vm.area));
+    obj.insert("selected".into(), json!(&vm.selected));
     Value::Object(obj)
 }
 fn worldaxislabelmodel(vm: &petunia_editor::projection::WorldAxisLabelModel) -> Value {

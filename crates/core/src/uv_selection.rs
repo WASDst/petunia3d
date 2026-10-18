@@ -221,6 +221,36 @@ impl UvSelectionState {
 }
 
 impl crate::context::CommandContext<'_> {
+    /// Seleciona faces inteiras em UV (lista de ilhas na Estrutura): sem
+    /// `extend` substitui; com `extend` acrescenta. Índices fora da malha são
+    /// ignorados; retorna `false` quando nenhuma face válida foi dada.
+    pub fn uv_select_faces(&mut self, faces: &[usize], extend: bool) -> bool {
+        let project = &mut self.document.project;
+        let Some(asset) = project.assets.get_mut(project.active) else {
+            return false;
+        };
+        let valid: Vec<usize> = faces
+            .iter()
+            .copied()
+            .filter(|&fi| asset.mesh.faces.get(fi).is_some_and(|f| !f.uv.is_empty()))
+            .collect();
+        if valid.is_empty() {
+            return false;
+        }
+        let selection = &mut self.editor.tools.uv_selection;
+        if extend {
+            let mut all: Vec<usize> = selection.faces(&asset.mesh).into_iter().collect();
+            all.extend(valid);
+            selection.set_faces(&asset.mesh, all);
+        } else {
+            selection.set_faces(&asset.mesh, valid);
+        }
+        if selection.sync_to_faces(&mut asset.mesh) {
+            self.sync_selection();
+        }
+        true
+    }
+
     /// Clique no UV Editor (Application): aplica o modo de seleção UV e, com
     /// Sync ligado, leva o resultado às faces 3D. Retorna se algo foi atingido.
     pub fn uv_click(&mut self, point: Vec2, radius: f32, extend: bool) -> bool {

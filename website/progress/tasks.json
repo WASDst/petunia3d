@@ -921,6 +921,11 @@
       "revision": "5407fc3e+working tree",
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "summary": "Harness shell_v2 (offscreen): paleta de comandos, Preferências e Referências abrem com o foco dentro, Esc fecha só o topo e o foco volta ao invocador (campo de busca da Estrutura); F6/Shift+F6 seguem funcionando depois. Corrigido: Referências não devolviam o foco; diálogos modais devolviam o foco sem reativar a janela (teclado ficava sem destino). PetuniaFocusReturn (memória do invocador) usado pelos diálogos do host. Não coberto: menus de contexto, painéis pinados e validação com tecnologia assistiva real (Q08)."
+    },
+    "gui-workspaces-native-2026-10-17": {
+      "revision": "working tree sobre 908aecf7",
+      "document": "website/docs/09-ui/shell-v2-proposal.md (F7) · AGENTS.md Camadas 2/3/6",
+      "summary": "PAINT/UV/ANIMATE com seções nativas de Propriedades (Pincel, Camada, Alvo, Efeitos, Projeção, Decalque, Canvas; Seleção UV, Desdobrar, Costuras, Empacotar, Transformar, Exibição; Criatura, Motion, Pose, Camadas, Keyframes); superfície 3D|Dividido|2D persistida por workspace; transporte da linha do tempo na gaveta; Estrutura UV lista ilhas (uv_editor.islands + uv_select_island, índice validado); diálogos Início/Recuperação/Paleta/Placeholder e seletor de cor só com papéis do tema (alvos >= 28 px, fontes do tema, roda de cor por teclado); menu de contexto da vista por teclado (Shift+F10) com rótulos traduzidos; motivo de desabilitação nos botões por estado; gaveta recolhida devolve a altura à superfície; barra contextual compacta cabe na vista. Gates pass: editor_parity 22, shell_v2 (172 verificações, 12 novas exigidas por nome), bridge_test 11 (1 pulado: sem display), ui_i18n_catalog 3, component_contracts 1, ui_contract_ids 3, gallery_test 1, ui_thread_guard 1, lib 5, core --lib 202, editor --lib 137, fmt e clippy -D warnings. Não executado: Windows, GPU física, leitor de tela, escala 150–200%; atalhos QShortcut da Estrutura (Alt+setas, H/L/Del por workspace) e teclado do canvas 2D sem teste automatizado."
     }
   },
   "tasks": [
@@ -1070,8 +1075,8 @@
       "checkpoints": [
         {
           "title": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "gui-workspaces-native-2026-10-17"
         },
         {
           "title": "preservar Assets/Prefabs, filtros e teclado",
@@ -2422,14 +2427,14 @@
       "title": "PAINT UX",
       "description": "Layers em Structure, Canvas em Work Surface, 3D/2D/Split/PiP com estado único; ContextBar/Basic+Advanced/Channel/Target, presets/paleta, shared/locked/missing-UV feedback, reorder por teclado.",
       "document": "06-paint/workspace-ux.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-17",
       "baseline": "Parcial. crates/ui-slint/ui/app.slint, crates/ui-slint/ui/components/paint_canvas.slint. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
           "title": "Layers em Structure, Canvas em Work Surface, 3D/2D/Split/PiP com estado único",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "gui-workspaces-native-2026-10-17"
         },
         {
           "title": "ContextBar/Basic+Advanced/Channel/Target, presets/paleta, shared/locked/missing-UV feedback, reorder por teclado",
@@ -2568,14 +2573,14 @@
       "title": "UV Work Surface",
       "description": "Promover editor 256×256 do Inspector; split 3D/UV persistente/maximização, pan/zoom/frame/grid, Structure islands, Properties/ContextBar e F6 entre superfícies.",
       "document": "07-uv/workspace-ux.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-17",
       "baseline": "Migração pendente. crates/ui-slint/ui/workspaces/uv/inspector.slint:96. Estado da migração a confirmar; preservar as capacidades existentes.",
       "checkpoints": [
         {
           "title": "Promover editor 256×256 do Inspector",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "gui-workspaces-native-2026-10-17"
         },
         {
           "title": "split 3D/UV persistente/maximização, pan/zoom/frame/grid, Structure islands, Properties/ContextBar e F6 entre superfícies",

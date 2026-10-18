@@ -19,8 +19,16 @@ class PetuniaViewportHeader : public QWidget {
     explicit PetuniaViewportHeader(PetuniaShellController *controller, QWidget *parent = nullptr);
 
     void sync(const QJsonObject &state);
+
+  signals:
+    void surfaceModeRequested(const QString &mode);
+
+  public:
     PetuniaSegmented *domain() const { return m_domain; }
     PetuniaSegmented *projection() const { return m_projection; }
+    /// PAINT/UV: 3D, dividido ou só a superfície 2D (preferência de layout).
+    PetuniaSegmented *surfaceMode() const { return m_surfaceMode; }
+    void setSurfaceMode(const QString &mode);
     bool compact() const { return m_compact; }
 
   protected:
@@ -42,6 +50,7 @@ class PetuniaViewportHeader : public QWidget {
     QToolButton *m_snap{nullptr};
     QToolButton *m_proportional{nullptr};
     PetuniaSegmented *m_projection{nullptr};
+    PetuniaSegmented *m_surfaceMode{nullptr};
     QToolButton *m_display{nullptr};
     QToolButton *m_overlays{nullptr};
     QToolButton *m_camera{nullptr};

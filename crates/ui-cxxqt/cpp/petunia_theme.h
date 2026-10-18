@@ -46,7 +46,7 @@ public:
     int railWidth() const;
     /// Escala um valor em px lógicos pela escala de UI.
     int scaled(int px) const;
-    int minHitTarget() const { return scaled(28); }
+    int minHitTarget() const { return scaled(28) < 28 ? 28 : scaled(28); }
     int focusRingWidth() const { return isHighContrast() ? 3 : 2; }
     /// Duração de transição em ms; 0 com movimento reduzido.
     int motionMs(int normal = 140) const { return m_reducedMotion ? 0 : normal; }

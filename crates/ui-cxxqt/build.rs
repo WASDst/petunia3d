@@ -61,6 +61,8 @@ fn main() {
         .cpp_file("cpp/shell/petunia_context_actions.cpp")
         .cpp_file("cpp/shell/petunia_node_canvas.h")
         .cpp_file("cpp/shell/petunia_node_canvas.cpp")
+        .cpp_file("cpp/shell/petunia_workspace_sections.h")
+        .cpp_file("cpp/shell/petunia_workspace_sections.cpp")
         .cpp_file("cpp/shell/petunia_node_page.h")
         .cpp_file("cpp/shell/petunia_node_page.cpp")
         .cpp_file("cpp/shell/petunia_operation_card.h")

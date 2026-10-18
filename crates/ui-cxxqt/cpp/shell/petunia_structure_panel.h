@@ -11,9 +11,10 @@
 
 class PetuniaPlaceholderMessage;
 
-/// Região "Estrutura": árvore de Partes da cena (model/view com identidade
-/// estável por id de objeto). Mostra, filtra e organiza; toda mudança é uma
-/// ação do editor (seleção, visibilidade, bloqueio, renomear, mover).
+/// Região "Estrutura": lista do workspace (Partes da cena, Camadas de pintura,
+/// Ilhas UV ou Ossos) em model/view com identidade estável por id. Mostra,
+/// filtra e organiza; toda mudança é uma ação do editor (seleção,
+/// visibilidade, bloqueio, renomear, mover).
 class PetuniaStructurePanel : public QWidget {
     Q_OBJECT
 
@@ -36,6 +37,9 @@ class PetuniaStructurePanel : public QWidget {
     void onClicked(const QModelIndex &proxyIndex);
     void onSelectionChanged();
     void onContextMenu(const QPoint &pos);
+    /// Ação do estado vazio e do botão primário: cada workspace cria o que lista.
+    void primaryAction();
+    void updateChrome(const QString &workspace);
     QStringList selectedIds() const;
     QString idAt(const QModelIndex &proxyIndex) const;
     void refreshIcons();
@@ -43,11 +47,16 @@ class PetuniaStructurePanel : public QWidget {
     void syncScene(const QJsonObject &state);
     void syncPaint(const QJsonObject &state);
     void syncAnimate(const QJsonObject &state);
+    void syncUv(const QJsonObject &state);
+    /// Alterna visibilidade/bloqueio, remove ou move a linha atual conforme o workspace.
+    void actOnCurrent(const QString &verb, int delta = 0);
 
     PetuniaShellController *m_controller;
     QLineEdit *m_search{nullptr};
     QPushButton *m_filterSelected{nullptr};
     QPushButton *m_sort{nullptr};
+    QPushButton *m_primary{nullptr};
+    QString m_chromeWorkspace;
     QTreeView *m_tree{nullptr};
     PetuniaPlaceholderMessage *m_empty{nullptr};
     QStandardItemModel *m_model{nullptr};

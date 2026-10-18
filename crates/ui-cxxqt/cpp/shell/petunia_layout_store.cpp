@@ -50,6 +50,9 @@ QJsonObject PetuniaLayoutStore::defaults(const QString &workspaceId) {
     layout[kRailExpanded] = false;
     layout[kRightCollapsed] = false;
     layout[kSections] = QJsonObject();
+    layout[kSurfaceMode] = QStringLiteral("split");
+    // UV: a superfície 2D é o foco (vista 3D com 38%); PAINT divide 45/55.
+    layout[kSurfaceRatio] = workspaceId == QLatin1String("UV") ? 0.38 : 0.45;
     layout[QStringLiteral("version")] = kSchemaVersion;
     layout[QStringLiteral("user_modified")] = false;
     return layout;
@@ -65,6 +68,10 @@ QJsonObject PetuniaLayoutStore::sanitized(const QJsonObject &raw, const QString 
     base[kDrawerOpen] = raw.value(kDrawerOpen).toBool(base[kDrawerOpen].toBool());
     base[kRailExpanded] = raw.value(kRailExpanded).toBool(false);
     base[kRightCollapsed] = raw.value(kRightCollapsed).toBool(false);
+    const QString surface = raw.value(kSurfaceMode).toString();
+    if (surface == QLatin1String("3d") || surface == QLatin1String("split") || surface == QLatin1String("2d"))
+        base[kSurfaceMode] = surface;
+    base[kSurfaceRatio] = clampReal(raw.value(kSurfaceRatio), base[kSurfaceRatio].toDouble(), 0.15, 0.85);
     QJsonObject sections;
     const auto rawSections = raw.value(kSections).toObject();
     for (auto it = rawSections.constBegin(); it != rawSections.constEnd(); ++it) {

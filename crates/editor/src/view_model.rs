@@ -1985,6 +1985,20 @@ impl ShellViewModel {
     }
 }
 
+/// Teto de linhas de ilha publicadas: malhas hostis não inflam o snapshot.
+pub const UV_ISLAND_ROWS_MAX: usize = 512;
+
+/// Uma ilha UV na Estrutura: índice estável na ordem de `Mesh::uv_islands`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UvIslandRowModel {
+    pub index: usize,
+    pub face_count: usize,
+    /// Fração da área UV 0..1 ocupada pelo retângulo da ilha.
+    pub area: f32,
+    /// Todas as faces da ilha estão na seleção UV.
+    pub selected: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UvEditorModel {
     /// SVG-like Path commands for UV mesh wireframe / Comandos SVG-like para malha de arame UV
@@ -2003,6 +2017,9 @@ pub struct UvEditorModel {
     pub uv_selected_count: usize,
     /// `true` quando a malha tem mais faces do que o editor desenha.
     pub truncated: bool,
+    /// Ilhas UV da malha ativa (lista da Estrutura no workspace UV), limitada
+    /// a `UV_ISLAND_ROWS_MAX` linhas.
+    pub islands: Vec<UvIslandRowModel>,
 }
 
 /// Feedback visual da seleção na viewport, projetado para `Path` do Slint.

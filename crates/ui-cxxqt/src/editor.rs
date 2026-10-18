@@ -1215,6 +1215,10 @@ fn integer(v: &Value, key: &str) -> Result<i64, String> {
         .filter(|v| (-1_000_000..=1_000_000).contains(v))
         .ok_or_else(|| format!("Inteiro inválido: {key}"))
 }
+/// Índice não negativo (linhas de lista publicadas pelo snapshot).
+fn index(v: &Value, key: &str) -> Result<usize, String> {
+    usize::try_from(integer(v, key)?).map_err(|_| format!("Índice inválido: {key}"))
+}
 fn boolean(v: &Value, key: &str) -> Result<bool, String> {
     v[key]
         .as_bool()
@@ -1740,6 +1744,7 @@ fn dispatch_controller(
             b.uv_editor_click(number(v, "u")?, number(v, "v")?, boolean(v, "extend")?)
         }
         "uv_equalize_texel_density" => b.uv_equalize_texel_density(),
+        "uv_select_island" => b.uv_select_island(index(v, "index")?, boolean(v, "extend")?),
         "uv_move_selected" => b.uv_move_selected(number(v, "du")?, number(v, "dv")?),
         "uv_rotate_selected" => b.uv_rotate_selected(number(v, "degrees")?),
         "uv_scale_selected" => b.uv_scale_selected(number(v, "factor")?),

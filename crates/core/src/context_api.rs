@@ -662,6 +662,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn uv_select_faces(&mut self, faces: &[usize], extend: bool) -> bool {
+        self.in_context(|ctx| ctx.uv_select_faces(faces, extend))
+    }
+
+    #[inline]
     pub fn set_uv_sync(&mut self, enabled: bool) {
         self.in_context(|ctx| ctx.set_uv_sync(enabled))
     }

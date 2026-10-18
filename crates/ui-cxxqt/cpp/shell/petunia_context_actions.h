@@ -24,7 +24,9 @@ class PetuniaContextActions : public QFrame {
     /// Ações visíveis na barra (em destaque), por id.
     QStringList primaryIds() const;
     /// Largura necessária com texto; o host compacta (só ícones) se faltar espaço.
-    int fullWidth() const { return m_fullWidth; }
+    /// Largura com rótulos. Medida na hora enquanto não está compacta (o estilo do
+    /// tema já foi aplicado); em modo compacto vale a última medida com rótulos.
+    int fullWidth() const;
     void setCompact(bool compact);
     bool compact() const { return m_compact; }
     /// Oculta a barra enquanto uma operação (HUD) está em curso.

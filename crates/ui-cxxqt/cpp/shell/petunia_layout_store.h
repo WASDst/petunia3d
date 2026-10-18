@@ -36,6 +36,9 @@ class PetuniaLayoutStore {
     static constexpr const char *kRailExpanded = "rail_expanded";
     static constexpr const char *kRightCollapsed = "right_collapsed";
     static constexpr const char *kSections = "sections";
+    /// PAINT/UV: "3d" | "split" | "2d" e a fração da largura dada à vista 3D.
+    static constexpr const char *kSurfaceMode = "surface_mode";
+    static constexpr const char *kSurfaceRatio = "surface_ratio";
 
   private:
     QString key(const QString &workspaceId) const;

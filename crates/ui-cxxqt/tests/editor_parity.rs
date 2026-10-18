@@ -671,3 +671,75 @@ fn decal_gizmo_mode_drives_the_viewport_drag() {
             .is_err()
     );
 }
+
+/// V03: a Estrutura do workspace UV lista as ilhas publicadas pelo snapshot e
+/// seleciona uma ilha inteira (substituindo ou acrescentando) pelo transporte.
+#[test]
+fn uv_structure_lists_islands_and_selects_them_by_index() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"UV"}));
+    request(&mut e, json!({"action":"command","id":"uv.unwrap_auto"}));
+    let islands = |e: &QtEditor| {
+        e.snapshot()["uv_editor"]["islands"]
+            .as_array()
+            .cloned()
+            .unwrap()
+    };
+    let rows = islands(&e);
+    assert!(
+        rows.len() >= 2,
+        "desdobramento automático do cubo gera várias ilhas: {rows:?}"
+    );
+    assert_eq!(
+        rows.len() as u64,
+        e.snapshot()["uv_editor"]["island_count"].as_u64().unwrap(),
+        "lista e contador vêm da mesma derivação"
+    );
+
+    request(
+        &mut e,
+        json!({"action":"uv_select_island","index":0,"extend":false}),
+    );
+    let rows = islands(&e);
+    assert_eq!(rows[0]["selected"], json!(true));
+    assert!(rows[1..].iter().all(|row| row["selected"] == json!(false)));
+    assert_eq!(
+        e.snapshot()["uv_editor"]["uv_selected_count"],
+        rows[0]["face_count"],
+        "a ilha inteira entra na seleção UV"
+    );
+
+    request(
+        &mut e,
+        json!({"action":"uv_select_island","index":1,"extend":true}),
+    );
+    let rows = islands(&e);
+    assert_eq!(
+        (rows[0]["selected"].clone(), rows[1]["selected"].clone()),
+        (json!(true), json!(true))
+    );
+
+    request(
+        &mut e,
+        json!({"action":"uv_select_island","index":0,"extend":false}),
+    );
+    assert_eq!(
+        islands(&e)[1]["selected"],
+        json!(false),
+        "sem extend substitui"
+    );
+
+    // Entrada hostil: índice fora da malha ou negativo não altera a seleção nem entra em pânico.
+    let before = islands(&e);
+    let _ = e.request(&json!({"action":"uv_select_island","index":100000,"extend":false}));
+    assert!(
+        e.request(&json!({"action":"uv_select_island","index":-1,"extend":false}))
+            .is_err()
+    );
+    assert!(
+        e.request(&json!({"action":"uv_select_island","index":0}))
+            .is_err(),
+        "extend é obrigatório"
+    );
+    assert_eq!(islands(&e), before);
+}

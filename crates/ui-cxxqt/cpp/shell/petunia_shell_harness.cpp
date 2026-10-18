@@ -24,6 +24,7 @@
 #include "petunia_structure_panel.h"
 #include "petunia_tool_rail.h"
 #include "petunia_viewport_header.h"
+#include "petunia_workspace_sections.h"
 
 #include <QAbstractButton>
 #include <QAccessible>
@@ -35,8 +36,10 @@
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QItemSelectionModel>
 #include <QJsonObject>
 #include <QKeyEvent>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QSettings>
 #include <QSplitter>
@@ -63,6 +66,34 @@ struct Harness {
 void settle(int rounds = 4) {
     for (int i = 0; i < rounds; ++i)
         QCoreApplication::processEvents(QEventLoop::AllEvents, 30);
+}
+
+/// Gaveta recolhida devolve a altura à superfície; ações contextuais cabem na vista.
+void checkSurfaceGeometry(Harness &h, PetuniaShellWindow &window, const QString &ws) {
+    auto *drawer = window.drawerRegion();
+    const int column = drawer->parentWidget() ? drawer->parentWidget()->height() : 0;
+    h.add("drawer:" + ws + ":collapsed-returns-space",
+          drawer->isOpen() ||
+              (drawer->height() <= drawer->barHeight() + 4 && drawer->geometry().bottom() >= column - 4),
+          QStringLiteral("open=%1 h=%2 bar=%3 bottom=%4 column=%5 surface=%6")
+              .arg(drawer->isOpen())
+              .arg(drawer->height())
+              .arg(drawer->barHeight())
+              .arg(drawer->geometry().bottom())
+              .arg(column)
+              .arg(window.surfaceSplitter()->height()));
+    auto *context = window.contextActions();
+    const bool fits = !context->isVisible() ||
+                      (context->parentWidget() && context->parentWidget()->rect().contains(context->geometry()));
+    h.add("context:" + ws + ":fits-inside-view", fits,
+          context->parentWidget() ? QStringLiteral("bar=%1,%2 %3x%4 view=%5x%6")
+                                        .arg(context->x())
+                                        .arg(context->y())
+                                        .arg(context->width())
+                                        .arg(context->height())
+                                        .arg(context->parentWidget()->width())
+                                        .arg(context->parentWidget()->height())
+                                  : QStringLiteral("sem pai"));
 }
 
 void sendKey(QWidget *target, int key, Qt::KeyboardModifiers mods = Qt::NoModifier) {
@@ -345,7 +376,49 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(4);
         h.add("paint:add-layer-updates-structure", window.structure()->rowCount() > baseLayers,
               QStringLiteral("%1 -> %2").arg(baseLayers).arg(window.structure()->rowCount()));
+        checkSurfaceGeometry(h, window, "PAINT");
         h.shot(&window, "shell_PAINT_v2");
+
+        // F7: seções nativas de PAINT no lugar das abas legadas.
+        {
+            const auto ids = window.properties()->visibleSectionIds();
+            h.add("paint:native-property-sections",
+                  ids.contains("paint.brush") && ids.contains("paint.layer") && ids.contains("paint.projection") &&
+                      !ids.contains("transform") && !ids.contains("uv.unwrap"),
+                  ids.join(","));
+        }
+        // Superfície 3D | Dividido | 2D: escolha do usuário, persistida por workspace.
+        {
+            auto *modes = window.viewportHeader()->surfaceMode();
+            QWidget *canvas = window.workspaceCanvas("PAINT");
+            h.add("surface:header-offers-modes-in-paint",
+                  modes->isVisibleTo(&window) && modes->button("3d") && modes->button("split") && modes->button("2d"));
+            if (modes->button("2d") && canvas) {
+                modes->button("2d")->click();
+                settle(4);
+                h.add("surface:2d-hides-3d-view", canvas->isVisible() && !window.viewport()->isVisible());
+                modes->button("3d")->click();
+                settle(4);
+                h.add("surface:3d-hides-canvas", !canvas->isVisible() && window.viewport()->isVisible());
+                modes->button("2d")->click();
+                settle(4);
+                c->request("workspace", {{"id", "POLY"}});
+                settle(6);
+                window.syncNow();
+                h.add("surface:modeling-has-no-surface-modes", !modes->isVisibleTo(&window) &&
+                                                                   window.viewport()->isVisible());
+                c->request("workspace", {{"id", "PAINT"}});
+                settle(6);
+                window.syncNow();
+                settle(2);
+                h.add("surface:mode-persists-per-workspace",
+                      modes->current() == "2d" && canvas->isVisible() && !window.viewport()->isVisible(),
+                      modes->current());
+                modes->button("split")->click();
+                settle(4);
+                h.add("surface:split-shows-both", canvas->isVisible() && window.viewport()->isVisible());
+            }
+        }
 
         // UV (U17): Canvas UV dominante (alvo >= 55% da superfície).
         c->request("workspace", {{"id", "UV"}});
@@ -358,6 +431,34 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
                                    ? (double(sizes[0]) / double(sizes[0] + sizes[1]))
                                    : 0.0;
         h.add("uv:canvas-is-dominant", uvRatio >= 0.55, QString::number(uvRatio, 'f', 2));
+        {
+            const auto ids = window.properties()->visibleSectionIds();
+            h.add("uv:native-property-sections",
+                  ids.contains("uv.unwrap") && ids.contains("uv.pack") && !ids.contains("paint.brush"), ids.join(","));
+        }
+        // V03: Estrutura lista as ilhas UV; selecionar a linha seleciona a ilha no documento.
+        c->request("command", {{"id", "uv.unwrap_auto"}});
+        settle(4);
+        window.syncNow();
+        settle(2);
+        {
+            const auto islands = c->state()["uv_editor"].toObject()["islands"].toArray();
+            h.add("uv:structure-lists-islands", islands.size() >= 2 && window.structure()->rowCount() == islands.size(),
+                  QStringLiteral("%1 linhas / %2 ilhas").arg(window.structure()->rowCount()).arg(islands.size()));
+            auto *tree = window.structure()->tree();
+            if (tree->model()->rowCount() > 0) {
+                tree->selectionModel()->select(tree->model()->index(0, 0),
+                                               QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+                settle(4);
+                window.syncNow();
+                const auto after = c->state()["uv_editor"].toObject()["islands"].toArray();
+                h.add("uv:selecting-island-row-selects-uv",
+                      !after.isEmpty() && after[0].toObject()["selected"].toBool() &&
+                          c->state()["uv_editor"].toObject()["uv_selected_count"].toInt() ==
+                              after[0].toObject()["face_count"].toInt());
+            }
+        }
+        checkSurfaceGeometry(h, window, "UV");
         h.shot(&window, "shell_UV_v2");
 
         // ANIMATE (U18): Gaveta tem aba Linha do tempo e Estrutura lista rig / ossos ao adicionar criatura.
@@ -374,6 +475,41 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(4);
         const int bonesCount = window.structure()->rowCount();
         h.add("animate:structure-shows-rig-bones", bonesCount >= 1, QString::number(bonesCount));
+        {
+            const auto ids = window.properties()->visibleSectionIds();
+            h.add("animate:native-property-sections",
+                  ids.contains("animate.motion") && ids.contains("animate.creature") && !ids.contains("transform"),
+                  ids.join(","));
+        }
+        // Transporte da linha do tempo: tocar/pausar pelo botão e rótulo de quadro.
+        if (auto *page = window.timelinePage()) {
+            window.drawerRegion()->setOpen(true);
+            settle(4);
+            h.add("timeline:transport-visible-in-drawer", page->playButton()->isVisibleTo(&window));
+            // Tocar exige um Motion: usa o primeiro do catálogo publicado.
+            const auto catalog = c->state()["animate"].toObject()["catalog"].toArray();
+            if (!c->flag("animate.has_motion") && !catalog.isEmpty()) {
+                c->request("animate", {{"id", "add-motion"}, {"arg", catalog.first().toObject()["id"]}});
+                settle(4);
+                window.syncNow();
+            }
+            const bool before = c->flag("animate.playing");
+            page->playButton()->click();
+            settle(4);
+            window.syncNow();
+            const bool toggled = c->flag("animate.playing") != before;
+            page->playButton()->click();
+            settle(4);
+            window.syncNow();
+            h.add("timeline:play-button-toggles-playback", toggled && c->flag("animate.playing") == before);
+            h.add("timeline:key-button-explains-when-disabled",
+                  page->keyButton()->isEnabled() || !page->keyButton()->toolTip().isEmpty());
+            window.drawerRegion()->setOpen(false);
+            settle(2);
+        } else {
+            h.add("timeline:transport-visible-in-drawer", false, "sem página");
+        }
+        checkSurfaceGeometry(h, window, "ANIMATE");
         h.shot(&window, "shell_ANIMATE_v2");
 
         // Retorna a POLY para manter a baseline das verificações subsequentes
@@ -381,6 +517,40 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(8);
         window.syncNow();
         settle(4);
+    }
+
+    // U07: menu de contexto da vista por teclado (Shift+F10) com rótulos traduzidos.
+    {
+        QStringList texts;
+        bool opened = false;
+        QTimer::singleShot(120, [&] {
+            if (auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
+                opened = true;
+                for (auto *action : menu->actions())
+                    if (!action->isSeparator())
+                        texts << action->text();
+                menu->close();
+            }
+        });
+        window.viewport()->setFocus();
+        settle(2);
+        QKeyEvent shiftF10(QEvent::KeyPress, Qt::Key_F10, Qt::ShiftModifier);
+        QCoreApplication::sendEvent(QApplication::focusWidget() ? QApplication::focusWidget() : window.viewport(),
+                                    &shiftF10);
+        settle(4);
+        h.add("viewport:shift-f10-opens-context-menu", opened && !texts.isEmpty(), texts.join(" | "));
+        // Fechar o menu devolve o foco ao invocador (U07); a janela segue ativa.
+        window.activateWindow();
+        settle(4);
+        h.add("viewport:context-menu-returns-focus", QApplication::focusWidget() == window.viewport(),
+              QApplication::focusWidget() ? QString::fromLatin1(QApplication::focusWidget()->metaObject()->className())
+                                          : QStringLiteral("sem foco"));
+        bool rawIds = false;
+        for (const auto &text : texts) {
+            const QString label = text.section(QLatin1Char('\t'), 0, 0);
+            rawIds |= label.contains(QLatin1Char('.')) || label.contains(QLatin1Char('_'));
+        }
+        h.add("viewport:context-menu-has-no-raw-ids", !texts.isEmpty() && !rawIds, texts.join(" | "));
     }
 
     // O05: materiais como nós — receita criada, ligada, editada e desfeita pela GUI.

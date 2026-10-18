@@ -1,4 +1,6 @@
 #include "petunia_recovery_dialog.h"
+#include "petunia_theme.h"
+#include <QFrame>
 #include <QGraphicsDropShadowEffect>
 
 PetuniaRecoveryDialog::PetuniaRecoveryDialog(QWidget *parent)
@@ -6,97 +8,71 @@ PetuniaRecoveryDialog::PetuniaRecoveryDialog(QWidget *parent)
     setupUi();
 }
 
+// Cores, fontes e alvos vêm do tema: "Recuperar" é a ação primária e
+// "Descartar" usa o papel de perigo (irreversível), sem literais de cor.
 void PetuniaRecoveryDialog::setupUi() {
-    resize(480, 240);
-    setMinimumSize(280, 220);
+    const auto &theme = PetuniaTheme::instance();
+    setWindowTitle(tr("Recuperar sessão"));
+    resize(theme.scaled(480), theme.scaled(240));
+    setMinimumSize(theme.scaled(280), theme.scaled(220));
     setAttribute(Qt::WA_TranslucentBackground);
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setContentsMargins(theme.space(3), theme.space(3), theme.space(3), theme.space(3));
 
-    auto *card = new QWidget(this);
-    card->setObjectName(QStringLiteral("RecoveryCard"));
-    card->setStyleSheet(
-        QStringLiteral("#RecoveryCard { background-color: #202020; border: 1px "
-                       "solid #454545; border-radius: 8px; }"));
-
+    auto *card = new QFrame(this);
+    card->setProperty("role", QStringLiteral("card"));
     auto *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(24);
-    shadow->setColor(QColor(0, 0, 0, 180));
+    shadow->setColor(QColor(0, 0, 0, 160));
     shadow->setOffset(0, 6);
     card->setGraphicsEffect(shadow);
 
     auto *cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(20, 20, 20, 20);
-    cardLayout->setSpacing(12);
+    cardLayout->setContentsMargins(theme.space(5), theme.space(5), theme.space(5), theme.space(5));
+    cardLayout->setSpacing(theme.space(3));
 
-    m_titleLabel =
-        new QLabel(QStringLiteral("Recuperar Sessão Não Salva"), card);
-    m_titleLabel->setStyleSheet(
-        QStringLiteral("font-size: 16px; font-weight: bold; color: #e96a00;"));
+    m_titleLabel = new QLabel(tr("Recuperar sessão não salva"), card);
+    m_titleLabel->setProperty("role", QStringLiteral("title"));
     cardLayout->addWidget(m_titleLabel);
 
-    m_bodyLabel =
-        new QLabel(QStringLiteral("Foi detectado um salvamento automático de "
-                                  "uma sessão anterior interrompida."),
-                   card);
-    m_bodyLabel->setStyleSheet(
-        QStringLiteral("font-size: 12px; color: #cccccc;"));
+    m_bodyLabel = new QLabel(tr("Foi encontrado um salvamento automático de uma sessão anterior interrompida."), card);
     m_bodyLabel->setWordWrap(true);
     cardLayout->addWidget(m_bodyLabel);
 
-    m_detailLabel = new QLabel(
-        QStringLiteral(
-            "Deseja restaurar as modificações ou descartar a recuperação?"),
-        card);
-    m_detailLabel->setStyleSheet(
-        QStringLiteral("font-size: 11px; color: #888888;"));
+    m_detailLabel = new QLabel(tr("Deseja restaurar as modificações ou descartar a recuperação?"), card);
+    m_detailLabel->setProperty("role", QStringLiteral("muted"));
     m_detailLabel->setWordWrap(true);
     cardLayout->addWidget(m_detailLabel);
-
     cardLayout->addStretch();
 
     auto *buttonsLayout = new QHBoxLayout();
-    buttonsLayout->setSpacing(8);
+    buttonsLayout->setSpacing(theme.space(2));
 
-    m_discardBtn = new QPushButton(QStringLiteral("Descartar"), card);
-    m_discardBtn->setFixedHeight(32);
-    m_discardBtn->setCursor(Qt::PointingHandCursor);
-    m_discardBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #381a1a; color: "
-                       "#ff6b6b; font-size: 12px; border: 1px solid #6b2a2a; "
-                       "border-radius: 4px; padding: 0 14px; }"
-                       "QPushButton:hover { background-color: #4d2222; }"));
+    m_discardBtn = new QPushButton(tr("Descartar"), card);
+    m_discardBtn->setProperty("role", QStringLiteral("danger"));
+    m_discardBtn->setMinimumHeight(theme.controlHeight());
+    m_discardBtn->setToolTip(tr("Apaga o salvamento automático; não pode ser desfeito"));
     connect(m_discardBtn, &QPushButton::clicked, this, [this]() {
         emit discardRequested();
         reject();
     });
     buttonsLayout->addWidget(m_discardBtn);
-
     buttonsLayout->addStretch();
 
-    m_keepBtn = new QPushButton(QStringLiteral("Manter"), card);
-    m_keepBtn->setFixedHeight(32);
-    m_keepBtn->setCursor(Qt::PointingHandCursor);
-    m_keepBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #292929; color: "
-                       "#cccccc; font-size: 12px; border: 1px solid #404040; "
-                       "border-radius: 4px; padding: 0 14px; }"
-                       "QPushButton:hover { background-color: #333333; }"));
+    m_keepBtn = new QPushButton(tr("Decidir depois"), card);
+    m_keepBtn->setMinimumHeight(theme.controlHeight());
+    m_keepBtn->setToolTip(tr("Mantém o salvamento automático para recuperar mais tarde"));
     connect(m_keepBtn, &QPushButton::clicked, this, [this]() {
         emit keepRequested();
         accept();
     });
     buttonsLayout->addWidget(m_keepBtn);
 
-    m_recoverBtn = new QPushButton(QStringLiteral("Recuperar"), card);
-    m_recoverBtn->setFixedHeight(32);
-    m_recoverBtn->setCursor(Qt::PointingHandCursor);
-    m_recoverBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #b58cff; color: "
-                       "#121212; font-weight: bold; font-size: 12px; border: "
-                       "none; border-radius: 4px; padding: 0 16px; }"
-                       "QPushButton:hover { background-color: #c9abff; }"));
+    m_recoverBtn = new QPushButton(tr("Recuperar"), card);
+    m_recoverBtn->setProperty("role", QStringLiteral("primary"));
+    m_recoverBtn->setMinimumHeight(theme.controlHeight());
+    m_recoverBtn->setDefault(true);
     connect(m_recoverBtn, &QPushButton::clicked, this, [this]() {
         emit recoverRequested();
         accept();
@@ -105,6 +81,8 @@ void PetuniaRecoveryDialog::setupUi() {
 
     cardLayout->addLayout(buttonsLayout);
     mainLayout->addWidget(card);
+    // Ação segura com foco inicial: Enter recupera, nunca descarta.
+    m_recoverBtn->setFocus();
 }
 
 void PetuniaRecoveryDialog::setSessionDetails(const QString &title,

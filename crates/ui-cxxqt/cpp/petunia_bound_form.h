@@ -1,11 +1,14 @@
 #pragma once
 #include "petunia_editor_api.h"
+#include <QColor>
 #include <QFormLayout>
 #include <QImage>
 #include <QJsonObject>
 #include <QListWidget>
 #include <QWidget>
 #include <functional>
+
+class QPushButton;
 
 /// Imagem do documento (referências, prefabs) lida da ponte do editor.
 QImage petuniaImage(const QString &kind, const QString &id);
@@ -48,6 +51,11 @@ class PetuniaBoundForm : public QWidget {
                 QJsonObject args = {});
     void text(QFormLayout *, const QString &label, const QString &key,
               const QString &action, const QString &arg, QJsonObject args = {});
+    /// Motivo mostrado quando o último controle criado fica desabilitado
+    /// pela sua chave de habilitação (dica + descrição acessível).
+    void disabledReason(const QString &reason);
+    /// Pinta a amostra de um campo de cor (borda do tema); ignora cor inválida.
+    static void paintSwatch(QPushButton *button, const QColor &color);
     void colorField(QFormLayout *, const QString &label, const QString &key,
                     const QString &action, const QString &arg, QJsonObject args = {});
     void xyz(QFormLayout *, const QString &label, const QString &keyPrefix,

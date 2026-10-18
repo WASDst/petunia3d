@@ -37,6 +37,8 @@ class PetuniaEditorCanvas : public QWidget {
   private:
     QRectF canvasRect() const;
     QPointF normalized(const QPointF &) const;
+    /// Zoom mantendo `anchor` (px do widget) sobre o mesmo ponto do canvas.
+    void zoomAt(qreal factor, const QPointF &anchor);
     void stroke(const QPointF &, int phase);
     /// Relê o raster da camada ativa do documento (nunca do widget).
     bool reloadCanvasImage();
@@ -56,36 +58,19 @@ class PetuniaEditorCanvas : public QWidget {
     qreal m_pressure{1.0};
 };
 
-/// Native widgets read the shared DTO; every control sends a typed adapter
-/// action.
+/// Formulários dos diálogos do host (Preferências, Referências, Biblioteca)
+/// em abas. Os workspaces usam seções nativas do Shell v2
+/// (`petunia_workspace_sections`); o canvas 2D é `PetuniaEditorCanvas`.
 class PetuniaEditorPanel : public PetuniaBoundForm {
     Q_OBJECT
   public:
     explicit PetuniaEditorPanel(const QString &mode, QWidget *parent = nullptr);
-    PetuniaEditorCanvas *canvas() const { return m_canvas; }
-    /// Shell v2: entrega o canvas e as abas para regiões próprias do shell. O painel
-    /// continua sendo o motor de sincronização (`sync`) dos dois.
-    QWidget *takeCanvas();
-    QTabWidget *takeTabs();
-
-  protected:
-    void afterSync(const QJsonObject &state) override;
 
   private:
     QFormLayout *page(const QString &title);
-    void setupModel();
-    void setupPaint();
-    void setupPaintGizmo();
-    void setupUv();
-    void setupAnimate();
     void setupSettings();
     void setupReferences();
     void setupAssets();
-    void updateDynamic(const QJsonObject &state);
     QString m_mode;
     QTabWidget *m_tabs{nullptr};
-    PetuniaEditorCanvas *m_canvas{nullptr};
-    QComboBox *m_gizmoAxisCombo{nullptr};
-    QFormLayout *m_dynamic{nullptr};
-    QString m_dynamicSignature;
 };

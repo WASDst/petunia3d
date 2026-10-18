@@ -49,6 +49,15 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     });
     m_layout->addWidget(m_snap);
     m_layout->addWidget(m_proportional);
+    m_surfaceMode = new PetuniaSegmented(this);
+    m_surfaceMode->setItems({{"3d", tr("3D"), tr("Só a vista 3D"), QStringLiteral("view_perspective")},
+                             {"split", tr("Dividido"), tr("Vista 3D e superfície 2D lado a lado"),
+                              QStringLiteral("split_view")},
+                             {"2d", tr("2D"), tr("Só a superfície 2D (maximizada)"), QStringLiteral("frame_all")}});
+    m_surfaceMode->setGroupLabel(tr("Superfície de trabalho"));
+    m_surfaceMode->setCurrent(QStringLiteral("split"));
+    connect(m_surfaceMode, &PetuniaSegmented::activated, this, &PetuniaViewportHeader::surfaceModeRequested);
+    m_layout->addWidget(m_surfaceMode);
     m_layout->addStretch(1);
 
     m_projection = new PetuniaSegmented(this);
@@ -228,6 +237,11 @@ void PetuniaViewportHeader::resizeEvent(QResizeEvent *event) {
     applyCompact(event->size().width() < kCompactBelow);
 }
 
+void PetuniaViewportHeader::setSurfaceMode(const QString &mode) {
+    const QSignalBlocker block(m_surfaceMode);
+    m_surfaceMode->setCurrent(mode);
+}
+
 void PetuniaViewportHeader::sync(const QJsonObject &state) {
     m_syncing = true;
     const bool modeling = state["workspace"].toString() == QLatin1String("Model");
@@ -293,5 +307,6 @@ void PetuniaViewportHeader::sync(const QJsonObject &state) {
     }
     m_overlays->setVisible(true);
     m_split->setVisible(modeling || uv || paint);
+    m_surfaceMode->setVisible(uv || paint);
     m_syncing = false;
 }

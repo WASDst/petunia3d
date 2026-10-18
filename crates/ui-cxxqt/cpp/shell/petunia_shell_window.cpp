@@ -16,14 +16,18 @@
 #include "petunia_operation_hud.h"
 #include "petunia_properties_panel.h"
 #include "petunia_region_navigator.h"
+#include "petunia_segmented.h"
 #include "petunia_status_bar.h"
 #include "petunia_structure_panel.h"
 #include "petunia_tool_rail.h"
 #include "petunia_viewport_header.h"
+#include "petunia_workspace_sections.h"
 
+#include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QContextMenuEvent>
 #include <QComboBox>
 #include <QDialog>
 #include <QFileDialog>
@@ -90,6 +94,8 @@ PetuniaShellWindow::~PetuniaShellWindow() {
         delete m_nodePage;
     if (m_assetsHost && !m_assetsHost->parentWidget())
         delete m_assetsHost;
+    if (m_timelinePage && !m_timelinePage->parentWidget())
+        delete m_timelinePage;
 }
 
 void PetuniaShellWindow::buildUi() {
@@ -193,7 +199,7 @@ void PetuniaShellWindow::buildUi() {
     setCentralWidget(central);
 
     m_navigator = new PetuniaRegionNavigator(this);
-    m_navigator->setRegions({m_appBar, m_rail, m_viewport, m_structure, m_properties, m_drawer, m_context});
+    updateRegions();
 
     connect(m_appBar, &PetuniaAppBar::localAction, this, &PetuniaShellWindow::triggerLocalAction);
     connect(m_structure, &PetuniaStructurePanel::createRequested, this,
@@ -215,8 +221,13 @@ void PetuniaShellWindow::buildUi() {
             scheduleLayoutSave();
         }
     });
-    for (auto *splitter : {m_body, m_middle, m_right})
+    for (auto *splitter : {m_body, m_middle, m_right, m_surface})
         connect(splitter, &QSplitter::splitterMoved, this, [this] { scheduleLayoutSave(); });
+    connect(m_header, &PetuniaViewportHeader::surfaceModeRequested, this, [this](const QString &mode) {
+        auto layout = m_layoutStore.load(m_workspace);
+        applySurfaceMode(mode, layout[PetuniaLayoutStore::kSurfaceRatio].toDouble());
+        scheduleLayoutSave();
+    });
 }
 
 int PetuniaShellWindow::focusedRegion() const {
@@ -293,8 +304,12 @@ void PetuniaShellWindow::onState(const QJsonObject &state) {
     m_context->setSuppressed(!m_hud->activeSections().isEmpty());
     m_context->sync(state);
     m_status->sync(state);
-    if (auto *panel = m_specialized.value(workspace))
-        panel->sync(state);
+    if (workspace == QLatin1String("ANIMATE") && m_timelinePage) {
+        m_timelineCanvas->sync(state);
+        m_timelinePage->sync(state);
+    } else if (auto *canvas = m_canvases.value(workspace)) {
+        canvas->sync(state);
+    }
 
     m_viewport->setExternalState(state);
     m_viewport->update();
@@ -321,6 +336,8 @@ void PetuniaShellWindow::retranslateUi() {
     // de destruir a central e libera cada um exatamente uma vez.
     for (auto *canvas : std::as_const(m_canvases))
         canvas->setParent(nullptr);
+    if (m_timelinePage)
+        m_timelinePage->setParent(nullptr);
     if (m_assetsHost)
         m_assetsHost->setParent(nullptr);
     if (m_nodePage)
@@ -328,12 +345,13 @@ void PetuniaShellWindow::retranslateUi() {
     auto *old = takeCentralWidget();
     delete old;
     qDeleteAll(m_canvases);
-    qDeleteAll(m_specialized);
+    delete m_timelinePage; // leva o dope sheet junto
+    m_timelinePage = nullptr;
+    m_timelineCanvas = nullptr;
     delete m_assetsHost;
     delete m_nodePage;
     m_nodePage = nullptr;
     m_canvases.clear();
-    m_specialized.clear();
     m_assetsHost = nullptr;
     m_assetsPanel = nullptr;
     m_workspace.clear();
@@ -350,8 +368,8 @@ void PetuniaShellWindow::onWorkspaceChanged(const QString &workspace) {
 
     m_drawer->clearPages();
     if (workspace == QLatin1String("ANIMATE")) {
-        if (auto *timeline = m_canvases.value(QStringLiteral("ANIMATE")))
-            m_drawer->addPage(QStringLiteral("timeline"), tr("Linha do tempo"), QStringLiteral("timeline"), timeline);
+        if (m_timelinePage)
+            m_drawer->addPage(QStringLiteral("timeline"), tr("Linha do tempo"), QStringLiteral("timeline"), m_timelinePage);
     } else {
         if (!m_assetsHost) {
             m_assetsHost = new QWidget(this);
@@ -368,20 +386,38 @@ void PetuniaShellWindow::onWorkspaceChanged(const QString &workspace) {
     applyLayout(workspace);
 }
 
+QWidget *PetuniaShellWindow::workspaceCanvas(const QString &workspace) const {
+    if (workspace == QLatin1String("ANIMATE"))
+        return m_timelineCanvas;
+    return m_canvases.value(workspace);
+}
+
+/// Superfícies 2D nativas do workspace: canvas de pintura e editor UV vivem na
+/// área de trabalho; o dope sheet do ANIMATE fica na página da linha do tempo.
+/// As propriedades desses workspaces são seções nativas (Propriedades), sem o
+/// painel legado.
 void PetuniaShellWindow::ensureSpecialized(const QString &workspace) {
-    if (workspace != QLatin1String("PAINT") && workspace != QLatin1String("UV") && workspace != QLatin1String("ANIMATE"))
+    auto refreshOnEdit = [this](PetuniaEditorCanvas *canvas) {
+        connect(canvas, &PetuniaEditorCanvas::editorChanged, this, [this] { m_controller.refresh(); });
+    };
+    if (workspace == QLatin1String("ANIMATE")) {
+        if (m_timelinePage)
+            return;
+        m_timelineCanvas = new PetuniaEditorCanvas(workspace, this);
+        refreshOnEdit(m_timelineCanvas);
+        m_timelinePage = new PetuniaTimelinePage(&m_controller, m_timelineCanvas, this);
+        m_timelinePage->hide();
+        m_timelineCanvas->sync(m_controller.state());
+        m_timelinePage->sync(m_controller.state());
         return;
-    if (m_specialized.contains(workspace))
+    }
+    if ((workspace != QLatin1String("PAINT") && workspace != QLatin1String("UV")) || m_canvases.contains(workspace))
         return;
-    auto *panel = new PetuniaEditorPanel(workspace, this);
-    panel->hide();
-    panel->setTransport([this](const QString &a, const QJsonObject &args) { return m_controller.request(a, args); });
-    m_specialized.insert(workspace, panel);
-    if (auto *canvas = panel->takeCanvas())
-        m_canvases.insert(workspace, canvas);
-    if (auto *tabs = panel->takeTabs())
-        m_properties->setHosted(workspace, tabs);
-    panel->sync(m_controller.state());
+    auto *canvas = new PetuniaEditorCanvas(workspace, this);
+    canvas->hide();
+    refreshOnEdit(canvas);
+    m_canvases.insert(workspace, canvas);
+    canvas->sync(m_controller.state());
 }
 
 void PetuniaShellWindow::arrangeSurface(const QString &workspace) {
@@ -389,21 +425,49 @@ void PetuniaShellWindow::arrangeSurface(const QString &workspace) {
         if (auto *canvas = m_canvases.value(id))
             if (canvas->parentWidget() == m_surface)
                 canvas->hide();
-    if (workspace == QLatin1String("PAINT")) {
+    m_viewArea->show();
+    if (workspace == QLatin1String("PAINT") || workspace == QLatin1String("UV")) {
         if (auto *canvas = m_canvases.value(workspace)) {
-            m_surface->insertWidget(1, canvas);
+            // PAINT: canvas à direita da vista; UV: editor à esquerda (foco principal).
+            m_surface->insertWidget(workspace == QLatin1String("UV") ? 0 : 1, canvas);
             canvas->show();
-            const int w = std::max(m_surface->width(), 800);
-            m_surface->setSizes({w * 45 / 100, w * 55 / 100});
-        }
-    } else if (workspace == QLatin1String("UV")) {
-        if (auto *canvas = m_canvases.value(workspace)) {
-            m_surface->insertWidget(0, canvas);
-            canvas->show();
-            const int w = std::max(m_surface->width(), 800);
-            m_surface->setSizes({w * 62 / 100, w * 38 / 100});
         }
     }
+    updateRegions();
+}
+
+void PetuniaShellWindow::applySurfaceMode(const QString &mode, double ratio) {
+    auto *canvas = m_canvases.value(m_workspace);
+    if (!canvas) {
+        m_viewArea->show();
+        return;
+    }
+    canvas->setVisible(mode != QLatin1String("3d"));
+    m_viewArea->setVisible(mode != QLatin1String("2d"));
+    if (mode == QLatin1String("split")) {
+        const int total = std::max(m_surface->width(), 800);
+        const int view = int(total * std::clamp(ratio, 0.15, 0.85));
+        // A ordem dos widgets no splitter muda por workspace (UV: editor primeiro).
+        QList<int> sizes;
+        for (int i = 0; i < m_surface->count(); ++i) {
+            auto *w = m_surface->widget(i);
+            sizes << (w == canvas ? total - view : w == m_viewArea ? view : (w->isVisible() ? w->width() : 0));
+        }
+        m_surface->setSizes(sizes);
+    }
+    m_header->setSurfaceMode(mode);
+    updateRegions();
+}
+
+void PetuniaShellWindow::updateRegions() {
+    // F6 percorre também a superfície 2D quando ela está visível.
+    QList<QWidget *> regions{m_appBar, m_rail};
+    if (m_viewArea->isVisible())
+        regions << m_viewport;
+    if (auto *canvas = m_canvases.value(m_workspace); canvas && canvas->isVisible())
+        regions << canvas;
+    regions << m_structure << m_properties << m_drawer << m_context;
+    m_navigator->setRegions(regions);
 }
 
 // ── Layout ──────────────────────────────────────────────────────────────────
@@ -423,6 +487,9 @@ void PetuniaShellWindow::applyLayout(const QString &workspace) {
     m_right->setVisible(!layout[PetuniaLayoutStore::kRightCollapsed].toBool());
     m_rail->setExpanded(layout[PetuniaLayoutStore::kRailExpanded].toBool());
     m_properties->applySectionStates(layout[PetuniaLayoutStore::kSections].toObject());
+    if (workspace == QLatin1String("PAINT") || workspace == QLatin1String("UV"))
+        applySurfaceMode(layout[PetuniaLayoutStore::kSurfaceMode].toString(),
+                         layout[PetuniaLayoutStore::kSurfaceRatio].toDouble());
 
     const bool open = layout[PetuniaLayoutStore::kDrawerOpen].toBool();
     const int drawerH = layout[PetuniaLayoutStore::kDrawerHeight].toInt();
@@ -436,6 +503,9 @@ void PetuniaShellWindow::applyLayout(const QString &workspace) {
     } else {
         m_drawer->setMinimumHeight(bar);
         m_drawer->setMaximumHeight(bar);
+        // O QSplitter guarda os tamanhos antigos: sem isto a altura da gaveta
+        // aberta vira um vão vazio abaixo da barra em vez de voltar à superfície.
+        m_middle->setSizes({std::max(0, m_middle->height() - bar), bar});
     }
     m_applyingLayout = false;
 }
@@ -455,10 +525,21 @@ void PetuniaShellWindow::captureLayout() {
     layout[PetuniaLayoutStore::kDrawerOpen] = m_drawer->isOpen();
     if (m_drawer->isOpen()) {
         const auto midSizes = m_middle->sizes();
-        if (midSizes.size() == 2 && midSizes[1] > 0)
+        // Logo após abrir, a gaveta ainda tem a altura da barra recolhida: essa
+        // medida não é a preferência do usuário e não pode sobrescrevê-la.
+        if (midSizes.size() == 2 && midSizes[1] >= m_drawer->barHeight() + 80)
             layout[PetuniaLayoutStore::kDrawerHeight] = midSizes[1];
     }
     layout[PetuniaLayoutStore::kSections] = m_properties->sectionStates();
+    if (m_workspace == QLatin1String("PAINT") || m_workspace == QLatin1String("UV")) {
+        layout[PetuniaLayoutStore::kSurfaceMode] = m_header->surfaceMode()->current();
+        auto *canvas = m_canvases.value(m_workspace);
+        if (canvas && canvas->isVisible() && m_viewArea->isVisible()) {
+            const int total = canvas->width() + m_viewArea->width();
+            if (total > 0)
+                layout[PetuniaLayoutStore::kSurfaceRatio] = double(m_viewArea->width()) / total;
+        }
+    }
     m_layoutStore.save(m_workspace, layout);
 }
 
@@ -793,6 +874,22 @@ bool PetuniaShellWindow::eventFilter(QObject *watched, QEvent *event) {
 
     if (key->key() == Qt::Key_F6) {
         m_navigator->cycle(key->modifiers() & Qt::ShiftModifier ? -1 : 1, QApplication::focusWidget());
+        return true;
+    }
+    // Shift+F10 abre o menu de contexto do widget com foco (como a tecla Menu).
+    if (key->key() == Qt::Key_F10 && (key->modifiers() & Qt::ShiftModifier)) {
+        QWidget *focus = QApplication::focusWidget();
+        if (!focus)
+            return true;
+        QWidget *receiver = focus;
+        QPoint pos = focus->rect().center();
+        if (auto *view = qobject_cast<QAbstractItemView *>(focus)) {
+            receiver = view->viewport();
+            const QRect item = view->visualRect(view->currentIndex());
+            pos = item.isValid() ? item.center() : receiver->rect().center();
+        }
+        QContextMenuEvent menu(QContextMenuEvent::Keyboard, pos, receiver->mapToGlobal(pos));
+        QCoreApplication::sendEvent(receiver, &menu);
         return true;
     }
     // Esc e Home pertencem à vista/canvas (cancelar operação, enquadrar).
