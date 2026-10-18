@@ -57,6 +57,10 @@ Regressões provadas por teste: o dissolver de arestas vizinhas gerava face com 
 
 Limites: `ICON_TOKENS.md` gerado saiu vazio, porque o gerador ainda procura o catálogo Slint removido; fica como tarefa separada. O teste `test_widgets_studio_window_creation` continua fora da rodada, como nos gates do AGENTS.md.
 
+### Correção posterior: gizmo parado ao mover a câmera (2026-10-18)
+
+Relato do usuário depois do commit `bbf2d941`: ao orbitar ou dar pan/zoom, o gizmo ficava na tela em vez de seguir o objeto. Mesma família do "fantasma": gizmo, pivô e 3D Cursor são projetados em pixels por Rust (`compute_gizmo`) e o shell v2 reaproveita o snapshot que a janela empurra só quando o editor muda (`m_externalState`). Gestos de câmera do próprio `PetuniaGlWidget` (órbita, pan, zoom, roda, ações do cubo) não geravam snapshot novo. Agora esses gestos marcam `m_cameraDirty` e `refreshOverlayState()` refaz o snapshot no próximo quadro. Teste de regressão no harness (`viewport:gizmo-follows-the-orbit-mid-drag` e `...-pan-mid-drag`): arrasto real do botão do meio (e Shift para pan), conferido **no meio do gesto**, comparando o overlay desenhado com um snapshot novo. Soltar o botão já refazia o estado, então checar só depois escondia o defeito (primeira versão do teste passava sem a correção; foi reescrita). Provado: sem a correção as duas verificações falham; com ela passam. O pivô e o 3D Cursor usam o mesmo snapshot e foram corrigidos junto. Limite: uma trava isolada do `cargo test` sob carga concorrente, sem causa identificada (7 execuções diretas do binário passaram).
+
 ## Risks
 
 - Grupos são `collections` de um nível: hierarquia aninhada com transformação herdada continua em G09.

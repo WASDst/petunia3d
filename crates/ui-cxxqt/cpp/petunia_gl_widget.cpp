@@ -209,10 +209,28 @@ void PetuniaGlWidget::paintEvent(QPaintEvent *) {
     drawOverlays(painter);
 }
 void PetuniaGlWidget::refreshOverlayState() {
-    if (m_shellChrome && m_hasExternalState)
+    if (m_shellChrome && m_hasExternalState) {
+        // O snapshot do shell só é refeito quando o editor muda. Gizmo, pivô e
+        // 3D Cursor são projetados em pixels pela câmera, então um gesto de
+        // câmera daqui precisa refazê-lo, senão eles ficam parados na tela
+        // enquanto a cena se move.
+        if (m_cameraDirty) {
+            const auto fresh = petuniaRequest("snapshot");
+            if (!fresh.isEmpty())
+                m_externalState = fresh;
+            m_cameraDirty = false;
+        }
         m_overlayState = m_externalState;
-    else
+    } else {
         m_overlayState = petuniaRequest("snapshot");
+    }
+}
+
+QJsonObject PetuniaGlWidget::paintedOverlayState() {
+    grab();
+    PetuniaViewScope scope(m_surfaceId);
+    refreshOverlayState(); // idempotente: no modo GL o grab() pode não pintar
+    return m_overlayState;
 }
 
 void PetuniaGlWidget::drawOverlays(QPainter &painter) {
@@ -351,6 +369,7 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
 /// Executa o pedido do cubo (face, aresta, canto, bússola, início ou menu).
 void PetuniaGlWidget::runNavAction(const PetuniaNavCube::Hit &hit) {
     using Type = PetuniaNavCube::Hit::Type;
+    m_cameraDirty = true;
     switch (hit.type) {
     case Type::Preset:
         petunia_qt_camera_set_preset(hit.preset);
@@ -601,11 +620,13 @@ void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
     }
     if (m_isGizmoInteracting) {
         petunia_qt_camera_orbit(delta.x(), delta.y());
+        m_cameraDirty = true;
         update();
         event->accept();
         return;
     }
     if (m_isInteracting) {
+        m_cameraDirty = true;
         if (pointerBinding(m_overlayState, "pointer_pan_mask",
                            event->modifiers()))
             petunia_qt_camera_pan(delta.x(), delta.y());
@@ -800,8 +821,10 @@ void PetuniaGlWidget::wheelEvent(QWheelEvent *event) {
     else if (m_overlayState["loop_cut_armed"].toBool())
         m_overlayState = petuniaRequest("adjust_loop_cut_hover_count",
                                         {{"delta", int(rawDelta / 120.f)}});
-    else
+    else {
         petunia_qt_camera_zoom(rawDelta * m_zoomSensitivity);
+        m_cameraDirty = true;
+    }
     update();
     event->accept();
 }

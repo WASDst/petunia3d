@@ -349,6 +349,53 @@ void checkRefinement(Harness &h, PetuniaShellWindow &window) {
         painter.end();
         h.add("navcube:paints-pixels", canvas.pixelColor(100, 100).alpha() > 0);
     }
+
+    // O gizmo acompanha a cena quando a câmera se move. Gestos reais do mouse
+    // (botão do meio: órbita; Shift: pan), conferidos NO MEIO do gesto, com o botão
+    // apertado: é quando o usuário vê o gizmo parado, e soltar o botão refaz o estado
+    // inteiro (esconderia o defeito). A verdade é um snapshot novo do editor.
+    {
+        c->request("tool", {{"id", "move"}});
+        selectIds(c, {ids[0]});
+        settle(4);
+        window.syncNow();
+        auto *view = window.viewport();
+        const auto gizmoOf = [](const QJsonObject &state) {
+            return QJsonDocument(state["gizmo"].toObject()).toJson(QJsonDocument::Compact);
+        };
+        const QPoint from(view->width() / 2, view->height() / 2);
+        const auto mouse = [&](QEvent::Type type, const QPoint &at, Qt::MouseButton button, Qt::MouseButtons held,
+                               Qt::KeyboardModifiers mods) {
+            QMouseEvent event(type, QPointF(at), QPointF(view->mapToGlobal(at)), button, held, mods);
+            QCoreApplication::sendEvent(view, &event);
+        };
+        // Devolve {desenhado, verdade} no meio de um arrasto com o botão do meio.
+        const auto dragMidway = [&](Qt::KeyboardModifiers mods) {
+            mouse(QEvent::MouseButtonPress, from, Qt::MiddleButton, Qt::MiddleButton, mods);
+            for (int step = 1; step <= 12; ++step)
+                mouse(QEvent::MouseMove, from + QPoint(step * 9, step * 4), Qt::NoButton, Qt::MiddleButton, mods);
+            const QByteArray painted = gizmoOf(view->paintedOverlayState());
+            const QByteArray truth = gizmoOf(petuniaRequest("snapshot"));
+            mouse(QEvent::MouseButtonRelease, from + QPoint(108, 48), Qt::MiddleButton, Qt::NoButton, mods);
+            settle(2);
+            return std::pair<QByteArray, QByteArray>(painted, truth);
+        };
+        const QJsonObject first = view->paintedOverlayState();
+        const bool visible = first["gizmo"].toObject()["visible"].toBool();
+        const QByteArray start = gizmoOf(first);
+        const auto orbit = dragMidway(Qt::NoModifier);
+        const QByteArray afterOrbit = gizmoOf(view->paintedOverlayState());
+        const auto pan = dragMidway(Qt::ShiftModifier);
+        h.add("viewport:gizmo-visible-for-the-camera-test", visible);
+        h.add("viewport:gizmo-follows-the-orbit-mid-drag", orbit.first == orbit.second,
+              QStringLiteral("o gizmo desenhado difere do snapshot novo durante a órbita"));
+        h.add("viewport:orbit-moved-the-gizmo", orbit.second != start,
+              QStringLiteral("a órbita não alterou o gizmo (o teste não discrimina)"));
+        h.add("viewport:gizmo-follows-the-pan-mid-drag", pan.first == pan.second,
+              QStringLiteral("o gizmo desenhado difere do snapshot novo durante o pan"));
+        h.add("viewport:pan-moved-the-gizmo", pan.second != afterOrbit,
+              QStringLiteral("o pan não alterou o gizmo (o teste não discrimina)"));
+    }
 }
 } // namespace
 

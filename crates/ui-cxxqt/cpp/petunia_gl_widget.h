@@ -38,7 +38,11 @@ class PetuniaGlWidget : public QWidget {
     void setExternalState(const QJsonObject &state) {
         m_externalState = state;
         m_hasExternalState = true;
+        m_cameraDirty = false;
     }
+    /// Estado de overlay usado no último quadro, depois de forçar um quadro novo.
+    /// Existe para testes (QTestLib/harness): confere o que foi realmente desenhado.
+    QJsonObject paintedOverlayState();
     void setZoomSensitivity(float s) { m_zoomSensitivity = qBound(0.1f, s, 5.0f); }
     float zoomSensitivity() const { return m_zoomSensitivity; }
 
@@ -105,6 +109,9 @@ class PetuniaGlWidget : public QWidget {
     QJsonObject m_overlayState;
     QJsonObject m_externalState;
     bool m_hasExternalState{false};
+    /// A câmera mudou por um gesto do próprio widget: o snapshot do shell (gizmo,
+    /// pivô, 3D Cursor em pixels) ficou velho até o próximo quadro.
+    bool m_cameraDirty{false};
     bool m_shellChrome{false};
     QPointF m_pressPoint;
     QPolygonF m_regionPoints;
