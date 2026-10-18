@@ -157,9 +157,10 @@ fn test_g02_gate_petunia_strict_load_fails_on_corrupt_data() {
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).unwrap();
-        if entry.name() == "document.json" {
+        let name = entry.name().unwrap().into_owned();
+        if name == "document.json" {
             entry.read_to_end(&mut document_json).unwrap();
-        } else if entry.name() == "manifest.json" {
+        } else if name == "manifest.json" {
             entry.read_to_end(&mut manifest_json).unwrap();
         }
     }

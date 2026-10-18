@@ -296,7 +296,10 @@ pub fn open_package_bytes(
         let mut file = archive
             .by_index(i)
             .map_err(|e| PackageError::Invalid(format!("unreadable entry: {e}")))?;
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|e| PackageError::Invalid(format!("invalid entry name: {e}")))?
+            .into_owned();
         if name == MANIFEST_NAME || name == PROJECT_DOC_NAME || name.ends_with('/') {
             continue;
         }
