@@ -13,12 +13,20 @@
 
 QPainterPath petuniaPath(const QString &commands);
 
+class QKeyEvent;
+
 class PetuniaEditorCanvas : public QWidget {
     Q_OBJECT
   public:
     explicit PetuniaEditorCanvas(const QString &mode,
                                  QWidget *parent = nullptr);
     void sync(const QJsonObject &state);
+    /// Estado de vista local (não é documento): leitura para testes e status.
+    qreal zoom() const { return m_zoom; }
+    QPointF pan() const { return m_pan; }
+    /// Teclas de navegação que o canvas trata antes dos atalhos globais
+    /// (Esc, Home, +/−, setas com ou sem Ctrl/Shift; o dope sheet só Esc/Home).
+    bool ownsKey(const QKeyEvent *event) const;
   signals:
     void editorChanged();
 

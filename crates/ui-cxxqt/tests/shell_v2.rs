@@ -57,6 +57,15 @@ fn shell_v2_regions_layout_focus_and_theme() {
         "timeline:play-button-toggles-playback",
         "viewport:shift-f10-opens-context-menu",
         "viewport:context-menu-has-no-raw-ids",
+        "viewport:context-menu-returns-focus",
+        "paint:alt-down-reorders-layer",
+        "paint:alt-up-restores-order",
+        "paint:h-toggles-layer-visibility",
+        "paint:delete-removes-layer-not-object",
+        "uv:plus-minus-zoom",
+        "uv:ctrl-arrow-pans-without-editing",
+        "uv:arrow-nudges-selection",
+        "uv:home-frames",
     ]
     .into_iter()
     .filter(|name| !names.contains(name))

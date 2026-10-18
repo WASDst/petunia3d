@@ -893,7 +893,9 @@ bool PetuniaShellWindow::eventFilter(QObject *watched, QEvent *event) {
         return true;
     }
     // Esc e Home pertencem à vista/canvas (cancelar operação, enquadrar).
-    if ((qobject_cast<PetuniaEditorCanvas *>(target) && (key->key() == Qt::Key_Escape || key->key() == Qt::Key_Home)) ||
+    // Também +/−/setas no canvas 2D: zoom, pan e nudge UV antes dos atalhos globais.
+    auto *canvas = qobject_cast<PetuniaEditorCanvas *>(target);
+    if ((canvas && canvas->ownsKey(key)) ||
         (qobject_cast<PetuniaGlWidget *>(target) && key->key() == Qt::Key_Escape))
         return QMainWindow::eventFilter(watched, event);
 

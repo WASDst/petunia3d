@@ -553,6 +553,19 @@ PetuniaEditorCanvas::PetuniaEditorCanvas(const QString &mode, QWidget *parent)
                                      : tr("+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra"));
 }
 
+bool PetuniaEditorCanvas::ownsKey(const QKeyEvent *event) const {
+    const int key = event->key();
+    if (key == Qt::Key_Escape || key == Qt::Key_Home)
+        return true;
+    if (m_mode == "ANIMATE")
+        return false;
+    const bool arrow = key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down;
+    const bool zoom = key == Qt::Key_Plus || key == Qt::Key_Minus || key == Qt::Key_Equal;
+    const auto mods = event->modifiers() & ~(Qt::KeypadModifier);
+    return (zoom && !(mods & (Qt::ControlModifier | Qt::AltModifier))) ||
+           (arrow && !(mods & Qt::AltModifier));
+}
+
 void PetuniaEditorCanvas::zoomAt(qreal factor, const QPointF &anchor) {
     const qreal minimum = m_mode == "PAINT" ? 1. : 0.25;
     const qreal zoom = qBound(minimum, m_zoom * factor, 16.);

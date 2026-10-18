@@ -3,6 +3,7 @@
 // capturas (PNG) para inspeção visual. Devolve um JSON {checks:[{name,pass,detail}]}.
 #include "petunia_shell_window.h"
 
+#include "../petunia_editor_panel.h"
 #include "../petunia_gl_widget.h"
 #include "../petunia_theme.h"
 #include "petunia_app_bar.h"
@@ -44,6 +45,10 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QStandardPaths>
+
+// Exportada pelo QtGui (é o que o QTest usa para disparar QShortcut).
+Q_GUI_EXPORT bool qt_sendShortcutOverrideEvent(QObject *o, ulong timestamp, int k, Qt::KeyboardModifiers mods,
+                                                const QString &text, bool autorep, ushort count);
 
 namespace {
 struct Harness {
@@ -94,6 +99,20 @@ void checkSurfaceGeometry(Harness &h, PetuniaShellWindow &window, const QString 
                                         .arg(context->parentWidget()->width())
                                         .arg(context->parentWidget()->height())
                                   : QStringLiteral("sem pai"));
+}
+
+/// Tecla como o usuário: primeiro o mapa de atalhos (QShortcut), depois o
+/// widget com foco — o mesmo caminho do QTest::keyClick, sem depender do QtTest.
+void realKey(QWidget *target, int key, Qt::KeyboardModifiers mods = Qt::NoModifier, const QString &text = {}) {
+    target->setFocus();
+    settle(1);
+    if (!qt_sendShortcutOverrideEvent(target, 0, key, mods, text, false, 1)) {
+        QKeyEvent press(QEvent::KeyPress, key, mods, text);
+        QCoreApplication::sendEvent(target, &press);
+        QKeyEvent release(QEvent::KeyRelease, key, mods, text);
+        QCoreApplication::sendEvent(target, &release);
+    }
+    settle(3);
 }
 
 void sendKey(QWidget *target, int key, Qt::KeyboardModifiers mods = Qt::NoModifier) {
@@ -376,6 +395,47 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(4);
         h.add("paint:add-layer-updates-structure", window.structure()->rowCount() > baseLayers,
               QStringLiteral("%1 -> %2").arg(baseLayers).arg(window.structure()->rowCount()));
+        // M03: camadas reordenadas, ocultas e removidas pelo teclado na Estrutura.
+        {
+            auto layerIds = [&] {
+                QStringList ids;
+                for (const auto &v : c->state()["paint_layers"].toArray())
+                    ids << v.toObject()["id"].toString();
+                return ids;
+            };
+            auto *tree = window.structure()->tree();
+            tree->setFocus();
+            tree->setCurrentIndex(tree->model()->index(0, 0));
+            settle(3);
+            window.syncNow();
+            const auto before = layerIds();
+            const int row = tree->currentIndex().row();
+            realKey(tree, Qt::Key_Down, Qt::AltModifier);
+            window.syncNow();
+            const auto moved = layerIds();
+            h.add("paint:alt-down-reorders-layer", moved != before && moved.size() == before.size(),
+                  before.join(",") + " -> " + moved.join(","));
+            realKey(tree, Qt::Key_Up, Qt::AltModifier);
+            window.syncNow();
+            h.add("paint:alt-up-restores-order", layerIds() == before, layerIds().join(","));
+            auto visibleAt = [&](int index) {
+                return c->state()["paint_layers"].toArray().at(index).toObject()["visible"].toBool(true);
+            };
+            const int current = std::max(0, tree->currentIndex().row());
+            const bool wasVisible = visibleAt(current);
+            realKey(tree, Qt::Key_H);
+            window.syncNow();
+            h.add("paint:h-toggles-layer-visibility", visibleAt(current) != wasVisible, QString::number(row));
+            realKey(tree, Qt::Key_H);
+            window.syncNow();
+            const int objects = c->state()["scene_items"].toArray().size();
+            const int layers = layerIds().size();
+            realKey(tree, Qt::Key_Delete);
+            window.syncNow();
+            h.add("paint:delete-removes-layer-not-object",
+                  layerIds().size() == layers - 1 && c->state()["scene_items"].toArray().size() == objects,
+                  QStringLiteral("%1 -> %2 camadas, %3 objetos").arg(layers).arg(layerIds().size()).arg(objects));
+        }
         checkSurfaceGeometry(h, window, "PAINT");
         h.shot(&window, "shell_PAINT_v2");
 
@@ -457,6 +517,31 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
                           c->state()["uv_editor"].toObject()["uv_selected_count"].toInt() ==
                               after[0].toObject()["face_count"].toInt());
             }
+        }
+        // V03: teclado do editor UV — zoom, pan e nudge da seleção (um Undo por tecla).
+        if (auto *uvCanvas = qobject_cast<PetuniaEditorCanvas *>(window.workspaceCanvas("UV"))) {
+            const qreal zoom0 = uvCanvas->zoom();
+            realKey(uvCanvas, Qt::Key_Plus, Qt::NoModifier, QStringLiteral("+"));
+            const qreal zoomIn = uvCanvas->zoom();
+            realKey(uvCanvas, Qt::Key_Minus, Qt::NoModifier, QStringLiteral("-"));
+            h.add("uv:plus-minus-zoom", zoomIn > zoom0 && std::abs(uvCanvas->zoom() - zoom0) < 0.01,
+                  QStringLiteral("%1 -> %2 -> %3").arg(zoom0).arg(zoomIn).arg(uvCanvas->zoom()));
+            const QPointF pan0 = uvCanvas->pan();
+            const QString rev0 = c->text("document_revision");
+            realKey(uvCanvas, Qt::Key_Right, Qt::ControlModifier);
+            h.add("uv:ctrl-arrow-pans-without-editing",
+                  uvCanvas->pan().x() > pan0.x() && c->text("document_revision") == rev0);
+            realKey(uvCanvas, Qt::Key_Right);
+            window.syncNow();
+            const QString rev1 = c->text("document_revision");
+            h.add("uv:arrow-nudges-selection", rev1 != rev0, rev0 + " -> " + rev1);
+            c->request("undo");
+            settle(3);
+            window.syncNow();
+            realKey(uvCanvas, Qt::Key_Home);
+            h.add("uv:home-frames", std::abs(uvCanvas->zoom() - 1.0) < 0.01 && uvCanvas->pan().isNull());
+        } else {
+            h.add("uv:plus-minus-zoom", false, "sem canvas UV");
         }
         checkSurfaceGeometry(h, window, "UV");
         h.shot(&window, "shell_UV_v2");

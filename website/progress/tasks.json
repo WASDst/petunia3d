@@ -926,6 +926,11 @@
       "revision": "working tree sobre 908aecf7",
       "document": "website/docs/09-ui/shell-v2-proposal.md (F7) · AGENTS.md Camadas 2/3/6",
       "summary": "PAINT/UV/ANIMATE com seções nativas de Propriedades (Pincel, Camada, Alvo, Efeitos, Projeção, Decalque, Canvas; Seleção UV, Desdobrar, Costuras, Empacotar, Transformar, Exibição; Criatura, Motion, Pose, Camadas, Keyframes); superfície 3D|Dividido|2D persistida por workspace; transporte da linha do tempo na gaveta; Estrutura UV lista ilhas (uv_editor.islands + uv_select_island, índice validado); diálogos Início/Recuperação/Paleta/Placeholder e seletor de cor só com papéis do tema (alvos >= 28 px, fontes do tema, roda de cor por teclado); menu de contexto da vista por teclado (Shift+F10) com rótulos traduzidos; motivo de desabilitação nos botões por estado; gaveta recolhida devolve a altura à superfície; barra contextual compacta cabe na vista. Gates pass: editor_parity 22, shell_v2 (172 verificações, 12 novas exigidas por nome), bridge_test 11 (1 pulado: sem display), ui_i18n_catalog 3, component_contracts 1, ui_contract_ids 3, gallery_test 1, ui_thread_guard 1, lib 5, core --lib 202, editor --lib 137, fmt e clippy -D warnings. Não executado: Windows, GPU física, leitor de tela, escala 150–200%; atalhos QShortcut da Estrutura (Alt+setas, H/L/Del por workspace) e teclado do canvas 2D sem teste automatizado."
+    },
+    "gui-keyboard-structure-canvas-2026-10-18": {
+      "revision": "working tree sobre 734321e5",
+      "document": "AGENTS.md Camadas 3/6 · website/docs/09-ui/shell-v2-proposal.md (F7)",
+      "summary": "Harness com teclas reais (qt_sendShortcutOverrideEvent, mesmo caminho do QTest): Alt+↑/↓ reordena camadas de pintura, H alterna visibilidade, Delete remove a camada (não o objeto); no editor UV +/− aproximam, Ctrl+setas deslocam sem editar o documento, setas movem a seleção UV (um Undo) e Home enquadra. Corrigidos: direção do reordenar camadas (lista topo→base vs delta da pilha base→topo, também no menu de contexto) e atalhos globais engolindo +/−/setas do canvas 2D. shell_v2 pass 180/180 (3 execuções), ui_i18n_catalog pass, fmt pass."
     }
   },
   "tasks": [

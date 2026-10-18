@@ -17,6 +17,12 @@
 #include <algorithm>
 
 namespace {
+/// A lista mostra as camadas do topo para a base (`paint_layers` vem invertido),
+/// mas `move_paint_layer` conta da base: descer na lista é descer na pilha.
+int paintStackDelta(int listDelta) {
+    return -listDelta;
+}
+
 class SelectedOnlyProxy : public QSortFilterProxyModel {
   public:
     using QSortFilterProxyModel::QSortFilterProxyModel;
@@ -222,7 +228,7 @@ void PetuniaStructurePanel::actOnCurrent(const QString &verb, int delta) {
         else if (verb == QLatin1String("remove"))
             m_controller->request(QStringLiteral("remove_paint_layer"), {{"id", id}});
         else if (verb == QLatin1String("move"))
-            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", id}, {"delta", delta}});
+            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", id}, {"delta", paintStackDelta(delta)}});
     } else if (ws == QLatin1String("ANIMATE")) {
         if (verb == QLatin1String("visibility"))
             m_controller->request(QStringLiteral("animate"), {{"id", "toggle-bones"}});
@@ -692,9 +698,9 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
         else if (picked == addDecal)
             m_controller->request(QStringLiteral("add_decal_layer"));
         else if (picked == up)
-            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", layerId}, {"delta", -1}});
+            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", layerId}, {"delta", paintStackDelta(-1)}});
         else if (picked == down)
-            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", layerId}, {"delta", 1}});
+            m_controller->request(QStringLiteral("move_paint_layer"), {{"id", layerId}, {"delta", paintStackDelta(1)}});
         else if (picked == merge)
             m_controller->request(QStringLiteral("merge_down_paint_layer"), {{"id", layerId}});
         else if (picked == toggleVis)
