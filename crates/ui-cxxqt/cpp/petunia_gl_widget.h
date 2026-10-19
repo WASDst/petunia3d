@@ -98,6 +98,8 @@ class PetuniaGlWidget : public QWidget {
     void drawShadingPill(QPainter &painter);
     void drawTransformGizmo(QPainter &painter);
     void drawSnapIndicator(QPainter &painter);
+    /// Quadro de prévia da ferramenta (B3): âncora, seta e valor perto da operação.
+    void drawToolPreview(QPainter &painter);
     void draw3dCursor(QPainter &painter);
     /// Pivô de transformação e origem do objeto (distintos do 3D Cursor).
     void drawPivotMarker(QPainter &painter);

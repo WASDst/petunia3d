@@ -1,4 +1,5 @@
 #include "petunia_home_dialog.h"
+#include "petunia_dialog_chrome.h"
 #include "petunia_icons.h"
 #include "petunia_theme.h"
 #include <QFrame>
@@ -53,6 +54,8 @@ void PetuniaHomeDialog::setupUi() {
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     headerLayout->addWidget(m_closeBtn);
     cardLayout->addLayout(headerLayout);
+    // Sem decoração do sistema: o cartão inteiro é a alça de arrasto (B5).
+    PetuniaDialogChrome::install(this, QStringLiteral("home"), {true, card});
 
     auto separator = [card] {
         auto *line = new QFrame(card);

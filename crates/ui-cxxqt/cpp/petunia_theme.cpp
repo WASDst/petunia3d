@@ -150,6 +150,15 @@ int PetuniaTheme::controlHeight() const {
     return std::max(28, scaled(32));
 }
 
+int PetuniaTheme::fieldHeight() const {
+    switch (m_density) {
+    case Density::Compact:
+    case Density::Standard: return std::max(28, scaled(28));
+    case Density::Comfortable: return std::max(28, scaled(34));
+    }
+    return std::max(28, scaled(28));
+}
+
 int PetuniaTheme::compactControlHeight() const {
     return std::max(28, controlHeight() - scaled(8));
 }
@@ -287,7 +296,7 @@ QPushButton[role="danger"] { color: @statusError@; border-color: @statusError@; 
 QToolButton::menu-indicator { image: none; }
 QPushButton[role="quiet"]:checked { background-color: @accentSoft@; color: @textPrimary@; border-color: @accent@; }
 
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background-color: @bgSurface@; color: @textPrimary@; border: 1px solid @borderSubtle@; border-radius: @radius@px; padding: 0 @s2@px; min-height: @controlH@px; selection-background-color: @accent@; selection-color: @textActive@; }
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background-color: @bgSurface@; color: @textPrimary@; border: 1px solid @borderSubtle@; border-radius: @radius@px; padding: 0 @s2@px; min-height: @fieldH@px; selection-background-color: @accent@; selection-color: @textActive@; }
 QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover { border-color: @borderStrong@; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border: @ring@px solid @borderFocus@; padding: 0 @s2Ring@px; }
 QLineEdit[invalid="true"] { border: @ring@px dashed @statusError@; }
@@ -295,14 +304,14 @@ QLineEdit:disabled, QComboBox:disabled { color: @textMuted@; background-color: @
 QComboBox::drop-down { border: none; width: @s5@px; }
 QComboBox QAbstractItemView { background-color: @bgSurface@; border: 1px solid @borderStrong@; selection-background-color: @accent@; selection-color: @textActive@; outline: 0; }
 
-QCheckBox, QRadioButton { spacing: @s2@px; min-height: @controlH@px; }
+QCheckBox, QRadioButton { spacing: @s2@px; min-height: @fieldH@px; }
 QCheckBox:focus, QRadioButton:focus { color: @textPrimary@; }
 
 QMenuBar { background-color: transparent; color: @textPrimary@; }
 QMenuBar::item { padding: @s1@px @s2@px; border-radius: @radius@px; background: transparent; }
 QMenuBar::item:selected { background-color: @bgSurfaceHover@; }
 QMenu { background-color: @bgSurface@; border: 1px solid @borderStrong@; border-radius: @radiusL@px; padding: @s1@px; }
-QMenu::item { padding: @s1@px @s5@px @s1@px @s2@px; margin: 1px 0; min-height: @compactH@px; border-radius: @radius@px; }
+QMenu::item { padding: 2px @s5@px 2px @s2@px; margin: 0; min-height: @menuH@px; border-radius: @radius@px; }
 QMenu::item:selected { background-color: @accentSoft@; color: @textPrimary@; }
 QMenu::icon { padding-left: @s1@px; }
 QMenu::indicator { width: @s4@px; height: @s4@px; }
@@ -342,6 +351,8 @@ QToolButton[role="header"]:hover { background-color: @bgSurfaceHover@; }
 QToolButton[role="header"]:checked { background-color: @accentSoft@; border-color: @accent@; color: @textPrimary@; }
 QToolButton[role="header"]:focus { border: @ring@px solid @borderFocus@; padding: 0 @s2Ring@px; }
 QToolButton[role="header"]::menu-indicator { image: none; }
+#PetuniaPropertiesPanel QLabel { font-size: @fontCaption@px; color: @textSecondary@; }
+#PetuniaPropertiesPanel QPushButton, #PetuniaPropertiesPanel QToolButton { min-height: @fieldH@px; }
 QToolButton[role="sectionHeader"] { background-color: @bgPanelHeader@; border: none; border-radius: 0px; text-align: left; padding: 0 @s3@px; font-weight: 600; min-height: @compactH@px; }
 QToolButton[role="sectionHeader"]:checked { background-color: @bgPanelHeader@; color: @textPrimary@; }
 QToolButton[role="sectionHeader"]:hover { background-color: @bgSurfaceHover@; }
@@ -396,6 +407,9 @@ QSlider::handle:horizontal:focus { border: @ring@px solid @borderFocus@; }
         {QStringLiteral("fontTitle"), QString::number(fontPx(TextRole::Title))},
         {QStringLiteral("controlH"), QString::number(controlHeight() - 2)},
         {QStringLiteral("compactH"), QString::number(compactControlHeight() - 2)},
+        {QStringLiteral("fieldH"), QString::number(fieldHeight() - 2)},
+        // B14: linhas de menu densas, sem descer do alvo de 24 px (WCAG 2.5.8).
+        {QStringLiteral("menuH"), QString::number(std::max(20, scaled(m_density == Density::Comfortable ? 24 : 20)))},
         {QStringLiteral("radius"), QString::number(radius())},
         {QStringLiteral("radiusL"), QString::number(radius() + scaled(3))},
         {QStringLiteral("ring"), QString::number(focusRingWidth())},

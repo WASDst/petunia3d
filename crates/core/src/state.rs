@@ -19,6 +19,9 @@ use super::selection::{
     Workspace,
 };
 
+/// Duração da transição de enquadramento (F / Home), sem movimento reduzido.
+pub const CAMERA_FRAME_SECONDS: f32 = 0.25;
+
 /// Modo de sombreamento da viewport.
 ///
 /// Nomeia o que o usuário vê, não o modelo de iluminação: cada variante
@@ -957,6 +960,28 @@ impl TransformOrientation {
         }
     }
 
+    /// Id estável para a GUI (B15). Auto e Custom não são oferecidos ainda.
+    pub fn id(&self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Local => "local",
+            Self::Normal => "normal",
+            Self::View => "view",
+            Self::Auto => "auto",
+            Self::Custom => "custom",
+        }
+    }
+
+    /// Orientações oferecidas no cabeçalho da vista (B15). O Cursor 3D não tem
+    /// rotação própria, então "Cursor" seria igual a Global e fica de fora.
+    pub fn offered() -> [Self; 4] {
+        [Self::Global, Self::Local, Self::Normal, Self::View]
+    }
+
+    pub fn from_offered_id(id: &str) -> Option<Self> {
+        Self::offered().into_iter().find(|o| o.id() == id)
+    }
+
     pub fn key(&self) -> &'static str {
         match self {
             Self::Global => "orientation.global",
@@ -1099,21 +1124,65 @@ impl PivotPoint {
 /// Configurações do Grid 3D e guias axiais/isométricos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GridSettings {
+    /// Meia extensão da grade em metros (a grade cobre `-size..=size`).
     pub size: f32,
-    pub subdivisions: f32,
+    /// Lado de cada ladrilho em metros.
+    pub spacing: f32,
     pub opacity: f32,
     pub show_isometric_guide: bool,
     pub isometric_angle_deg: f32,
+    /// Eixos do mundo visíveis (X, Y, Z). O Y nasce oculto: a linha vertical
+    /// atravessa os objetos e polui a leitura (ADR-C16, B6).
+    pub axes: [bool; 3],
 }
 
 impl Default for GridSettings {
     fn default() -> Self {
         Self {
             size: 20.0,
-            subdivisions: 1.0,
-            opacity: 0.4,
+            spacing: 1.0,
+            opacity: 0.5,
             show_isometric_guide: false,
             isometric_angle_deg: 30.0,
+            axes: [true, false, true],
+        }
+    }
+}
+
+/// O que clique, caixa, laço, hover e snap alcançam (ADR-C16, B10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SelectPolicy {
+    /// Segue o que se vê: o Sólido respeita a oclusão; Raio-X e Wireframe
+    /// selecionam através (vê-se o componente de trás, alcança-se o de trás).
+    #[default]
+    Auto,
+    /// Só o visível, mesmo em Raio-X ou Wireframe.
+    VisibleOnly,
+    /// Através da malha, mesmo no Sólido.
+    Through,
+}
+
+impl SelectPolicy {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::VisibleOnly => "visible",
+            Self::Through => "through",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        [Self::Auto, Self::VisibleOnly, Self::Through]
+            .into_iter()
+            .find(|policy| policy.id() == id)
+    }
+
+    /// Efeito da política para um modo de exibição.
+    pub fn selects_through(self, show_xray: bool, shading: Shading) -> bool {
+        match self {
+            Self::Through => true,
+            Self::VisibleOnly => false,
+            Self::Auto => show_xray || shading == Shading::Wireframe,
         }
     }
 }
@@ -1142,8 +1211,9 @@ pub struct ViewportSession {
     pub edit_pivot: bool,
     pub show_overlays: bool,
     pub show_xray: bool,
-    /// Picking policy, independent of X-Ray and wireframe shading.
-    pub select_through: bool,
+    /// Política de picking (B10). É estado próprio: ligar o Raio-X nunca a altera
+    /// (VSP-004); o efeito da política Automática é que segue o que se vê.
+    pub select_policy: SelectPolicy,
     pub xray_opacity: f32,
     pub show_triangulation: bool,
     pub show_nav_hud: bool,
@@ -1185,7 +1255,7 @@ impl ViewportSession {
             edit_pivot: false,
             show_overlays: true,
             show_xray: false,
-            select_through: false,
+            select_policy: SelectPolicy::Auto,
             xray_opacity: 0.5,
             show_triangulation: false,
             show_nav_hud: true,
@@ -1252,8 +1322,9 @@ pub struct EditorSession {
     pub edit_pivot_session: Option<EditPivotSession>,
     pub show_overlays: bool,
     pub show_xray: bool,
-    /// Picking policy, independent of X-Ray and wireframe shading.
-    pub select_through: bool,
+    /// Política de picking (B10). É estado próprio: ligar o Raio-X nunca a altera
+    /// (VSP-004); o efeito da política Automática é que segue o que se vê.
+    pub select_policy: SelectPolicy,
     /// Opacidade da geometria em X-Ray (0.1..=0.9). Ajustável pelo popover.
     pub xray_opacity: f32,
     pub show_triangulation: bool,
@@ -1307,6 +1378,12 @@ impl Default for EditorSession {
 }
 
 impl EditorSession {
+    /// O picking atravessa a malha agora? (política + Raio-X/Wireframe atuais)
+    pub fn selects_through(&self) -> bool {
+        self.select_policy
+            .selects_through(self.show_xray, self.shading)
+    }
+
     pub fn new() -> Self {
         Self {
             viewport_rect: None,
@@ -1338,7 +1415,7 @@ impl EditorSession {
             edit_pivot_session: None,
             show_overlays: true,
             show_xray: false,
-            select_through: false,
+            select_policy: SelectPolicy::Auto,
             xray_opacity: 0.42,
             show_triangulation: false,
             show_nav_hud: true,
@@ -1557,7 +1634,7 @@ impl EditorSession {
             edit_pivot: self.edit_pivot,
             show_overlays: self.show_overlays,
             show_xray: self.show_xray,
-            select_through: self.select_through,
+            select_policy: self.select_policy,
             xray_opacity: self.xray_opacity,
             show_triangulation: self.show_triangulation,
             show_nav_hud: self.show_nav_hud,
@@ -1592,7 +1669,7 @@ impl EditorSession {
         self.edit_pivot = vs.edit_pivot;
         self.show_overlays = vs.show_overlays;
         self.show_xray = vs.show_xray;
-        self.select_through = vs.select_through;
+        self.select_policy = vs.select_policy;
         self.xray_opacity = vs.xray_opacity;
         self.show_triangulation = vs.show_triangulation;
         self.show_nav_hud = vs.show_nav_hud;
@@ -1691,6 +1768,8 @@ pub struct UiState {
     pub gizmo_size: f32,
     /// Espessura do traço dos gizmos (px lógicos, 1..=6).
     pub gizmo_thickness: f32,
+    /// Alças do gizmo da ferramenta Selecionar: mover, girar, escalar (B11).
+    pub select_gizmo_handles: [bool; 3],
     /// Opacidade do cubo de navegação (0,2..=1).
     pub nav_cube_opacity: f32,
     pub inspector_detached: bool,
@@ -1808,6 +1887,7 @@ impl UiState {
             selection_thickness: 2.0,
             gizmo_size: 72.0,
             gizmo_thickness: 2.0,
+            select_gizmo_handles: [true; 3],
             nav_cube_opacity: 1.0,
             inspector_detached: false,
             export_selected: Vec::new(),
@@ -2617,6 +2697,39 @@ impl AppState {
     /// Marca para render-on-demand (§33).
     pub fn mark_dirty(&mut self) {
         self.render.mark_dirty();
+    }
+
+    /// Avança o enquadramento agendado por `frame_selection`/`frame_all` em `dt`
+    /// segundos (tique do host). Com movimento reduzido salta direto ao alvo.
+    /// Só toca alvo, distância e meia-altura ortográfica: órbita e projeção feitas
+    /// durante a transição são preservadas. `true` enquanto houver transição
+    /// (pede redesenho); `dt` não finito ou negativo não avança o relógio.
+    pub fn advance_camera_frame(&mut self, dt: f32) -> bool {
+        let Some((start, goal, elapsed)) = self.camera_frame.take() else {
+            return false;
+        };
+        let dt = if dt.is_finite() {
+            dt.clamp(0.0, 0.1)
+        } else {
+            0.0
+        };
+        let elapsed = elapsed + dt;
+        let t = if self.ui.reduced_motion {
+            1.0
+        } else {
+            (elapsed / CAMERA_FRAME_SECONDS).min(1.0)
+        };
+        let eased = t * t * (3.0 - 2.0 * t);
+        self.camera.target = start.target.lerp(goal.target, eased);
+        self.camera.distance = start.distance + (goal.distance - start.distance) * eased;
+        self.camera.ortho_half_h =
+            start.ortho_half_h + (goal.ortho_half_h - start.ortho_half_h) * eased;
+        self.camera.far = self.camera.far.max(goal.far);
+        if t < 1.0 {
+            self.camera_frame = Some((start, goal, elapsed));
+        }
+        self.mark_dirty();
+        true
     }
 
     pub fn consume_dirty(&mut self) -> bool {

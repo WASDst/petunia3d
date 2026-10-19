@@ -72,6 +72,7 @@ pub mod align;
 pub mod animation;
 pub mod shared;
 pub use shared::Shared;
+pub mod animatable;
 pub mod autosave;
 pub mod export;
 pub mod export_model;
@@ -108,6 +109,7 @@ pub mod spline;
 pub mod surface_attachment;
 pub mod surface_recipe;
 pub mod svg;
+pub mod transform_locks;
 
 pub use align::{
     AlignAxis, AlignError, AlignMode, AlignReference, BoundingBox3D, compute_alignment_deltas,
@@ -150,7 +152,9 @@ pub use paint_layers::{
     DecalLayer, LayerBlendMode, LayerKind, PaintEffect, PaintLayer, PaintLayerStack, apply_effect,
     blend_pixels,
 };
-pub use palette::{export_gpl, export_hex, import_gpl, import_hex, preset_gameboy, preset_pico8};
+pub use palette::{
+    NamedPalette, export_gpl, export_hex, import_gpl, import_hex, preset_gameboy, preset_pico8,
+};
 pub use path_generator::{
     MAX_GENERATED_VERTICES, PathGenerator, PathGeneratorDependencies, PathGeneratorDiagnostics,
     PathGeneratorError, PathGeneratorEvaluation, PathGeneratorEvaluationCache, PathGeneratorKind,
@@ -201,6 +205,7 @@ pub use svg::{
     MAX_RASTER_PX, MAX_SVG_BYTES, MAX_SVG_NODES, SvgError, SvgInfo, SvgNode, SvgSubpath,
     rasterize_svg, svg_info, svg_subpaths, svg_to_splines,
 };
+pub use transform_locks::{TransformChannel, TransformLocks};
 pub use zip;
 
 /// Canvas de textura simples (albedo) por asset — workspace PAINT.
@@ -521,6 +526,11 @@ pub struct Asset {
     /// este TRS; consumidores em mundo leem world_matrix/world_mesh.
     #[serde(default)]
     pub transform: object_transform::ObjectTransform,
+    /// Canais do transform travados (B7): gizmo, G/R/S, campos e atalhos respeitam.
+    /// Sempre serializado: `Asset` também passa pelo layout posicional (postcard)
+    /// do formato legado, onde omitir um campo desalinharia os seguintes.
+    #[serde(default)]
+    pub transform_locks: TransformLocks,
     /// Receita persistente de composição sólida reeditável (H26).
     #[serde(default)]
     pub composition: Option<solid_composition::SolidCompositionRecipe>,
@@ -568,6 +578,7 @@ impl Asset {
             scale: [1.0, 1.0, 1.0],
             surface_shading: petunia_mesh::shading::SurfaceShading::Flat,
             transform: object_transform::ObjectTransform::IDENTITY,
+            transform_locks: TransformLocks::default(),
             composition: None,
             eval_cache: None,
             graph_cache: None,
@@ -1258,6 +1269,9 @@ pub struct Project {
     pub history_selection: Vec<Uuid>,
     #[serde(default = "default_palette")]
     pub palette: Vec<[f32; 3]>,
+    /// Paletas nomeadas do seletor de cor (opcional no arquivo).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub palettes: Vec<NamedPalette>,
     #[serde(default)]
     pub collections: Vec<String>,
     /// Cor e opções de cada grupo; só tem entrada o grupo que as definiu.
@@ -1533,6 +1547,7 @@ impl Default for Project {
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
             collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2115,6 +2130,7 @@ impl Project {
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
             collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2860,6 +2876,8 @@ impl Project {
         if self.op_graph.validate().is_err() {
             self.op_graph = Default::default();
         }
+        // Paletas nomeadas também vêm de arquivo: limites, cores e nomes corrigidos.
+        palette::repair_palettes(&mut self.palettes);
         let asset_ids: std::collections::HashSet<Uuid> =
             self.assets.iter().map(|asset| asset.id).collect();
         let stale: Vec<Uuid> = self

@@ -60,6 +60,10 @@ pub struct QtEditor {
     /// Pegada do pincel 3D sob o último ponto consultado: achatamento e giro
     /// do anel, como o Slint publica em `brush-cursor-squash/tilt`.
     brush_footprint: Option<[f32; 2]>,
+    /// Cursor do pincel espelhado entre 3D e 2D (B2): ponto da textura sob o
+    /// cursor na vista 3D e posição na vista do ponto sob o cursor do canvas 2D.
+    brush_texture_point: Option<[f32; 2]>,
+    brush_ghost_view: Option<[f32; 2]>,
     /// Alça do decalque sob o ponteiro (20 mover, 21 escalar, 22 girar).
     decal_hover_handle: Option<u8>,
     decal_gizmo: DecalGizmoMode,
@@ -88,6 +92,8 @@ impl QtEditor {
             tablet_input: None,
             session_lease: None,
             brush_footprint: None,
+            brush_texture_point: None,
+            brush_ghost_view: None,
             decal_hover_handle: None,
             decal_gizmo: DecalGizmoMode::Auto,
         }
@@ -161,6 +167,13 @@ impl QtEditor {
         v["brush_squash"] = json!(brush_squash);
         v["brush_tilt"] = json!(brush_tilt);
         v["brush_flow"] = json!(vm.brush_panel.flow);
+        v["brush_mirror"] = json!({
+            "texture": self.brush_texture_point,
+            "view": self.brush_ghost_view,
+        });
+        v["brush_size_jitter"] = json!(vm.brush_panel.size_jitter);
+        v["brush_scatter"] = json!(vm.brush_panel.scatter);
+        v["brush_opacity_jitter"] = json!(vm.brush_panel.opacity_jitter);
         // Sobe a cada mutação de pixels de textura/canvas: o host nativo usa
         // essa revisão para reler o raster em vez de redesenhar às cegas.
         v["texture_revision"] = json!(self.state.project.project.texture_revision);
@@ -216,6 +229,48 @@ impl QtEditor {
             &self.state.project.project,
             self.controller.active_material_id(),
         );
+        v["palettes"] = crate::palette_view::snapshot(&self.state.project.project);
+        v["tool_preview"] = match self.controller.tool_preview_frame() {
+            Some(frame) => json!({
+                "tool": frame.tool,
+                "title": frame.title,
+                "anchor": frame.anchor,
+                "tip": frame.tip,
+                "value": frame.value,
+                "unit": frame.unit,
+                "typed": frame.typed,
+            }),
+            None => Value::Null,
+        };
+        let locks = self
+            .state
+            .project
+            .active()
+            .map(|asset| asset.transform_locks)
+            .unwrap_or_default();
+        v["transform_locks"] = json!({
+            "position": locks.position,
+            "rotation": locks.rotation,
+            "scale": locks.scale,
+        });
+        let [gizmo_move, gizmo_rotate, gizmo_scale] = self.state.ui.select_gizmo_handles;
+        v["select_gizmo_move"] = json!(gizmo_move);
+        v["select_gizmo_rotate"] = json!(gizmo_rotate);
+        v["select_gizmo_scale"] = json!(gizmo_scale);
+        v["transform_orientation"] = json!(self.state.session.transform_orientation.id());
+        v["select_policy"] = json!({
+            "id": self.state.session.select_policy.id(),
+            "through_now": self.state.session.selects_through(),
+        });
+        let grid = &self.state.session.grid_settings;
+        v["viewport_grid"] = json!({
+            "visible": self.state.session.show_grid,
+            "axes_enabled": self.state.session.show_axes,
+            "axes": grid.axes,
+            "size": grid.size,
+            "spacing": grid.spacing,
+            "opacity": grid.opacity,
+        });
         v["op_graph"] = crate::op_graph_view::snapshot(
             &self.state.project.project,
             self.state.project.active().map(|asset| asset.id),
@@ -427,7 +482,22 @@ impl QtEditor {
                 } else {
                     None
                 };
+                self.brush_texture_point = self.controller.brush_texture_point_at(x, y);
                 return Ok(self.brush_footprint.is_some());
+            }
+            // Cursor do canvas 2D espelhado na vista 3D (B2).
+            "brush_texture_hover" => {
+                let x = number(request, "x")?;
+                let y = number(request, "y")?;
+                self.brush_ghost_view = self.controller.texture_point_to_viewport(x, y);
+                return Ok(self.brush_ghost_view.is_some());
+            }
+            "brush_mirror_clear" => {
+                let had = self.brush_texture_point.is_some() || self.brush_ghost_view.is_some();
+                self.brush_texture_point = None;
+                self.brush_ghost_view = None;
+                self.brush_footprint = None;
+                return Ok(had);
             }
             // Alça do decalque sob o ponteiro, para o realce do gizmo.
             "decal_hover" => {
@@ -514,6 +584,22 @@ impl QtEditor {
                 let material = self.controller.active_material_id();
                 let command = crate::material_recipe_view::command_for(action, request, material)?
                     .ok_or_else(|| format!("Ação desconhecida: {action}"))?;
+                self.execute_command(&command).map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            "transform_lock" => {
+                let channel = petunia_project::TransformChannel::from_id(string(request, "kind")?)
+                    .ok_or_else(|| "Canal inválido (position, rotation ou scale)".to_string())?;
+                let command = petunia_core::SetTransformLockCmd {
+                    channel,
+                    axis: index(request, "axis")?,
+                    locked: boolean(request, "locked")?,
+                };
+                self.execute_command(&command).map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            "palette" => {
+                let command = crate::palette_view::command_for(request)?;
                 self.execute_command(&command).map_err(|e| e.to_string())?;
                 return Ok(true);
             }
@@ -815,6 +901,7 @@ impl QtEditor {
                 p.selection_thickness = state.ui.selection_thickness;
                 p.gizmo_size = state.ui.gizmo_size;
                 p.gizmo_thickness = state.ui.gizmo_thickness;
+                p.select_gizmo_handles = state.ui.select_gizmo_handles;
                 p.nav_cube_opacity = state.ui.nav_cube_opacity;
                 p.model_quick_actions = state.ui.model_quick_actions.clone();
                 p.active_keymap_id = state.ui.active_keymap_id.clone();
@@ -1216,6 +1303,7 @@ impl QtEditor {
                 } else {
                     false
                 };
+                changed |= b.state.advance_camera_frame(dt);
                 changed |= b.decal_playback_tick(dt);
                 changed |= with_tablet(b, tablet, |b| b.airbrush_tick());
                 if owns_session {
@@ -1752,6 +1840,37 @@ fn dispatch_controller(
         "toggle_bevel_clamp_overlap" => b.toggle_bevel_clamp_overlap(),
         "toggle_edit_pivot" => b.toggle_edit_pivot(),
         "toggle_face_orientation" => b.toggle_face_orientation(),
+        "toggle_grid" => b.toggle_grid(),
+        "set_select_gizmo_move" => b.set_select_gizmo_handle(0, boolean(v, "enabled")?),
+        "set_select_gizmo_rotate" => b.set_select_gizmo_handle(1, boolean(v, "enabled")?),
+        "set_select_gizmo_scale" => b.set_select_gizmo_handle(2, boolean(v, "enabled")?),
+        "set_transform_orientation" => {
+            let orientation = petunia_core::TransformOrientation::from_offered_id(string(v, "id")?)
+                .ok_or_else(|| "Orientação inválida (global, local, normal, view)".to_string())?;
+            if b.state.session.transform_orientation == orientation {
+                false
+            } else {
+                b.state.set_transform_orientation(orientation);
+                b.state.mark_dirty();
+                true
+            }
+        }
+        "select_policy" => {
+            let policy =
+                petunia_core::SelectPolicy::from_id(string(v, "id")?).ok_or_else(|| {
+                    "Política de seleção inválida (auto, visible, through)".to_string()
+                })?;
+            b.state.set_select_policy(policy);
+            b.clear_hover();
+            b.state.mark_dirty();
+            true
+        }
+        "toggle_world_axis" => b.toggle_world_axis(index(v, "axis")?),
+        "set_viewport_grid" => b.set_viewport_grid(
+            number(v, "size")?,
+            number(v, "spacing")?,
+            number(v, "opacity")?,
+        ),
         "toggle_loop_cut_balanced" => b.toggle_loop_cut_balanced(),
         "toggle_menu" => b.toggle_menu(string(v, "id")?),
         "toggle_micro_inspector" => b.toggle_micro_inspector(),

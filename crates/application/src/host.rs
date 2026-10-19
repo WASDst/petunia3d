@@ -97,8 +97,14 @@ impl DesktopHost {
         state.ui.selection_thickness = preferences.selection_thickness.clamp(1.0, 6.0);
         state.ui.gizmo_size = preferences.gizmo_size.clamp(48.0, 160.0);
         state.ui.gizmo_thickness = preferences.gizmo_thickness.clamp(1.0, 6.0);
+        state.ui.select_gizmo_handles = preferences.select_gizmo_handles;
         state.ui.nav_cube_opacity = preferences.nav_cube_opacity.clamp(0.2, 1.0);
         state.ui.model_quick_actions = preferences.model_quick_actions.clone();
+        let grid = preferences.viewport_grid.sanitized();
+        state.session.grid_settings.size = grid.size;
+        state.session.grid_settings.spacing = grid.spacing;
+        state.session.grid_settings.opacity = grid.opacity;
+        state.session.grid_settings.axes = grid.axes;
         if !preferences.theme_id.is_empty() {
             state.ui.active_theme_id = preferences.theme_id.clone();
         }

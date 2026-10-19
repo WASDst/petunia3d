@@ -263,6 +263,10 @@
         {
           "path": "09-ui/shell-v2-roadmap.md",
           "title": "Shell v2 — roteiro de Poly, Paint, UV, Animate, Nós e Assets"
+        },
+        {
+          "path": "09-ui/visual-language.md",
+          "title": "Linguagem visual da vista e da GUI — proposta (B8)"
         }
       ]
     },

@@ -151,7 +151,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
                 } else if self.profile_transform_target_at(x, y) {
                     petunia_core::PressTarget::Handle(0)
-                } else if self.gizmo_target_at(x, y).is_some() {
+                } else if self.gizmo_takes_press(x, y) {
                     petunia_core::PressTarget::Handle(1)
                 } else {
                     petunia_core::PressTarget::Surface

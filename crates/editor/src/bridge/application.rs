@@ -346,7 +346,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.cancel_uv_transform();
             }
             UiIntent::SetSelectThrough(enabled) => {
-                self.state.session.select_through = enabled;
+                self.state.set_select_through(enabled);
                 self.clear_hover();
                 self.state.mark_dirty();
             }

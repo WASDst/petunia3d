@@ -274,7 +274,7 @@ impl crate::AppState {
             let p = clip.truncate() / clip.w;
             Some([p.x, p.y])
         };
-        let through = self.session.select_through;
+        let through = self.session.selects_through();
         let inside = |point: Vec3| {
             project(point).is_some_and(|p| {
                 contains(p) && (through || scene.point_visible(&self.session.camera, point))
@@ -525,60 +525,62 @@ mod lasso_tests {
     }
 
     #[test]
-    fn front_ortho_cube_box_lasso_select_only_visible_components_without_through_selection() {
+    fn front_ortho_cube_box_lasso_selection_follows_the_policy_and_the_display_mode() {
+        use crate::SelectPolicy::{Auto, Through, VisibleOnly};
         use crate::SelectionDomain::{Edge, Face, Vertex};
         for lasso in [false, true] {
-            for (xray, wireframe, through) in [
-                (false, false, false),
-                (true, false, false),
-                (false, true, false),
-                (false, false, true),
-                (true, false, true),
-                (false, true, true),
-            ] {
-                for domain in [Face, Vertex, Edge] {
-                    let mut state = cube_state(domain, xray, wireframe);
-                    state.session.select_through = through;
-                    select_region(&mut state, lasso, [-0.6, -0.6], [0.6, 0.6]);
-                    let mesh = state.project.active_mesh().unwrap();
-                    let context = format!(
-                        "{domain:?}, lasso={lasso}, xray={xray}, wireframe={wireframe}, select_through={through}"
-                    );
-                    match domain {
-                        Face => {
-                            for face in &mesh.faces {
-                                assert_eq!(
-                                    face.selected,
-                                    through
-                                        || face
-                                            .verts
-                                            .iter()
-                                            .all(|&v| mesh.verts[v as usize].pos[2] == 1.0),
-                                    "{context}"
-                                );
+            for (xray, wireframe) in [(false, false), (true, false), (false, true)] {
+                for policy in [Auto, VisibleOnly, Through] {
+                    for domain in [Face, Vertex, Edge] {
+                        let mut state = cube_state(domain, xray, wireframe);
+                        state.session.select_policy = policy;
+                        // B10: Automática atravessa só quando se vê através (Raio-X/Wireframe).
+                        let through = match policy {
+                            Through => true,
+                            VisibleOnly => false,
+                            Auto => xray || wireframe,
+                        };
+                        select_region(&mut state, lasso, [-0.6, -0.6], [0.6, 0.6]);
+                        let mesh = state.project.active_mesh().unwrap();
+                        let context = format!(
+                            "{domain:?}, lasso={lasso}, xray={xray}, wireframe={wireframe}, policy={policy:?}"
+                        );
+                        match domain {
+                            Face => {
+                                for face in &mesh.faces {
+                                    assert_eq!(
+                                        face.selected,
+                                        through
+                                            || face
+                                                .verts
+                                                .iter()
+                                                .all(|&v| mesh.verts[v as usize].pos[2] == 1.0),
+                                        "{context}"
+                                    );
+                                }
                             }
-                        }
-                        Vertex => {
-                            for vertex in &mesh.verts {
-                                assert_eq!(
-                                    vertex.selected,
-                                    through || vertex.pos[2] == 1.0,
-                                    "{context}"
-                                );
+                            Vertex => {
+                                for vertex in &mesh.verts {
+                                    assert_eq!(
+                                        vertex.selected,
+                                        through || vertex.pos[2] == 1.0,
+                                        "{context}"
+                                    );
+                                }
                             }
-                        }
-                        Edge => {
-                            for (a, b) in mesh.edges_unique() {
-                                assert_eq!(
-                                    mesh.selected_edges.contains(&(a, b)),
-                                    through
-                                        || (mesh.verts[a as usize].pos[2] == 1.0
-                                            && mesh.verts[b as usize].pos[2] == 1.0),
-                                    "{context}: {a}-{b}"
-                                );
+                            Edge => {
+                                for (a, b) in mesh.edges_unique() {
+                                    assert_eq!(
+                                        mesh.selected_edges.contains(&(a, b)),
+                                        through
+                                            || (mesh.verts[a as usize].pos[2] == 1.0
+                                                && mesh.verts[b as usize].pos[2] == 1.0),
+                                        "{context}: {a}-{b}"
+                                    );
+                                }
                             }
+                            _ => unreachable!(),
                         }
-                        _ => unreachable!(),
                     }
                 }
             }

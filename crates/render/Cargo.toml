@@ -19,3 +19,5 @@ puffin = { workspace = true }
 petunia_mesh = { workspace = true }
 # Contexto OpenGL sem janela (EGL surfaceless) para os testes de pixel do renderer.
 glutin = { version = "0.32", default-features = false, features = ["egl"] }
+# Capturas PNG do modo de edição para inspeção visual (B12, "olhar o resultado").
+image = { version = "0.25", default-features = false, features = ["png"] }

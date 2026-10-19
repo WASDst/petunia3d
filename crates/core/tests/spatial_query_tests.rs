@@ -448,20 +448,20 @@ fn test_vsp004_xray_vs_select_through_strict_invariance() {
 
     // Estado inicial: ambos false
     assert!(!state.show_xray);
-    assert!(!state.select_through);
+    assert!(state.select_policy != petunia_core::SelectPolicy::Through);
 
     // Ativar X-Ray NÃO ativa Select Through
     state.set_show_xray(true);
     assert!(state.show_xray, "X-Ray deve estar ativado");
     assert!(
-        !state.select_through,
+        state.select_policy != petunia_core::SelectPolicy::Through,
         "Invariante VSP-004: Ativar X-Ray NUNCA ativa Select Through"
     );
 
     // Ativar Select Through explicitamente
     state.set_select_through(true);
     assert!(
-        state.select_through,
+        state.select_policy == petunia_core::SelectPolicy::Through,
         "Select Through explicitamente ativado"
     );
     assert!(state.show_xray, "X-Ray continua ativo");
@@ -470,14 +470,14 @@ fn test_vsp004_xray_vs_select_through_strict_invariance() {
     state.set_show_xray(false);
     assert!(!state.show_xray, "X-Ray desativado");
     assert!(
-        state.select_through,
+        state.select_policy == petunia_core::SelectPolicy::Through,
         "Invariante VSP-004: Desativar X-Ray NÃO altera Select Through configurado pelo usuário"
     );
 
     // Desativar Select Through
     state.set_select_through(false);
     assert!(!state.show_xray);
-    assert!(!state.select_through);
+    assert!(state.select_policy != petunia_core::SelectPolicy::Through);
 }
 
 #[test]

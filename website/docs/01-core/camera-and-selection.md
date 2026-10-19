@@ -58,7 +58,7 @@ IDs persistentes deverão usar newtypes quando isso aumentar segurança e legibi
 
 O [contrato contextual](../02-application/contextual-editor-contract.md) separa navegação, centro de transformação e origem persistente. `NavigationAnchor::ViewTarget` é o default; `Cursor3D` é escolha explícita da sessão. Orbitar no modo Cursor3D transforma olho e alvo em torno da âncora sem reenquadrar antes do gesto; zoom preserva a posição projetada da referência. Pan/frame não movem cursor; trocar modo não altera câmera imediatamente. Ferramenta ativa e `PivotPoint` não decidem navegação.
 
-`select_through` é política de picking da sessão, independente de `show_xray` e Wireframe. Clique, hover, regiões e candidatos de snap usam essa política; a renderização mantém suas opções visuais próprias. `ViewportSession` projeta e restaura ambas as escolhas. A exposição Qt e seus gates continuam em H33; APIs headless não comprovam acesso físico no frontend.
+`select_policy` (`SelectPolicy`) é a política de picking da sessão: **Automática** (padrão; atravessa com `show_xray` ou Wireframe), **Só visível** ou **Através** (ADR-C16, item 15, 2026-10-19). A política é estado próprio: ligar o Raio-X nunca a altera (VSP-004). `EditorSession::selects_through()` combina política e modo de exibição, e clique, hover, regiões e candidatos de snap usam esse efeito. A renderização mantém suas opções visuais próprias e `ViewportSession` projeta e restaura ambas as escolhas. O Qt expõe a política no cabeçalho da vista, anunciada ao leitor de tela (harness `shell_v2`: `select-policy:*`).
 
 ## Matriz de implementação e conformidade (A05)
 

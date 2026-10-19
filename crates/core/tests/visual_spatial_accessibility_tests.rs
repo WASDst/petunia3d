@@ -186,27 +186,27 @@ fn test_vsp004_xray_and_select_through_strict_decoupling() {
 
     // Estado inicial: ambos desativados
     assert!(!state.session.show_xray);
-    assert!(!state.session.select_through);
+    assert!(state.session.select_policy != petunia_core::SelectPolicy::Through);
 
     // Ativar X-Ray NÃO ativa Select Through
     state.set_show_xray(true);
     assert!(state.session.show_xray);
-    assert!(!state.session.select_through);
+    assert!(state.session.select_policy != petunia_core::SelectPolicy::Through);
 
     // Ativar Select Through NÃO altera X-Ray
     state.set_select_through(true);
     assert!(state.session.show_xray);
-    assert!(state.session.select_through);
+    assert!(state.session.select_policy == petunia_core::SelectPolicy::Through);
 
     // Desativar X-Ray NÃO desativa Select Through
     state.set_show_xray(false);
     assert!(!state.session.show_xray);
-    assert!(state.session.select_through);
+    assert!(state.session.select_policy == petunia_core::SelectPolicy::Through);
 
     // Desativar Select Through
     state.set_select_through(false);
     assert!(!state.session.show_xray);
-    assert!(!state.session.select_through);
+    assert!(state.session.select_policy != petunia_core::SelectPolicy::Through);
 }
 
 #[test]

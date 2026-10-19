@@ -946,6 +946,16 @@
       "revision": "árvore de trabalho sobre ee93e35a (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Segunda leva da Onda A (A9–A15). fmt limpo; clippy -D warnings sem avisos (8 crates). Rust 92 binários, 1602 testes, 0 falhas, GL headless sem SKIPPED (novos: medida, objeto oculto, grupos de nós no OpGraph com dados hostis, cor/poda de grupos, orientação das referências, opacidade do cubo). Qt offscreen 49 testes, 0 falhas; shell_v2 com 258 verificações, 0 reprovadas, em 5 execuções seguidas (scrub de campos, caixa/multiseleção/Ctrl+G/renomear de nós, legenda fixa, medida por cliques reais). Defeitos achados pelos testes: Ctrl+G de Partes deixava grupo vazio; o filtro de teclas do shell desviava Ctrl+G do canvas de nós para agrupar objetos. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%. A8 depende de B1; B5 e C7 registrados nas ondas B e C."
+    },
+    "shell-v2-roadmap-b-2026-10-19": {
+      "revision": "árvore de trabalho sobre 2bd25a99 (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda B (B1–B7, B9) e A8. fmt limpo; clippy -D warnings sem avisos (8 crates). Rust 7 crates --all-features com PETUNIA_REQUIRE_GL=1: 1615 testes, 0 falhas, GL sem SKIPPED (novos: travas de transform com Undo e no modal, grade com dados hostis, registro animável, baricêntricas) + ida e volta 3D↔UV do cursor do pincel no bridge. Qt offscreen 49 testes, 0 falhas; shell_v2 com 303 verificações, 0 reprovadas, em 5 execuções seguidas (paletas CRUD, hex, rail, moldura de diálogo arrastar/redimensionar/teclado/lembrar, cartão de operação arrastável, grade e eixos, cadeados, tortas por direção/número/Esc/atalho/lista, eco do pincel, quadro de prévia). B8 com guia de estilo proposto, aguardando aprovação. Achado fora do escopo: view.frame_selection só agenda camera_frame e nada o consome (tarefa separada). Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%."
+    },
+    "shell-v2-roadmap-b-close-2026-10-19": {
+      "revision": "árvore de trabalho sobre 4f983e64 (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Fechamento da Onda B (B8, B10–B15) + correção do camera_frame (sessão paralela). fmt limpo; clippy -D warnings sem avisos (8 crates). Rust 7 crates --all-features com PETUNIA_REQUIRE_GL=1: 1628 testes, 0 falhas, GL sem SKIPPED. Qt offscreen 51 testes, 0 falhas; shell_v2 315 verificações, 0 reprovadas em 5 execuções. Defeitos achados e corrigidos com teste de regressão: raio-triângulo vazava pela diagonal dos quads (125/1600), gizmo do Selecionar engolia clique em vértice/aresta vizinho, gizmo aparecia sem componentes, camera_frame não avançava no tick Qt. Capturas GL antes/depois do modo de edição em target/render-captures. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%."
     }
   },
   "tasks": [
@@ -5240,7 +5250,7 @@
       "title": "Shell v2 — Onda A (pequenas e concretas)",
       "description": "Grupo vazio some, renomear e cor por grupo, pivô não destrutivo e menus de Pivô/3D Cursor, navegação dos nós, wireframe 2D e mover várias ilhas na UV.",
       "document": "09-ui/shell-v2-roadmap.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-19",
       "baseline": "ADR-C16 aprovado em 2026-10-18; implementação em andamento.",
       "checkpoints": [
@@ -5295,9 +5305,14 @@
           "evidence": "shell-v2-roadmap-a2-2026-10-19"
         },
         {
+          "title": "A8 A opacidade duplicada do Paint sai: é o alfa do seletor de cor embutido no pincel.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
+        },
+        {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual manual) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         }
       ],
       "documents": [
@@ -5310,67 +5325,103 @@
       "id": "U32",
       "phase": "slint-gl",
       "title": "Shell v2 — Onda B (alicerces)",
-      "description": "Seletor de cor único com paletas, cursor do brush 3D/2D, quadro de prévia de ferramentas e registro de propriedades animáveis.",
+      "description": "Seletor de cor único com paletas, cursor do brush 3D/2D, quadro de prévia de ferramentas e registro de propriedades animáveis. Pedidos de 2026-10-19: seleção fiel ao que se vê (B10) e gizmo do Selecionar configurável (B11).",
       "document": "09-ui/shell-v2-roadmap.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-19",
       "baseline": "ADR-C16; começa depois da Onda A.",
       "checkpoints": [
         {
           "title": "B1 PetuniaColorPanel único com paletas e cor fixa no rail (a opacidade duplicada do Paint sai junto).",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "B2 Cursor do brush no 3D e no 2D, com posição espelhada.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "B3 Quadro de prévia de ferramentas com HUD numérico.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "B4 Registro de propriedades animáveis.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "B5 Todo diálogo movível e redimensionável, com posição e tamanho lembrados.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "B6 Eixos sem atravessar objetos (Y oculto por padrão) e grade configurável com botão na vista.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "B7 Trava de valores por canal, com cadeado dentro do campo.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
-          "title": "B8 Linguagem visual: guia de estilo aprovado e passada de polimento.",
-          "completed": false,
-          "evidence": null
+          "title": "B8 Linguagem visual: guia aprovado (09-ui/visual-language.md), tokens nos guias e frentes B12–B14.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
         },
         {
           "title": "B9 Menus em torta (primitivas, vista, domínio de seleção) com teclado e lista.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
           "title": "Executar e registrar os gates aplicáveis.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-2026-10-19"
+        },
+        {
+          "title": "B10 Seleção de componentes fiel ao que se vê (oclusão no Sólido; através no Raio-X/Wireframe), política explícita e controle no cabeçalho, com teste de regressão.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
+        },
+        {
+          "title": "B11 Gizmo do Selecionar configurável nas Preferências (mover, escalar e/ou rotacionar).",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
+        },
+        {
+          "title": "B12 Seleção e overlays suaves na vista (contorno fino, pontos e arestas finas, tinta leve na face, sem diagonais).",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
+        },
+        {
+          "title": "B13 Painel direito denso: campos em fieldHeight (28 px) e módulos compactos, rótulo acima mantido por decisão do usuário.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
+        },
+        {
+          "title": "B14 Paint compacto: seletor de cor compacto e menus densos (trilho único mantido; prateleira de pincéis na C2).",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
+        },
+        {
+          "title": "B15 Orientação de transformação no cabeçalho (Global, Local, Normal, Vista; Cursor fora enquanto não houver rotação do cursor).",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
+        },
+        {
+          "title": "Executar e registrar os gates de B10–B15.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-b-close-2026-10-19"
         }
       ],
       "documents": [
         "09-ui/shell-v2-roadmap.md",
         "09-ui/shell-v2-refinement.md",
-        "09-ui/shell-v2-proposal.md"
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/visual-language.md"
       ]
     },
     {

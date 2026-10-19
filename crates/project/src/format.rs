@@ -130,6 +130,7 @@ impl LegacyProjectWithSplines {
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
             collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
         }
     }
@@ -209,6 +210,7 @@ impl LegacyProjectBeforeSplines {
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
             collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
         }
     }
@@ -850,6 +852,7 @@ mod tests {
                 paint_stack: None,
                 surface_shading: Default::default(),
                 transform: Default::default(),
+                transform_locks: Default::default(),
                 eval_cache: None,
                 graph_cache: None,
                 parametric: None,

@@ -1,4 +1,5 @@
 #include "petunia_number_field.h"
+#include "petunia_icons.h"
 #include "petunia_expression.h"
 #include "petunia_scrub.h"
 #include "petunia_theme.h"
@@ -118,6 +119,31 @@ void PetuniaNumberField::setLabel(const QString &label) {
     m_lineEdit->setToolTip(label);
 }
 
+void PetuniaNumberField::setLockable(bool lockable) {
+    if (m_lockable == lockable)
+        return;
+    m_lockable = lockable;
+    applyTheme();
+}
+
+void PetuniaNumberField::setLocked(bool locked) {
+    if (m_locked == locked)
+        return;
+    m_locked = locked;
+    const QString state = locked ? tr("travado: o gizmo e os atalhos não mudam este valor") : QString();
+    setAccessibleDescription(state);
+    m_lineEdit->setAccessibleDescription(state);
+    update();
+}
+
+QRect PetuniaNumberField::lockRect() const {
+    if (!m_lockable)
+        return {};
+    const auto &t = PetuniaTheme::instance();
+    const int side = std::max(12, t.iconPx() - 2);
+    return {width() - side - t.space(1), (height() - side) / 2, side, side};
+}
+
 void PetuniaNumberField::setReadOnly(bool readOnly) {
     m_readOnly = readOnly;
     m_lineEdit->setReadOnly(readOnly);
@@ -134,14 +160,14 @@ QSize PetuniaNumberField::sizeHint() const {
     const int chip = m_prefix.isEmpty() ? 0 : chipRect().width();
     const int text = fm.horizontalAdvance(QStringLiteral("-000.0000")) +
                      (m_suffix.isEmpty() ? 0 : fm.horizontalAdvance(m_suffix + QLatin1Char(' ')));
-    return {chip + text + t.space(4), t.controlHeight()};
+    return {chip + text + t.space(4), t.fieldHeight()};
 }
 
 QSize PetuniaNumberField::minimumSizeHint() const {
     const auto &t = PetuniaTheme::instance();
     const QFontMetrics fm(m_lineEdit->font());
     const int chip = m_prefix.isEmpty() ? 0 : chipRect().width();
-    return {chip + fm.horizontalAdvance(QStringLiteral("0.00")) + t.space(3), t.controlHeight()};
+    return {chip + fm.horizontalAdvance(QStringLiteral("0.00")) + t.space(3), t.fieldHeight()};
 }
 
 // ── Tema ────────────────────────────────────────────────────────────────────
@@ -156,10 +182,11 @@ void PetuniaNumberField::applyTheme() {
     p.setColor(QPalette::Highlight, t.accentPrimary());
     p.setColor(QPalette::HighlightedText, t.textActive());
     m_lineEdit->setPalette(p);
-    setMinimumHeight(t.controlHeight());
-    setMaximumHeight(t.controlHeight());
+    setMinimumHeight(t.fieldHeight());
+    setMaximumHeight(t.fieldHeight());
     const int chip = m_prefix.isEmpty() ? 0 : chipRect().width();
-    layout()->setContentsMargins(chip + t.space(2), 1, t.space(1), 1);
+    const int lock = m_lockable ? std::max(12, t.iconPx() - 2) + t.space(1) : 0;
+    layout()->setContentsMargins(chip + t.space(2), 1, t.space(1) + lock, 1);
     updateGeometry();
     update();
 }
@@ -173,7 +200,7 @@ QRect PetuniaNumberField::chipRect() const {
     f.setBold(true);
     const QFontMetrics fm(f);
     const int width = std::max(t.space(5), fm.horizontalAdvance(m_prefix) + t.space(2));
-    const int h = std::max(0, t.controlHeight() - 2);
+    const int h = std::max(0, t.fieldHeight() - 2);
     return {1, 1, width, h};
 }
 
@@ -408,6 +435,12 @@ void PetuniaNumberField::scrubEnd() {
 }
 
 void PetuniaNumberField::mousePressEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton && m_lockable && isEnabled() &&
+        lockRect().adjusted(-2, -2, 2, 2).contains(event->position().toPoint())) {
+        emit lockToggled(m_propertyId, !m_locked);
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && inChip(event->position().toPoint()) && !m_readOnly &&
         isEnabled()) {
         scrubArm(event->globalPosition().toPoint());
@@ -428,6 +461,16 @@ void PetuniaNumberField::mouseMoveEvent(QMouseEvent *event) {
     if (overChip != m_hoverChip) {
         m_hoverChip = overChip;
         setCursor(overChip && !m_readOnly ? Qt::SizeHorCursor : Qt::ArrowCursor);
+    }
+    const bool overLock = m_lockable && lockRect().contains(event->position().toPoint());
+    if (overLock != m_hoverLock) {
+        m_hoverLock = overLock;
+        setToolTip(overLock ? (m_locked ? tr("Destravar (Alt+L)") : tr("Travar este valor (Alt+L)")) : QString());
+        if (overLock)
+            setCursor(Qt::PointingHandCursor);
+        else if (!m_hoverChip)
+            setCursor(Qt::ArrowCursor);
+        update();
     }
     if (!m_scrubArmed || !(event->buttons() & Qt::LeftButton)) {
         QWidget::mouseMoveEvent(event);
@@ -507,6 +550,11 @@ bool PetuniaNumberField::eventFilter(QObject *watched, QEvent *event) {
         return true;
     case QEvent::KeyPress: {
         auto *key = static_cast<QKeyEvent *>(event);
+        if (m_lockable && key->key() == Qt::Key_L &&
+            (key->modifiers() & ~Qt::KeypadModifier) == Qt::AltModifier) {
+            emit lockToggled(m_propertyId, !m_locked);
+            return true;
+        }
         switch (key->key()) {
         case Qt::Key_Return:
         case Qt::Key_Enter:
@@ -583,5 +631,22 @@ void PetuniaNumberField::paintEvent(QPaintEvent *) {
         p.setFont(f);
         p.setPen(enabled ? readableOn(chipColor) : t.textMuted());
         p.drawText(chip, Qt::AlignCenter, m_prefix);
+    }
+
+    if (m_lockable) {
+        // Destravado: discreto (sem competir com o número). Travado: cor de destaque e
+        // fundo próprio — a diferença não depende só de cor (ícone muda de forma).
+        const QRect lock = lockRect();
+        if (m_locked) {
+            p.setPen(Qt::NoPen);
+            QColor back = t.accentPrimary();
+            back.setAlpha(60);
+            p.setBrush(back);
+            p.drawRoundedRect(QRectF(lock).adjusted(-1, -1, 1, 1), t.radius() - 1, t.radius() - 1);
+        }
+        const QIcon icon = PetuniaIcons::get(m_locked ? QStringLiteral("lock") : QStringLiteral("unlock"));
+        p.setOpacity(!enabled ? 0.35 : m_locked ? 1.0 : (m_hoverLock || m_hover) ? 0.75 : 0.35);
+        icon.paint(&p, lock);
+        p.setOpacity(1.0);
     }
 }

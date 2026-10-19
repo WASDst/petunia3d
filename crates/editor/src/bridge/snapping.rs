@@ -58,7 +58,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 grid,
                 radius_pixels: session.snap_settings.radius_pixels,
                 mask,
-                xray: session.select_through,
+                xray: session.selects_through(),
                 reference,
                 angle_step_degrees: angle_step,
             },

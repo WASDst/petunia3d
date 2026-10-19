@@ -1,4 +1,5 @@
 #include "petunia_recovery_dialog.h"
+#include "petunia_dialog_chrome.h"
 #include "petunia_theme.h"
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
@@ -81,6 +82,8 @@ void PetuniaRecoveryDialog::setupUi() {
 
     cardLayout->addLayout(buttonsLayout);
     mainLayout->addWidget(card);
+    // Sem decoração do sistema: o cartão é a alça de arrasto (B5).
+    PetuniaDialogChrome::install(this, QStringLiteral("recovery"), {true, card});
     // Ação segura com foco inicial: Enter recupera, nunca descarta.
     m_recoverBtn->setFocus();
 }

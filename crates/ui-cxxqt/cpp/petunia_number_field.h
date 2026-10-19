@@ -62,6 +62,15 @@ public:
     void setReadOnly(bool readOnly);
     bool isReadOnly() const { return m_readOnly; }
 
+    /// Cadeado dentro do campo, à direita (ADR-C16, B7): clique ou Alt+L alterna.
+    /// O campo só mostra e pede; quem trava o canal é o documento (pedido com Undo).
+    void setLockable(bool lockable);
+    bool isLockable() const { return m_lockable; }
+    /// Não emite `lockToggled` (sincronização vinda do estado).
+    void setLocked(bool locked);
+    bool isLocked() const { return m_locked; }
+    QRect lockRect() const;
+
     bool isInvalid() const { return !m_error.isEmpty(); }
     const QString &errorText() const { return m_error; }
     bool isEditing() const { return m_isEditing; }
@@ -97,6 +106,8 @@ signals:
     void commitRequested(const QString &propertyId, double value, const QString &text = QString());
     void editCanceled(const QString &propertyId);
     void invalidInput(const QString &propertyId, const QString &message);
+    /// Pedido da pessoa para travar/destravar (o estado só muda quando o documento confirmar).
+    void lockToggled(const QString &propertyId, bool locked);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -147,6 +158,9 @@ private:
     bool m_readOnly{false};
     bool m_hover{false};
     bool m_hoverChip{false};
+    bool m_lockable{false};
+    bool m_locked{false};
+    bool m_hoverLock{false};
 
     bool m_scrubArmed{false};
     bool m_scrubbing{false};

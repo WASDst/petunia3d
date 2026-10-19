@@ -1,4 +1,8 @@
 #include "petunia_operation_hud.h"
+
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <algorithm>
 #include "petunia_operation_card.h"
 #include "../petunia_number_field.h"
 #include "../petunia_theme.h"
@@ -58,7 +62,84 @@ PetuniaOperationHud::PetuniaOperationHud(PetuniaShellController *controller, QWi
     connect(m_controller, &PetuniaShellController::operationAdded, this, &PetuniaOperationHud::focusOperation);
     setMinimumWidth(theme.scaled(260));
     setMaximumWidth(theme.scaled(400));
+    setCursor(Qt::OpenHandCursor);
+    setToolTip(tr("Arraste para mover. Duplo clique volta ao canto; Ctrl+Alt+setas movem."));
     hide();
+}
+
+QPoint PetuniaOperationHud::placement(const QSize &area, int margin) const {
+    const QPoint wanted = m_customPos ? m_pos : QPoint(margin, margin);
+    const int maxX = std::max(margin, area.width() - width() - margin);
+    const int maxY = std::max(margin, area.height() - height() - margin);
+    return {std::clamp(wanted.x(), margin, maxX), std::clamp(wanted.y(), margin, maxY)};
+}
+
+void PetuniaOperationHud::resetPlacement() {
+    m_customPos = false;
+    if (parentWidget())
+        move(placement(parentWidget()->size(), PetuniaTheme::instance().space(3)));
+}
+
+void PetuniaOperationHud::mousePressEvent(QMouseEvent *event) {
+    if (event->button() != Qt::LeftButton) {
+        QFrame::mousePressEvent(event);
+        return;
+    }
+    m_dragging = true;
+    m_dragOffset = event->position().toPoint();
+    setCursor(Qt::ClosedHandCursor);
+    event->accept();
+}
+
+void PetuniaOperationHud::mouseMoveEvent(QMouseEvent *event) {
+    if (!m_dragging || !parentWidget()) {
+        QFrame::mouseMoveEvent(event);
+        return;
+    }
+    m_customPos = true;
+    m_pos = mapToParent(event->position().toPoint()) - m_dragOffset;
+    move(placement(parentWidget()->size(), PetuniaTheme::instance().space(3)));
+    m_pos = pos();
+    event->accept();
+}
+
+void PetuniaOperationHud::mouseReleaseEvent(QMouseEvent *event) {
+    if (m_dragging) {
+        m_dragging = false;
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
+    QFrame::mouseReleaseEvent(event);
+}
+
+void PetuniaOperationHud::mouseDoubleClickEvent(QMouseEvent *event) {
+    resetPlacement();
+    event->accept();
+}
+
+void PetuniaOperationHud::keyPressEvent(QKeyEvent *event) {
+    const auto mods = event->modifiers() & ~Qt::KeypadModifier;
+    if (mods == (Qt::ControlModifier | Qt::AltModifier) && parentWidget()) {
+        const int step = PetuniaTheme::instance().scaled(20);
+        QPoint delta;
+        switch (event->key()) {
+        case Qt::Key_Left: delta = {-step, 0}; break;
+        case Qt::Key_Right: delta = {step, 0}; break;
+        case Qt::Key_Up: delta = {0, -step}; break;
+        case Qt::Key_Down: delta = {0, step}; break;
+        default: break;
+        }
+        if (!delta.isNull()) {
+            m_customPos = true;
+            m_pos = pos() + delta;
+            move(placement(parentWidget()->size(), PetuniaTheme::instance().space(3)));
+            m_pos = pos();
+            event->accept();
+            return;
+        }
+    }
+    QFrame::keyPressEvent(event);
 }
 
 QWidget *PetuniaOperationHud::makeSection(const QString &id, const QString &) {

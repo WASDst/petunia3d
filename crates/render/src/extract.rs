@@ -43,10 +43,18 @@ const WIRE_EDGE_COLOR: [f32; 3] = [0.62, 0.66, 0.74];
 const WIRE_SELECTED_EDGE_COLOR: [f32; 3] = [1.0, 0.62, 0.20];
 const TRIANGULATION_COLOR: [f32; 3] = [0.3, 0.65, 0.95];
 /// Preselection: ciano #7DDCFF único em GPU, software e shell.
-const HOVER_LINE: [f32; 4] = [0.49, 0.86, 1.0, 0.85];
-const HOVER_FACE: [f32; 4] = [0.49, 0.86, 1.0, 0.18];
-const EDGE_GUIDE: [f32; 4] = [0.70, 0.75, 0.83, 0.76];
-const VERTEX_GUIDE: [f32; 4] = [0.73, 0.78, 0.85, 0.9];
+// B12 (guia de linguagem visual): componentes discretos e escuros, só o que está
+// selecionado ganha cor e tamanho; o hover é um destaque, não um halo.
+const HOVER_LINE: [f32; 4] = [0.49, 0.86, 1.0, 0.9];
+const HOVER_FACE: [f32; 4] = [0.49, 0.86, 1.0, 0.12];
+const EDGE_GUIDE: [f32; 4] = [0.05, 0.05, 0.06, 0.9];
+const VERTEX_GUIDE: [f32; 4] = [0.04, 0.04, 0.05, 1.0];
+/// Raio dos pontos de vértice em px lógicos: comum, selecionado e sob o cursor.
+const VERTEX_RADIUS: f32 = 2.0;
+const VERTEX_SELECTED_RADIUS: f32 = 3.0;
+const VERTEX_HOVER_RADIUS: f32 = 3.5;
+/// Tinta da face selecionada (o contorno na cor de seleção dá a forma).
+const FACE_SELECTED_ALPHA: f32 = 0.22;
 
 struct Hasher(u64);
 
@@ -72,6 +80,9 @@ fn overlay_key(settings: &ViewportRenderSettings) -> u64 {
     h.mix(u64::from(settings.show_overlays));
     h.mix(u64::from(settings.show_grid));
     h.mix(u64::from(settings.show_axes));
+    for visible in settings.axes_visible {
+        h.mix(u64::from(visible));
+    }
     for value in [
         settings.grid.size,
         settings.grid.spacing,
@@ -1045,7 +1056,7 @@ pub fn build_component_overlays(
             .selection_color_of(asset)
             .unwrap_or(style.selection_rgb),
     );
-    let face_color = [selected[0], selected[1], selected[2], 0.32];
+    let face_color = [selected[0], selected[1], selected[2], FACE_SELECTED_ALPHA];
     let edge_color = [selected[0], selected[1], selected[2], 1.0];
     let thickness = style.thickness;
     let segment = |a: u32, b: u32| {
@@ -1078,24 +1089,26 @@ pub fn build_component_overlays(
                         a,
                         b,
                         color: edge_color,
-                        width_px: thickness.max(2.5),
+                        width_px: thickness.clamp(1.5, 3.0),
                     });
                 }
             }
         }
         SelectionDomain::Vertex => {
             for vertex in &mesh.verts {
+                // A espessura de seleção (preferência) engrossa um pouco os pontos.
+                let grow = (thickness - 2.0).max(0.0) * 0.5;
                 overlays.points.push(if vertex.selected {
                     OverlayPoint {
                         position: vertex.pos,
                         color: edge_color,
-                        radius_px: (thickness * 2.0).clamp(5.0, 7.0),
+                        radius_px: VERTEX_SELECTED_RADIUS + grow,
                     }
                 } else {
                     OverlayPoint {
                         position: vertex.pos,
                         color: VERTEX_GUIDE,
-                        radius_px: (thickness * 1.5).clamp(3.5, 5.5),
+                        radius_px: VERTEX_RADIUS + grow,
                     }
                 });
             }
@@ -1108,6 +1121,24 @@ pub fn build_component_overlays(
             for (index, face) in mesh.faces.iter().enumerate() {
                 if face.selected {
                     face_fill(&mut overlays.faces, &mesh, index, face_color);
+                    // Contorno fino na cor de seleção: a forma da face lê sem
+                    // precisar de tinta forte.
+                    let count = face.verts.len();
+                    for corner in 0..count {
+                        let (Some(&a), Some(&b)) =
+                            (face.verts.get(corner), face.verts.get((corner + 1) % count))
+                        else {
+                            continue;
+                        };
+                        if let Some((a, b)) = segment(a, b) {
+                            overlays.lines.push(OverlayLine {
+                                a,
+                                b,
+                                color: edge_color,
+                                width_px: thickness.clamp(1.0, 2.0),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1120,7 +1151,7 @@ pub fn build_component_overlays(
                 overlays.points.push(OverlayPoint {
                     position: vertex.pos,
                     color: HOVER_LINE,
-                    radius_px: (thickness * 2.5).clamp(6.5, 8.5),
+                    radius_px: VERTEX_HOVER_RADIUS + (thickness - 2.0).max(0.0) * 0.5,
                 });
             }
         }
@@ -1130,7 +1161,7 @@ pub fn build_component_overlays(
                     a,
                     b,
                     color: HOVER_LINE,
-                    width_px: thickness * 1.35,
+                    width_px: thickness.clamp(1.5, 2.5),
                 });
             }
         }

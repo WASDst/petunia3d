@@ -29,6 +29,11 @@ public:
 
     PetuniaNumberField *field(int axis) const;
 
+    /// Cadeado por eixo dentro de cada campo (B7).
+    void setLockable(bool lockable);
+    void setLocked(int axis, bool locked);
+    bool isLocked(int axis) const;
+
     /// Nome acessível do vetor; cada eixo recebe "<label> X/Y/Z".
     void setLabel(const QString &label);
 
@@ -40,6 +45,7 @@ signals:
     void previewRequested(int axis, double val);
     void commitRequested(int axis, double val, const QString &text = QString());
     void editCanceled(int axis);
+    void lockToggled(int axis, bool locked);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

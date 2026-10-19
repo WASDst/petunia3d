@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QList>
 #include <QToolButton>
+#include <QColor>
 #include <QWidget>
 
 class QScrollArea;
@@ -25,6 +26,10 @@ class PetuniaToolRail : public QWidget {
     void setExpanded(bool expanded);
     QList<QToolButton *> buttons() const { return m_buttons; }
     QToolButton *button(const QString &toolId) const { return m_byId.value(toolId); }
+    /// Cor atual do pincel (só no PAINT), como no Photoshop: clicar abre o seletor
+    /// e a cor é aplicada ao vivo; Cancelar volta à cor anterior.
+    QToolButton *colorSwatch() const { return m_color; }
+    QColor brushColor() const { return m_brushColor; }
 
   signals:
     void expandedChanged(bool expanded);
@@ -45,6 +50,10 @@ class PetuniaToolRail : public QWidget {
     QWidget *m_column{nullptr};
     QVBoxLayout *m_layout{nullptr};
     QToolButton *m_expand{nullptr};
+    QToolButton *m_color{nullptr};
+    QColor m_brushColor;
+    void openColor();
+    void applyBrushColor(const QColor &color);
     QButtonGroup *m_group{nullptr};
     QList<QToolButton *> m_buttons;
     QHash<QString, QToolButton *> m_byId;

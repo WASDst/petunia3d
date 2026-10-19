@@ -5602,5 +5602,305 @@
   "Nome do grupo de nós": {
     "pt-BR": "Nome do grupo de nós",
     "en": "Node group name"
+  },
+  "Arraste para mover. Duplo clique volta ao canto; Ctrl+Alt+setas movem.": {
+    "pt-BR": "Arraste para mover. Duplo clique volta ao canto; Ctrl+Alt+setas movem.",
+    "en": "Drag to move. Double-click returns to the corner; Ctrl+Alt+arrows move."
+  },
+  "Menu em torta: aponte e clique, use os números 1 a 8, ou setas e Enter. Esc cancela.": {
+    "pt-BR": "Menu em torta: aponte e clique, use os números 1 a 8, ou setas e Enter. Esc cancela.",
+    "en": "Pie menu: point and click, use the numbers 1 to 8, or arrows and Enter. Esc cancels."
+  },
+  "Mostrar como lista (lembrado)": {
+    "pt-BR": "Mostrar como lista (lembrado)",
+    "en": "Show as a list (remembered)"
+  },
+  "Mostrar como lista": {
+    "pt-BR": "Mostrar como lista",
+    "en": "Show as a list"
+  },
+  "Tecla %1": {
+    "pt-BR": "Tecla %1",
+    "en": "Key %1"
+  },
+  "Mostrar em torta": {
+    "pt-BR": "Mostrar em torta",
+    "en": "Show as a pie"
+  },
+  "Adicionar": {
+    "pt-BR": "Adicionar",
+    "en": "Add"
+  },
+  "Cubo": {
+    "pt-BR": "Cubo",
+    "en": "Cube"
+  },
+  "Esfera": {
+    "pt-BR": "Esfera",
+    "en": "Sphere"
+  },
+  "Cilindro": {
+    "pt-BR": "Cilindro",
+    "en": "Cylinder"
+  },
+  "Cone": {
+    "pt-BR": "Cone",
+    "en": "Cone"
+  },
+  "Toro": {
+    "pt-BR": "Toro",
+    "en": "Torus"
+  },
+  "Icosfera": {
+    "pt-BR": "Icosfera",
+    "en": "Icosphere"
+  },
+  "Cápsula": {
+    "pt-BR": "Cápsula",
+    "en": "Capsule"
+  },
+  "Isométrica": {
+    "pt-BR": "Isométrica",
+    "en": "Isometric"
+  },
+  "Cor do pincel — clique para escolher": {
+    "pt-BR": "Cor do pincel — clique para escolher",
+    "en": "Brush color — click to choose"
+  },
+  "Grade da vista": {
+    "pt-BR": "Grade da vista",
+    "en": "View grid"
+  },
+  "Grade: clique liga/desliga; a seta abre tamanho, ladrilho e eixos": {
+    "pt-BR": "Grade: clique liga/desliga; a seta abre tamanho, ladrilho e eixos",
+    "en": "Grid: click toggles; the arrow opens size, tile and axes"
+  },
+  "Opções da grade": {
+    "pt-BR": "Opções da grade",
+    "en": "Grid options"
+  },
+  "Extensão (metade)": {
+    "pt-BR": "Extensão (metade)",
+    "en": "Extent (half)"
+  },
+  "Lado do ladrilho": {
+    "pt-BR": "Lado do ladrilho",
+    "en": "Tile size"
+  },
+  "Mostrar o eixo %1": {
+    "pt-BR": "Mostrar o eixo %1",
+    "en": "Show the %1 axis"
+  },
+  "Eixos": {
+    "pt-BR": "Eixos",
+    "en": "Axes"
+  },
+  "Caixa de cor": {
+    "pt-BR": "Caixa de cor",
+    "en": "Color box"
+  },
+  "Setas mudam saturação e brilho; Page Up e Page Down mudam o matiz": {
+    "pt-BR": "Setas mudam saturação e brilho; Page Up e Page Down mudam o matiz",
+    "en": "Arrows change saturation and brightness; Page Up and Page Down change the hue"
+  },
+  "Cores da paleta": {
+    "pt-BR": "Cores da paleta",
+    "en": "Palette colors"
+  },
+  "Clique escolhe a cor; botão direito ou Menu edita ou apaga; setas percorrem": {
+    "pt-BR": "Clique escolhe a cor; botão direito ou Menu edita ou apaga; setas percorrem",
+    "en": "Click picks the color; right-click or Menu edits or deletes; arrows move"
+  },
+  "Paleta vazia: use + para guardar a cor atual": {
+    "pt-BR": "Paleta vazia: use + para guardar a cor atual",
+    "en": "Empty palette: use + to keep the current color"
+  },
+  "Editar cor…": {
+    "pt-BR": "Editar cor…",
+    "en": "Edit color…"
+  },
+  "Apagar cor": {
+    "pt-BR": "Apagar cor",
+    "en": "Delete color"
+  },
+  "Roda": {
+    "pt-BR": "Roda",
+    "en": "Wheel"
+  },
+  "Caixa": {
+    "pt-BR": "Caixa",
+    "en": "Box"
+  },
+  "Forma de escolher a cor": {
+    "pt-BR": "Forma de escolher a cor",
+    "en": "How to pick the color"
+  },
+  "Modelo de cor": {
+    "pt-BR": "Modelo de cor",
+    "en": "Color model"
+  },
+  "#RRGGBB ou #RRGGBBAA": {
+    "pt-BR": "#RRGGBB ou #RRGGBBAA",
+    "en": "#RRGGBB or #RRGGBBAA"
+  },
+  "Adicionar a cor à paleta": {
+    "pt-BR": "Adicionar a cor à paleta",
+    "en": "Add the color to the palette"
+  },
+  "Paleta": {
+    "pt-BR": "Paleta",
+    "en": "Palette"
+  },
+  "Nova paleta": {
+    "pt-BR": "Nova paleta",
+    "en": "New palette"
+  },
+  "Renomear paleta": {
+    "pt-BR": "Renomear paleta",
+    "en": "Rename palette"
+  },
+  "Apagar paleta": {
+    "pt-BR": "Apagar paleta",
+    "en": "Delete palette"
+  },
+  "Nome da paleta": {
+    "pt-BR": "Nome da paleta",
+    "en": "Palette name"
+  },
+  "Paleta %1": {
+    "pt-BR": "Paleta %1",
+    "en": "Palette %1"
+  },
+  "Editar cor da paleta": {
+    "pt-BR": "Editar cor da paleta",
+    "en": "Edit palette color"
+  },
+  "Vermelho": {
+    "pt-BR": "Vermelho",
+    "en": "Red"
+  },
+  "Verde": {
+    "pt-BR": "Verde",
+    "en": "Green"
+  },
+  "Azul": {
+    "pt-BR": "Azul",
+    "en": "Blue"
+  },
+  "Luminosidade": {
+    "pt-BR": "Luminosidade",
+    "en": "Lightness"
+  },
+  "Barra de título": {
+    "pt-BR": "Barra de título",
+    "en": "Title bar"
+  },
+  "Arraste para mover. Ctrl+Alt+setas movem; com Shift redimensionam.": {
+    "pt-BR": "Arraste para mover. Ctrl+Alt+setas movem; com Shift redimensionam.",
+    "en": "Drag to move. Ctrl+Alt+arrows move; with Shift they resize."
+  },
+  "travado: o gizmo e os atalhos não mudam este valor": {
+    "pt-BR": "travado: o gizmo e os atalhos não mudam este valor",
+    "en": "locked: the gizmo and shortcuts do not change this value"
+  },
+  "Destravar (Alt+L)": {
+    "pt-BR": "Destravar (Alt+L)",
+    "en": "Unlock (Alt+L)"
+  },
+  "Travar este valor (Alt+L)": {
+    "pt-BR": "Travar este valor (Alt+L)",
+    "en": "Lock this value (Alt+L)"
+  },
+  "%n segmento(s)": {
+    "pt-BR": "%n segmento(s)",
+    "en": "%n segment(s)"
+  },
+  "Digitado: %1  (Enter confirma)": {
+    "pt-BR": "Digitado: %1  (Enter confirma)",
+    "en": "Typed: %1  (Enter confirms)"
+  },
+  "Clique na próxima aresta · Enter confirma · Esc cancela": {
+    "pt-BR": "Clique na próxima aresta · Enter confirma · Esc cancela",
+    "en": "Click the next edge · Enter confirms · Esc cancels"
+  },
+  "Arraste ou digite um valor · Enter confirma · Esc cancela": {
+    "pt-BR": "Arraste ou digite um valor · Enter confirma · Esc cancela",
+    "en": "Drag or type a value · Enter confirms · Esc cancels"
+  },
+  "O que a seleção alcança": {
+    "pt-BR": "O que a seleção alcança",
+    "en": "What selection reaches"
+  },
+  "Orientação de transformação": {
+    "pt-BR": "Orientação de transformação",
+    "en": "Transform orientation"
+  },
+  "Orientação de transformação: %1": {
+    "pt-BR": "Orientação de transformação: %1",
+    "en": "Transform orientation: %1"
+  },
+  "através da malha": {
+    "pt-BR": "através da malha",
+    "en": "through the mesh"
+  },
+  "só o visível": {
+    "pt-BR": "só o visível",
+    "en": "visible only"
+  },
+  "Seleção: %1 (agora: %2)": {
+    "pt-BR": "Seleção: %1 (agora: %2)",
+    "en": "Selection: %1 (now: %2)"
+  },
+  "Automática": {
+    "pt-BR": "Automática",
+    "en": "Automatic"
+  },
+  "Só o visível": {
+    "pt-BR": "Só o visível",
+    "en": "Visible only"
+  },
+  "Através da malha": {
+    "pt-BR": "Através da malha",
+    "en": "Through the mesh"
+  },
+  "Automática: segue o que se vê (Raio-X e Wireframe selecionam através)": {
+    "pt-BR": "Automática: segue o que se vê (Raio-X e Wireframe selecionam através)",
+    "en": "Automatic: follows what you see (X-Ray and Wireframe select through)"
+  },
+  "Global (eixos do mundo)": {
+    "pt-BR": "Global (eixos do mundo)",
+    "en": "Global (world axes)"
+  },
+  "Local (eixos do objeto)": {
+    "pt-BR": "Local (eixos do objeto)",
+    "en": "Local (object axes)"
+  },
+  "Normal (da seleção)": {
+    "pt-BR": "Normal (da seleção)",
+    "en": "Normal (of the selection)"
+  },
+  "Vista (eixos da câmera)": {
+    "pt-BR": "Vista (eixos da câmera)",
+    "en": "View (camera axes)"
+  },
+  "Canais": {
+    "pt-BR": "Canais",
+    "en": "Channels"
+  },
+  "Mostrar os canais numéricos": {
+    "pt-BR": "Mostrar os canais numéricos",
+    "en": "Show the numeric channels"
+  },
+  "Selecionar mostra mover": {
+    "pt-BR": "Selecionar mostra mover",
+    "en": "Select shows move"
+  },
+  "Selecionar mostra girar": {
+    "pt-BR": "Selecionar mostra girar",
+    "en": "Select shows rotate"
+  },
+  "Selecionar mostra escalar": {
+    "pt-BR": "Selecionar mostra escalar",
+    "en": "Select shows scale"
   }
 }

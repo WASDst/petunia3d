@@ -573,6 +573,31 @@ impl Command for NudgeCmd {
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let edit = state.editor.edit_mode() == crate::EditMode::Edit;
+        // Objeto: eixos de posição travados (B7) não andam; se nada sobrar, recusa
+        // dizendo qual trava impediu (a tecla não "some" em silêncio).
+        let mut delta = self.delta;
+        if !edit && let Some(asset) = state.document.active() {
+            let locks = asset.transform_locks;
+            let mut blocked = None;
+            for (axis, component) in delta.iter_mut().enumerate() {
+                if locks.is_locked(petunia_project::TransformChannel::Position, axis)
+                    && component.abs() > f32::EPSILON
+                {
+                    *component = 0.0;
+                    blocked.get_or_insert(axis);
+                }
+            }
+            if let Some(axis) = blocked
+                && delta
+                    .iter()
+                    .all(|component| component.abs() <= f32::EPSILON)
+            {
+                return Err(CommandError::Execution(format!(
+                    "Posição {} está travada",
+                    petunia_project::transform_locks::axis_label(axis)
+                )));
+            }
+        }
         let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
@@ -580,15 +605,15 @@ impl Command for NudgeCmd {
             if !mesh.verts.iter().any(|v| v.selected) {
                 return Err(CommandError::EmptySelection);
             }
-            mesh.translate_selected(self.delta);
+            mesh.translate_selected(delta);
         } else {
             for v in &mut mesh.verts {
-                for (axis, d) in v.pos.iter_mut().zip(self.delta) {
+                for (axis, d) in v.pos.iter_mut().zip(delta) {
                     *axis += d;
                 }
             }
         }
-        let [dx, dy, dz] = self.delta;
+        let [dx, dy, dz] = delta;
         state.set_status(format!("Nudge {dx:+.2}, {dy:+.2}, {dz:+.2}"));
         Ok(())
     }

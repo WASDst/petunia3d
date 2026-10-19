@@ -190,6 +190,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Comprimento das hastes dos gizmos de transformação (px lógicos).
+    /// Alça do gizmo do Selecionar (0 = mover, 1 = girar, 2 = escalar) — B11.
+    pub fn set_select_gizmo_handle(&mut self, family: usize, enabled: bool) -> bool {
+        let Some(slot) = self.state.ui.select_gizmo_handles.get_mut(family) else {
+            return false;
+        };
+        if *slot == enabled {
+            return false;
+        }
+        *slot = enabled;
+        self.gizmo_hover = None;
+        self.state.mark_dirty();
+        true
+    }
+
     pub fn set_gizmo_size(&mut self, size: f32) -> bool {
         if !size.is_finite() {
             return false;

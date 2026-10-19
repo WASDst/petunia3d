@@ -100,6 +100,13 @@ class PetuniaShellWindow : public QMainWindow {
     void repositionOverlays();
     void openHostDialogs(const QJsonObject &state);
     bool handleShortcut(QKeyEvent *key);
+    /// Atalhos de menus em torta da vista 3D (B9): Adicionar, Vista e Domínio.
+    bool handlePieShortcut(QKeyEvent *key, QWidget *target);
+  public:
+    /// Abre a torta `kind` ("add", "view", "select") centrada em `globalPos`. Público para testes.
+    class PetuniaPieMenu *openPie(const QString &kind, const QPoint &globalPos);
+
+  private:
     bool confirmDiscard();
 
     void newProject();

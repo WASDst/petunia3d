@@ -46,6 +46,8 @@ class PetuniaPaintTargetForm : public PetuniaBoundForm {
     explicit PetuniaPaintTargetForm(QWidget *parent = nullptr);
 };
 
+class PetuniaColorPanel;
+
 class PetuniaBrushForm : public PetuniaBoundForm {
     Q_OBJECT
   public:
@@ -55,7 +57,9 @@ class PetuniaBrushForm : public PetuniaBoundForm {
     void afterSync(const QJsonObject &state) override;
 
   private:
-    QPushButton *m_color{nullptr};
+    PetuniaColorPanel *m_color{nullptr};
+    bool m_syncingColor{false};
+    double m_lastOpacity{1.0};
 };
 
 class PetuniaPaintLayerForm : public PetuniaDynamicForm {

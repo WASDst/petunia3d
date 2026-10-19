@@ -28,6 +28,16 @@
 #include "petunia_tool_rail.h"
 #include "petunia_viewport_header.h"
 #include "petunia_workspace_sections.h"
+#include "petunia_pie_menu.h"
+#include "../petunia_color_picker.h"
+#include "../petunia_dialog_chrome.h"
+#include "../petunia_vector3_field.h"
+
+#include <QCheckBox>
+#include <QDialog>
+#include <QPointer>
+#include <QPushButton>
+#include <QVBoxLayout>
 
 #include <QAbstractButton>
 #include <QAccessible>
@@ -617,6 +627,428 @@ void checkRefinement(Harness &h, PetuniaShellWindow &window) {
         }
     }
 }
+
+/// Evento de ponteiro com posição local e global coerentes (o filtro da moldura usa as duas).
+void mouseEvent(QWidget *w, QEvent::Type type, QPoint local, Qt::MouseButton button, Qt::MouseButtons buttons,
+                Qt::KeyboardModifiers mods = Qt::NoModifier) {
+    QMouseEvent e(type, QPointF(local), QPointF(w->mapToGlobal(local)), button, buttons, mods);
+    QCoreApplication::sendEvent(w, &e);
+}
+
+PetuniaPieMenu *visiblePie() {
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (auto *pie = qobject_cast<PetuniaPieMenu *>(w); pie && pie->isVisible())
+            return pie;
+    return nullptr;
+}
+
+bool namesContain(const QJsonArray &palettes, const QString &name) {
+    for (const auto &p : palettes)
+        if (p.toObject()["name"].toString() == name)
+            return true;
+    return false;
+}
+
+/// Onda B (ADR-C16): seletor de cor e paletas, diálogos com moldura própria, grade e
+/// eixos, travas de transform, menus em torta, eco do pincel e quadro de prévia.
+void checkWaveB(Harness &h, PetuniaShellWindow &window, PetuniaShellController *c) {
+    // ── B1: paletas com CRUD pelo documento, hex e modos ──
+    {
+        PetuniaColorPanel panel;
+        panel.resize(520, 360);
+        panel.refreshPalettes();
+        const bool created = panel.createPalette(QStringLiteral("Harness B1"));
+        h.add("color:create-palette-reaches-the-document",
+              created && namesContain(c->request("snapshot")["palettes"].toArray(), QStringLiteral("Harness B1")),
+              panel.currentPaletteId());
+        panel.setColor(QColor(255, 0, 0));
+        panel.addCurrentColorToPalette();
+        h.add("color:plus-adds-the-color-to-the-palette", panel.swatches()->count() == 1,
+              QString::number(panel.swatches()->count()));
+        const bool renamed = panel.renamePalette(QStringLiteral("Harness B1 nova"));
+        h.add("color:rename-palette",
+              renamed && namesContain(c->request("snapshot")["palettes"].toArray(), QStringLiteral("Harness B1 nova")));
+        const bool deleted = panel.deleteCurrentPalette();
+        h.add("color:delete-palette",
+              deleted && !namesContain(c->request("snapshot")["palettes"].toArray(), QStringLiteral("Harness B1 nova")));
+        QMetaObject::invokeMethod(panel.hexEditor(), "textEdited", Q_ARG(QString, QStringLiteral("#336699")));
+        h.add("color:hex-sets-the-color", panel.color().name() == QLatin1String("#336699"), panel.color().name());
+        panel.setMode(1);
+        h.add("color:box-mode", panel.mode() == 1);
+        panel.setMode(0);
+    }
+    c->request("workspace", {{"id", "PAINT"}});
+    settle(8);
+    window.syncNow();
+    settle(4);
+    h.add("color:rail-swatch-visible-in-paint",
+          window.toolRail()->colorSwatch() && window.toolRail()->colorSwatch()->isVisible());
+    h.add("color:brush-form-embeds-the-color-panel",
+          window.properties()->findChild<PetuniaColorPanel *>() != nullptr);
+
+    // ── B2: cursor do pincel espelhado entre 3D e 2D ──
+    {
+        // Checks anteriores giram a câmera e movem o cubo: em vez de um pixel fixo,
+        // parte de um ponto da textura que aparece na vista (2D → 3D), aponta o
+        // cursor 3D ali (3D → textura) e volta (textura → mesmo pixel).
+        auto *vp = window.viewport();
+        QPointF view;
+        bool found = false;
+        for (int iy = 1; iy < 10 && !found; ++iy)
+            for (int ix = 1; ix < 10 && !found; ++ix) {
+                const auto reply = c->request("brush_texture_hover", {{"x", ix / 10.0}, {"y", iy / 10.0}});
+                const auto v = reply["brush_mirror"].toObject()["view"].toArray();
+                if (v.size() == 2 && QRectF(vp->rect()).adjusted(4, 4, -4, -4).contains(QPointF(v[0].toDouble(), v[1].toDouble()))) {
+                    view = QPointF(v[0].toDouble(), v[1].toDouble());
+                    found = true;
+                }
+            }
+        h.add("brush:2d-cursor-maps-to-the-view", found);
+        const auto from3d = c->request("brush_footprint", {{"x", view.x()}, {"y", view.y()}});
+        const auto texture = from3d["brush_mirror"].toObject()["texture"].toArray();
+        h.add("brush:3d-cursor-maps-to-the-texture", found && texture.size() == 2,
+              QStringLiteral("%1 em %2,%3 (vista %4x%5)")
+                  .arg(QString::fromUtf8(QJsonDocument(from3d["brush_mirror"].toObject()).toJson(QJsonDocument::Compact)))
+                  .arg(view.x()).arg(view.y()).arg(vp->width()).arg(vp->height()));
+        if (texture.size() == 2) {
+            const auto back = c->request("brush_texture_hover", {{"x", texture[0].toDouble()}, {"y", texture[1].toDouble()}});
+            const auto v = back["brush_mirror"].toObject()["view"].toArray();
+            const double distance =
+                v.size() == 2 ? std::hypot(v[0].toDouble() - view.x(), v[1].toDouble() - view.y()) : 1e9;
+            h.add("brush:2d-cursor-maps-back-to-the-same-view-point", distance < 3.0,
+                  QStringLiteral("distância %1 px").arg(distance, 0, 'f', 2));
+        } else {
+            h.add("brush:2d-cursor-maps-back-to-the-same-view-point", false, QStringLiteral("sem ponto da textura"));
+        }
+        const auto cleared = c->request("brush_mirror_clear")["brush_mirror"].toObject();
+        h.add("brush:mirror-clears", cleared["texture"].isNull() && cleared["view"].isNull());
+    }
+    c->request("workspace", {{"id", "POLY"}});
+    settle(8);
+    window.syncNow();
+    settle(4);
+    h.add("color:rail-swatch-hidden-outside-paint",
+          window.toolRail()->colorSwatch() && !window.toolRail()->colorSwatch()->isVisible());
+
+    // ── B5: moldura própria — arrastar, redimensionar, teclado e geometria lembrada ──
+    {
+        QDialog dialog(&window);
+        dialog.setWindowTitle(QStringLiteral("Harness"));
+        auto *layout = new QVBoxLayout(&dialog);
+        layout->addWidget(new QPushButton(QStringLiteral("ok"), &dialog));
+        auto *chrome = PetuniaDialogChrome::install(&dialog, QStringLiteral("harness-b5"));
+        dialog.resize(360, 240);
+        dialog.move(200, 200);
+        dialog.show();
+        settle(6);
+        QWidget *bar = chrome ? chrome->titleBar() : nullptr;
+        h.add("dialog:frameless-with-own-title-bar",
+              bar && bar->isVisible() && (dialog.windowFlags() & Qt::FramelessWindowHint));
+        if (bar) {
+            const QPoint before = dialog.pos();
+            const QPoint grip = bar->rect().center();
+            mouseEvent(bar, QEvent::MouseButtonPress, grip, Qt::LeftButton, Qt::LeftButton);
+            mouseEvent(bar, QEvent::MouseMove, grip + QPoint(40, 25), Qt::NoButton, Qt::LeftButton);
+            mouseEvent(bar, QEvent::MouseButtonRelease, grip + QPoint(40, 25), Qt::LeftButton, Qt::NoButton);
+            settle(2);
+            h.add("dialog:title-bar-drag-moves", dialog.pos() - before == QPoint(40, 25),
+                  QStringLiteral("%1,%2").arg(dialog.x() - before.x()).arg(dialog.y() - before.y()));
+        }
+        const int widthBefore = dialog.width();
+        const QPoint edge(dialog.width() - 2, dialog.height() / 2);
+        mouseEvent(&dialog, QEvent::MouseButtonPress, edge, Qt::LeftButton, Qt::LeftButton);
+        mouseEvent(&dialog, QEvent::MouseMove, edge + QPoint(50, 0), Qt::NoButton, Qt::LeftButton);
+        mouseEvent(&dialog, QEvent::MouseButtonRelease, edge + QPoint(50, 0), Qt::LeftButton, Qt::NoButton);
+        settle(2);
+        h.add("dialog:right-edge-drag-resizes", dialog.width() == widthBefore + 50,
+              QStringLiteral("%1 → %2").arg(widthBefore).arg(dialog.width()));
+        const QPoint keyBefore = dialog.pos();
+        QKeyEvent right(QEvent::KeyPress, Qt::Key_Right, Qt::ControlModifier | Qt::AltModifier);
+        QCoreApplication::sendEvent(&dialog, &right);
+        const int heightBefore = dialog.height();
+        QKeyEvent grow(QEvent::KeyPress, Qt::Key_Down, Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier);
+        QCoreApplication::sendEvent(&dialog, &grow);
+        settle(2);
+        h.add("dialog:keyboard-moves-and-resizes",
+              dialog.x() > keyBefore.x() && dialog.height() > heightBefore,
+              QStringLiteral("dx=%1 dh=%2").arg(dialog.x() - keyBefore.x()).arg(dialog.height() - heightBefore));
+        const QRect closedAt = dialog.geometry();
+        dialog.reject();
+        settle(2);
+        h.add("dialog:geometry-is-remembered", PetuniaDialogChrome::rememberedGeometry(QStringLiteral("harness-b5")) == closedAt,
+              QStringLiteral("%1,%2 %3x%4").arg(closedAt.x()).arg(closedAt.y()).arg(closedAt.width()).arg(closedAt.height()));
+    }
+    // O cartão da operação (ex.: "Adicionar Icosfera") arrasta dentro da vista.
+    {
+        c->command(QStringLiteral("model.add_cube"));
+        settle(6);
+        window.syncNow();
+        settle(4);
+        auto *hud = window.hud();
+        const bool shown = hud && hud->isVisible();
+        h.add("hud:visible-for-a-new-primitive", shown, hud ? hud->activeSections().join(",") : QString());
+        if (shown) {
+            const QPoint before = hud->pos();
+            mouseEvent(hud, QEvent::MouseButtonPress, QPoint(12, 12), Qt::LeftButton, Qt::LeftButton);
+            mouseEvent(hud, QEvent::MouseMove, QPoint(72, 52), Qt::NoButton, Qt::LeftButton);
+            mouseEvent(hud, QEvent::MouseButtonRelease, QPoint(72, 52), Qt::LeftButton, Qt::NoButton);
+            settle(2);
+            h.add("hud:card-drags-inside-the-view", hud->hasCustomPlacement() && hud->pos() != before,
+                  QStringLiteral("%1,%2 → %3,%4").arg(before.x()).arg(before.y()).arg(hud->x()).arg(hud->y()));
+            mouseEvent(hud, QEvent::MouseButtonDblClick, QPoint(12, 12), Qt::LeftButton, Qt::LeftButton);
+            settle(2);
+            h.add("hud:double-click-returns-to-the-corner", !hud->hasCustomPlacement());
+        }
+        c->request("cancel_primitive");
+        settle(4);
+        window.syncNow();
+    }
+
+    // ── B6: grade e eixos ──
+    {
+        auto *header = window.viewportHeader();
+        auto grid = [&] { return c->request("snapshot")["viewport_grid"].toObject(); };
+        const auto initial = grid();
+        const auto axes = initial["axes"].toArray();
+        h.add("grid:y-axis-hidden-by-default",
+              axes.size() == 3 && axes[0].toBool() && !axes[1].toBool() && axes[2].toBool());
+        auto *button = header->gridButton();
+        h.add("grid:header-button-reflects-the-grid", button && button->isChecked() == initial["visible"].toBool(true));
+        if (button) {
+            button->click();
+            settle(4);
+            const bool hidden = !grid()["visible"].toBool(true);
+            button->click();
+            settle(4);
+            h.add("grid:header-button-toggles", hidden && grid()["visible"].toBool());
+        }
+        window.syncNow();
+        auto *yAxis = header->gridOptions() ? header->gridOptions()->findChild<QCheckBox *>(QStringLiteral("grid-axis-y"))
+                                            : nullptr;
+        if (yAxis) {
+            yAxis->click();
+            settle(4);
+            const bool shown = grid()["axes"].toArray().at(1).toBool();
+            yAxis->click();
+            settle(4);
+            h.add("grid:axis-checkbox-toggles-the-axis", shown && !grid()["axes"].toArray().at(1).toBool());
+        } else {
+            h.add("grid:axis-checkbox-toggles-the-axis", false, QStringLiteral("sem caixa do eixo Y"));
+        }
+        c->request("set_viewport_grid", {{"size", 50}, {"spacing", 0.25}, {"opacity", 0.6}});
+        const auto custom = grid();
+        h.add("grid:size-and-tile-are-configurable",
+              std::abs(custom["size"].toDouble() - 50) < 1e-4 && std::abs(custom["spacing"].toDouble() - 0.25) < 1e-4);
+        c->request("set_viewport_grid", {{"size", 50}, {"spacing", 0}, {"opacity", 0.6}});
+        h.add("grid:invalid-tile-is-refused", std::abs(grid()["spacing"].toDouble() - 0.25) < 1e-4);
+        c->request("set_viewport_grid", {{"size", 20}, {"spacing", 1}, {"opacity", 0.5}});
+    }
+
+    // ── B7: travas de transform (documento, campo e recusa) ──
+    {
+        const auto items = c->state()["scene_items"].toArray();
+        if (!items.isEmpty())
+            c->request("select", {{"id", items.first().toObject()["id"].toString()}});
+        settle(4);
+        window.syncNow();
+        settle(4);
+        PetuniaVector3Field *position = nullptr;
+        for (auto *field : window.properties()->findChildren<PetuniaVector3Field *>())
+            if (field->property("lockKind").toString() == QLatin1String("position"))
+                position = field;
+        h.add("lock:transform-fields-have-padlocks", position && position->field(1)->isLockable());
+        c->request("transform_lock", {{"kind", "position"}, {"axis", 1}, {"locked", true}});
+        window.syncNow();
+        settle(2);
+        const auto locks = c->request("snapshot")["transform_locks"].toObject()["position"].toArray();
+        h.add("lock:request-locks-the-channel", locks.at(1).toBool());
+        h.add("lock:field-shows-the-padlock-closed", position && position->isLocked(1));
+        const double y = c->request("snapshot")["position"].toArray().at(1).toDouble();
+        c->request("transform", {{"kind", "position"}, {"axis", 1}, {"text", QString::number(y + 3.0)}});
+        h.add("lock:typed-value-on-locked-axis-is-refused",
+              std::abs(c->request("snapshot")["position"].toArray().at(1).toDouble() - y) < 1e-5);
+        if (position) {
+            auto *field = position->field(1);
+            const QPoint lock = field->lockRect().center();
+            mouseEvent(field, QEvent::MouseButtonPress, lock, Qt::LeftButton, Qt::LeftButton);
+            mouseEvent(field, QEvent::MouseButtonRelease, lock, Qt::LeftButton, Qt::NoButton);
+            settle(4);
+            window.syncNow();
+        }
+        h.add("lock:clicking-the-padlock-unlocks",
+              !c->request("snapshot")["transform_locks"].toObject()["position"].toArray().at(1).toBool());
+        PetuniaNumberField solo;
+        solo.setLockable(true);
+        solo.resize(160, 28);
+        bool requested = false;
+        QObject::connect(&solo, &PetuniaNumberField::lockToggled, [&](const QString &, bool locked) { requested = locked; });
+        QKeyEvent altL(QEvent::KeyPress, Qt::Key_L, Qt::AltModifier, QStringLiteral("l"));
+        QCoreApplication::sendEvent(solo.valueEditor(), &altL);
+        h.add("lock:alt-l-asks-to-lock", requested);
+    }
+
+    // ── B9: menus em torta ──
+    {
+        const QPoint at = window.viewport()->mapToGlobal(window.viewport()->rect().center());
+        QPointer<PetuniaPieMenu> pie = window.openPie(QStringLiteral("select"), at);
+        settle(4);
+        h.add("pie:opens-with-the-selection-domains", pie && pie->isVisible() && pie->count() == 4);
+        if (pie) {
+            h.add("pie:direction-picks-the-item",
+                  pie->indexForOffset({0, -100}) == 0 && pie->indexForOffset({100, 0}) == 1 &&
+                      pie->indexForOffset({0, 100}) == 2 && pie->indexForOffset({-100, 0}) == 3 &&
+                      pie->indexForOffset({3, 3}) == -1);
+            h.add("pie:items-are-named-buttons",
+                  pie->button(1) && pie->button(1)->objectName() == QLatin1String("pie-item-vertex") &&
+                      !pie->button(1)->accessibleName().isEmpty());
+            QKeyEvent two(QEvent::KeyPress, Qt::Key_2, Qt::NoModifier, QStringLiteral("2"));
+            QCoreApplication::sendEvent(pie, &two);
+            settle(4);
+        }
+        h.add("pie:number-key-activates", c->request("snapshot")["selection_domain"].toString() == QLatin1String("Vertex"),
+              c->request("snapshot")["selection_domain"].toString());
+        h.add("pie:closes-after-choosing", !visiblePie());
+        c->request("domain", {{"id", "object"}});
+        settle(2);
+        const int sceneBefore = c->request("snapshot")["scene_items"].toArray().size();
+        QPointer<PetuniaPieMenu> add = window.openPie(QStringLiteral("add"), at);
+        settle(4);
+        h.add("pie:add-offers-eight-primitives", add && add->count() == 8);
+        if (add) {
+            QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QCoreApplication::sendEvent(add, &esc);
+            settle(4);
+        }
+        h.add("pie:escape-cancels-without-effect",
+              !visiblePie() && c->request("snapshot")["scene_items"].toArray().size() == sceneBefore);
+        QKeyEvent altD(QEvent::KeyPress, Qt::Key_D, Qt::AltModifier, QStringLiteral("d"));
+        window.viewport()->setFocus();
+        settle(1);
+        QCoreApplication::sendEvent(window.viewport(), &altD);
+        settle(4);
+        PetuniaPieMenu *byKey = visiblePie();
+        h.add("pie:shortcut-in-the-viewport-opens-it", byKey && byKey->title() == window.tr("Selecionar"),
+              byKey ? byKey->title() : QStringLiteral("nenhuma"));
+        if (byKey)
+            byKey->close();
+        settle(2);
+        PetuniaPieMenu::setListFallback(true);
+        window.openPie(QStringLiteral("view"), at);
+        settle(4);
+        QMenu *list = nullptr;
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (auto *menu = qobject_cast<QMenu *>(w); menu && menu->isVisible() && menu->objectName() == QLatin1String("PetuniaPieList"))
+                list = menu;
+        h.add("pie:list-fallback-has-the-same-items", list && list->actions().size() >= 8,
+              list ? QString::number(list->actions().size()) : QStringLiteral("sem lista"));
+        if (list)
+            list->close();
+        PetuniaPieMenu::setListFallback(false);
+        settle(2);
+    }
+
+    // ── B3: quadro de prévia da ferramenta (âncora, seta, valor) ──
+    {
+        c->request("domain", {{"id", "face"}});
+        c->request("select_all");
+        settle(2);
+        c->command(QStringLiteral("model.extrude"));
+        c->request("set_tool_modal_value", {{"value", 0.5}});
+        const auto frame = c->request("snapshot")["tool_preview"].toObject();
+        h.add("preview:extrude-publishes-anchor-arrow-and-value",
+              frame["tool"].toString() == QLatin1String("extrude") && frame["anchor"].toArray().size() == 2 &&
+                  frame["tip"].toArray().size() == 2 && std::abs(frame["value"].toDouble() - 0.5) < 1e-4,
+              QString::fromUtf8(QJsonDocument(frame).toJson(QJsonDocument::Compact)));
+        window.syncNow();
+        settle(2);
+        h.shot(window.viewport(), "wave_b_extrude_preview");
+        c->request("cancel_tool_modal");
+        h.add("preview:gone-after-cancel", c->request("snapshot")["tool_preview"].isNull());
+        c->request("domain", {{"id", "object"}});
+        settle(4);
+        window.syncNow();
+    }
+}
+
+
+/// Fechamento da Onda B: política de seleção, orientação, alças do Selecionar,
+/// cor compacta e campos densos no painel.
+void checkWaveBClosing(Harness &h, PetuniaShellWindow &window, PetuniaShellController *c) {
+    c->request("workspace", {{"id", "POLY"}});
+    settle(6);
+    window.syncNow();
+    settle(2);
+    auto *header = window.viewportHeader();
+    auto policy = [&] { return c->request("snapshot")["select_policy"].toObject(); };
+    h.add("select-policy:defaults-to-automatic", policy()["id"].toString() == QLatin1String("auto"));
+    QList<QAction *> policyActions =
+        header->selectPolicyButton() && header->selectPolicyButton()->menu() ? header->selectPolicyButton()->menu()->actions()
+                                                                             : QList<QAction *>();
+    h.add("select-policy:header-offers-three-policies", policyActions.size() == 3,
+          QString::number(policyActions.size()));
+    c->command(QStringLiteral("view.toggle_xray"));
+    settle(2);
+    h.add("select-policy:automatic-selects-through-in-xray", policy()["through_now"].toBool());
+    if (policyActions.size() == 3) {
+        policyActions[1]->trigger();
+        settle(2);
+        h.add("select-policy:visible-only-wins-over-xray",
+              policy()["id"].toString() == QLatin1String("visible") && !policy()["through_now"].toBool());
+        policyActions[0]->trigger();
+        settle(2);
+    }
+    c->command(QStringLiteral("view.toggle_xray"));
+    settle(2);
+    window.syncNow();
+    h.add("select-policy:state-is-announced", !header->selectPolicyButton()->accessibleDescription().isEmpty(),
+          header->selectPolicyButton()->accessibleDescription());
+
+    QList<QAction *> orientationActions;
+    if (header->orientationButton() && header->orientationButton()->menu())
+        for (auto *action : header->orientationButton()->menu()->actions())
+            if (action->isCheckable())
+                orientationActions << action;
+    h.add("orientation:header-offers-global-local-normal-view", orientationActions.size() == 4,
+          QString::number(orientationActions.size()));
+    if (orientationActions.size() == 4) {
+        orientationActions[1]->trigger();
+        settle(2);
+        h.add("orientation:local-reaches-the-session",
+              c->request("snapshot")["transform_orientation"].toString() == QLatin1String("local"));
+        orientationActions[0]->trigger();
+        settle(2);
+    }
+
+    c->request("set_select_gizmo_rotate", {{"enabled", false}});
+    const bool rotateOff = !c->request("snapshot")["select_gizmo_rotate"].toBool(true);
+    c->request("set_select_gizmo_rotate", {{"enabled", true}});
+    h.add("select-gizmo:rotate-handles-can-be-hidden",
+          rotateOff && c->request("snapshot")["select_gizmo_rotate"].toBool());
+
+    bool dense = true;
+    QString tall;
+    for (auto *field : window.properties()->findChildren<PetuniaNumberField *>()) {
+        if (field->isVisible() && field->height() > PetuniaTheme::instance().fieldHeight()) {
+            dense = false;
+            tall = QStringLiteral("%1=%2").arg(field->accessibleName()).arg(field->height());
+        }
+    }
+    h.add("panel:number-fields-use-the-dense-height", dense, tall);
+
+    c->request("workspace", {{"id", "PAINT"}});
+    settle(8);
+    window.syncNow();
+    settle(4);
+    auto *colorPanel = window.properties()->findChild<PetuniaColorPanel *>();
+    h.add("color:brush-panel-is-compact", colorPanel && colorPanel->isCompact() &&
+                                              colorPanel->channelsToggle()->isVisible());
+    h.shot(&window, "shell_PAINT_compact");
+    c->request("workspace", {{"id", "POLY"}});
+    settle(6);
+    window.syncNow();
+    h.shot(&window, "shell_POLY_dense");
+}
+
 } // namespace
 
 extern "C" const char *petunia_shell_harness(const char *directory) {
@@ -1872,6 +2304,9 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
     h.shot(&window, "shell_POLY_narrow");
     window.resize(1360, 860);
     settle(6);
+
+    checkWaveB(h, window, c);
+    checkWaveBClosing(h, window, c);
 
     // Layout do usuário persiste e restaura.
     auto *store = window.layoutStore();

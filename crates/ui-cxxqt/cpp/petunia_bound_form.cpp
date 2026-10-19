@@ -6,7 +6,7 @@
 #include "petunia_vector3_field.h"
 #include <QApplication>
 #include <QCheckBox>
-#include <QColorDialog>
+#include "petunia_color_picker.h"
 #include <QGridLayout>
 #include <QToolButton>
 #include <QComboBox>
@@ -212,7 +212,12 @@ void PetuniaBoundForm::colorField(QFormLayout *form, const QString &label,
     connect(btn, &QPushButton::clicked, this, [=, this]() mutable {
         QColor initial(edit->text());
         if (!initial.isValid()) initial = QColor("#b58cff");
-        QColor chosen = QColorDialog::getColor(initial, this, label);
+        // Mesmo seletor do resto do app (B1), em vez do diálogo do sistema.
+        PetuniaColorPickerPopover picker(this);
+        picker.setTitle(label);
+        picker.setAlphaEnabled(false); // o campo guarda #RRGGBB
+        picker.setColor(initial);
+        const QColor chosen = picker.exec() == QDialog::Accepted ? picker.color() : QColor();
         if (chosen.isValid()) {
             edit->setText(chosen.name());
             updateBtn();
@@ -261,6 +266,14 @@ void PetuniaBoundForm::xyz(QFormLayout *form, const QString &label,
         });
     }
 
+    if (action == QLatin1String("transform")) {
+        // Cadeado por canal (B7): pede ao documento; o estado volta pelo snapshot.
+        v3->setLockable(true);
+        v3->setProperty("lockKind", keyPrefix);
+        connect(v3, &PetuniaVector3Field::lockToggled, this, [this, keyPrefix](int axis, bool locked) {
+            send(QStringLiteral("transform_lock"), {{"kind", keyPrefix}, {"axis", axis}, {"locked", locked}});
+        });
+    }
     m_bindings.append({v3, keyPrefix, {}, {}});
     form->addRow(label, v3);
 }
@@ -366,6 +379,12 @@ void PetuniaBoundForm::sync(const QJsonObject &state) {
         }
 
         if (auto *w = qobject_cast<PetuniaVector3Field *>(binding.widget)) {
+            const QString lockKind = w->property("lockKind").toString();
+            if (!lockKind.isEmpty()) {
+                const auto locks = state["transform_locks"].toObject()[lockKind].toArray();
+                for (int axis = 0; axis < 3; ++axis)
+                    w->setLocked(axis, locks.at(axis).toBool());
+            }
             const auto array = value.toArray();
             if (array.size() >= 3) {
                 w->setValues(array.at(0).toDouble(), array.at(1).toDouble(), array.at(2).toDouble());

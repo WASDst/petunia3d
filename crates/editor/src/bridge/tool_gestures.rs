@@ -121,7 +121,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             return changed || previous_edge.is_some();
         }
-        let next = self.pick_viewport_target(normalized_x, normalized_y);
+        let mut next = self.pick_viewport_target(normalized_x, normalized_y);
+        // B10: onde a alça do gizmo recebe o clique, nada de pré-seleção por
+        // baixo dela (antes o hover destacava um vértice que o clique ignorava).
+        if self
+            .gizmo_target_at(self.pointer_position[0], self.pointer_position[1])
+            .is_some()
+            && !self.component_beats_gizmo(next)
+        {
+            next = petunia_core::HoverTarget::None;
+        }
 
         if next == self.state.session.tools.hover {
             return self.state.session.tools.active_tool == "cut";
@@ -477,7 +486,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         // Qualquer objeto visível claramente à frente esconde a região (a
         // cena em cache tem BVH; não triangula a malha por evento). Fora do
         // Raio-X/Wireframe, como a oclusão do picking.
-        let through = self.state.session.select_through;
+        let through = self.state.session.selects_through();
         let hidden = !through
             && self
                 .scene_query()
