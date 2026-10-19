@@ -461,7 +461,10 @@ fn load_zip(bytes: &[u8]) -> Result<(Project, LoadSource, u32), ProjectError> {
         let mut entry = archive
             .by_index(i)
             .map_err(|e| ProjectError::Format(e.to_string()))?;
-        let name = entry.name().to_string();
+        let name = entry
+            .name()
+            .map_err(|e| ProjectError::Format(format!("invalid zip entry name: {e}")))?
+            .into_owned();
         if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
             return Err(ProjectError::Format(format!("path traversal: {name}")));
         }
