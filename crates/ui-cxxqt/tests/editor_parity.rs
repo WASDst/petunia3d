@@ -782,3 +782,38 @@ fn uv_structure_lists_islands_and_selects_them_by_index() {
     );
     assert_eq!(islands(&e), before);
 }
+
+#[test]
+fn the_operation_mode_request_reaches_the_active_tool() {
+    let mut e = editor();
+    // Sem ferramenta de operação, o pedido é recusado (sem efeito silencioso).
+    request(
+        &mut e,
+        json!({"action": "set_operation_mode", "mode": "individual"}),
+    );
+    assert_eq!(
+        e.state.tools.extrude_mode,
+        petunia_mesh::ExtrudeMode::Region,
+        "sem ferramenta ativa nada muda"
+    );
+
+    request(&mut e, json!({"action": "tool", "id": "extrude"}));
+    request(
+        &mut e,
+        json!({"action": "set_operation_mode", "mode": "individual"}),
+    );
+    assert_eq!(
+        e.state.tools.extrude_mode,
+        petunia_mesh::ExtrudeMode::Individual
+    );
+
+    // Um modo inexistente não muda o estado.
+    request(
+        &mut e,
+        json!({"action": "set_operation_mode", "mode": "inexistente"}),
+    );
+    assert_eq!(
+        e.state.tools.extrude_mode,
+        petunia_mesh::ExtrudeMode::Individual
+    );
+}

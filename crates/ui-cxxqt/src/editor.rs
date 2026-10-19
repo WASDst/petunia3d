@@ -1926,6 +1926,7 @@ fn dispatch_controller(
         "toggle_paint_layer_visibility" => b.toggle_paint_layer_visibility(string(v, "id")?),
         "toggle_paint_pip" => b.toggle_paint_pip(),
         "toggle_paint_isolate" => b.toggle_paint_isolate(),
+        "set_operation_mode" => b.set_operation_mode(string(v, "mode")?),
         "toggle_paint_symmetry_x" => b.toggle_paint_symmetry_x(),
         "toggle_paint_symmetry_y" => b.toggle_paint_symmetry_y(),
         "toggle_paint_symmetry_z" => b.toggle_paint_symmetry_z(),

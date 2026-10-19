@@ -6118,5 +6118,9 @@
   "máscara": {
     "pt-BR": "máscara",
     "en": "mask"
+  },
+  "Modo da operação": {
+    "pt-BR": "Modo da operação",
+    "en": "Operation mode"
   }
 }

@@ -4,6 +4,7 @@
 #include <QMouseEvent>
 #include <algorithm>
 #include "petunia_operation_card.h"
+#include "petunia_segmented.h"
 #include "../petunia_number_field.h"
 #include "../petunia_theme.h"
 #include "petunia_i18n.h"
@@ -208,6 +209,17 @@ void PetuniaOperationHud::buildModal() {
     });
     section->layout()->addWidget(m_modalValue);
 
+    // C8: modo da operação com vários elementos (extrusão/inset). Escondido
+    // quando a operação não tem modo; a escolha vai para a ferramenta.
+    m_modeChooser = new PetuniaSegmented(section);
+    m_modeChooser->setObjectName(QStringLiteral("operation_mode"));
+    m_modeChooser->setGroupLabel(tr("Modo da operação"));
+    m_modeChooser->setVisible(false);
+    connect(m_modeChooser, &PetuniaSegmented::activated, this, [this](const QString &id) {
+        m_controller->request(QStringLiteral("set_operation_mode"), {{"mode", id}});
+    });
+    section->layout()->addWidget(m_modeChooser);
+
     m_bevelOptions = new QWidget(section);
     auto *bevel = new QVBoxLayout(m_bevelOptions);
     bevel->setContentsMargins(0, 0, 0, 0);
@@ -339,6 +351,26 @@ void PetuniaOperationHud::sync(const QJsonObject &state) {
     show("loop_cut", loopCut);
     show("slice", slice);
     syncGraphOperation(state);
+
+    // C8: modos da operação (região / faces individuais / ao longo das
+    // normais). Só aparece quando a operação oferece modo.
+    if (m_modeChooser) {
+        const auto modes = state["tool_modal_modes"].toArray();
+        QString signature;
+        QList<PetuniaSegmented::Item> items;
+        for (const auto &value : modes) {
+            const auto mode = value.toObject();
+            const QString id = mode["id"].toString();
+            signature += id + QLatin1Char(';');
+            items.append({id, mode["label"].toString(), QString(), QString()});
+        }
+        if (signature != m_modeSignature) {
+            m_modeChooser->setItems(items);
+            m_modeSignature = signature;
+        }
+        m_modeChooser->setCurrent(state["tool_modal_mode"].toString());
+        m_modeChooser->setVisible(modal && !modes.isEmpty());
+    }
 
     QString title;
     if (primitive)

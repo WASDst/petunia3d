@@ -616,6 +616,9 @@ pub struct ToolState {
     pub transform_rotation: [f32; 3],
     pub transform_scale: f32,
     pub extrude_dist: f32,
+    /// Modo da extrusão (C8): região, faces individuais ou ao longo das
+    /// normais de cada face.
+    pub extrude_mode: petunia_mesh::ExtrudeMode,
     /// Distância do Inset em unidades de mundo (não fator relativo).
     pub inset_distance: f32,
     /// Region (padrão) ou Individual.
@@ -708,6 +711,7 @@ impl ToolState {
             transform_rotation: [0.0; 3],
             transform_scale: 1.0,
             extrude_dist: 0.5,
+            extrude_mode: petunia_mesh::ExtrudeMode::Region,
             inset_distance: 0.1,
             inset_mode: petunia_mesh::InsetMode::Region,
             bevel_amount: 0.15,
@@ -839,6 +843,7 @@ impl ToolState {
     pub fn settings_snapshot(&self) -> ToolSettingsSnapshot {
         ToolSettingsSnapshot {
             extrude_dist: self.extrude_dist,
+            extrude_mode: self.extrude_mode,
             inset_distance: self.inset_distance,
             inset_mode: self.inset_mode,
             bevel_amount: self.bevel_amount,
@@ -859,6 +864,7 @@ impl ToolState {
     /// Restaura as configurações persistentes das ferramentas (A06).
     pub fn restore_settings(&mut self, settings: &ToolSettingsSnapshot) {
         self.extrude_dist = settings.extrude_dist;
+        self.extrude_mode = settings.extrude_mode;
         self.inset_distance = settings.inset_distance;
         self.inset_mode = settings.inset_mode;
         self.bevel_amount = settings.bevel_amount;
@@ -881,6 +887,8 @@ impl ToolState {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolSettingsSnapshot {
     pub extrude_dist: f32,
+    /// Modo da extrusão (C8), lembrado entre sessões.
+    pub extrude_mode: petunia_mesh::ExtrudeMode,
     pub inset_distance: f32,
     pub inset_mode: petunia_mesh::InsetMode,
     pub bevel_amount: f32,
@@ -2522,6 +2530,7 @@ impl AppState {
                 }
                 self.dispatch(&crate::command::ExtrudeSelectedCmd {
                     dist: self.tools.extrude_dist,
+                    mode: None,
                 })
             }
             "model.subdivide" => {
@@ -5779,6 +5788,87 @@ mod model_quick_action_tests {
         );
         assert!(state.ui.reset_model_quick_actions());
         assert!(!state.ui.reset_model_quick_actions());
+    }
+}
+
+#[cfg(test)]
+mod operation_mode_tests {
+    use super::*;
+
+    /// Duas faces quadradas que compartilham a aresta 2–3.
+    fn two_adjacent_quads() -> petunia_mesh::Mesh {
+        let mut mesh = petunia_mesh::Mesh::default();
+        for corner in [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, -1.0],
+            [1.0, 0.0, -1.0],
+        ] {
+            mesh.verts
+                .push(petunia_mesh::Vertex::new(corner[0], corner[1], corner[2]));
+        }
+        let mut a = petunia_mesh::Face::new(vec![0, 1, 2, 3]);
+        a.selected = true;
+        let mut b = petunia_mesh::Face::new(vec![3, 2, 5, 4]);
+        b.selected = true;
+        mesh.faces.push(a);
+        mesh.faces.push(b);
+        mesh
+    }
+
+    fn state_with_two_faces() -> AppState {
+        let mut state = AppState::new("en");
+        state.set_edit_mode(EditMode::Edit);
+        state.project.add("teste", two_adjacent_quads());
+        state.sync_selection();
+        state
+    }
+
+    #[test]
+    fn the_extrude_command_follows_the_tool_mode() {
+        // Região: os vértices do topo são compartilhados (6 vértices novos).
+        let mut state = state_with_two_faces();
+        state.tools.extrude_mode = petunia_mesh::ExtrudeMode::Region;
+        state
+            .dispatch(&crate::command::ExtrudeSelectedCmd {
+                dist: 0.5,
+                mode: None,
+            })
+            .expect("extrusão da região");
+        assert_eq!(
+            state.project.assets[state.project.active].mesh.verts.len(),
+            6 + 6
+        );
+
+        // Individual: cada face duplica o topo (4 + 4 vértices novos).
+        let mut state = state_with_two_faces();
+        state.tools.extrude_mode = petunia_mesh::ExtrudeMode::Individual;
+        state
+            .dispatch(&crate::command::ExtrudeSelectedCmd {
+                dist: 0.5,
+                mode: None,
+            })
+            .expect("extrusão individual");
+        assert_eq!(
+            state.project.assets[state.project.active].mesh.verts.len(),
+            6 + 8
+        );
+
+        // O comando pode forçar o modo, ignorando o da ferramenta.
+        let mut state = state_with_two_faces();
+        state.tools.extrude_mode = petunia_mesh::ExtrudeMode::Region;
+        state
+            .dispatch(&crate::command::ExtrudeSelectedCmd {
+                dist: 0.5,
+                mode: Some(petunia_mesh::ExtrudeMode::AlongNormals),
+            })
+            .expect("extrusão ao longo das normais");
+        assert_eq!(
+            state.project.assets[state.project.active].mesh.verts.len(),
+            6 + 8
+        );
     }
 }
 

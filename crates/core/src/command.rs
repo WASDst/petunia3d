@@ -4429,11 +4429,16 @@ impl Command for RedoCmd {
 #[derive(Debug, Clone)]
 pub struct ExtrudeSelectedCmd {
     pub dist: f32,
+    /// Modo da extrusão (C8); `None` usa o modo da ferramenta.
+    pub mode: Option<petunia_mesh::ExtrudeMode>,
 }
 
 impl Default for ExtrudeSelectedCmd {
     fn default() -> Self {
-        Self { dist: 0.5 }
+        Self {
+            dist: 0.5,
+            mode: None,
+        }
     }
 }
 
@@ -4467,6 +4472,7 @@ impl Command for ExtrudeSelectedCmd {
         } else {
             state.tools.extrude_dist
         };
+        let mode = self.mode.unwrap_or(state.tools.extrude_mode);
         let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
@@ -4476,9 +4482,9 @@ impl Command for ExtrudeSelectedCmd {
         if !mesh.faces.iter().any(|f| f.selected) {
             return Err(CommandError::EmptySelection);
         }
-        mesh.extrude_selected(dist);
+        mesh.extrude_selected_with_mode(dist, mode);
         state.sync_selection();
-        state.set_status(format!("Extruded faces ({:.2})", dist));
+        state.set_status(format!("Extruded faces ({dist:.2}, {})", mode.id()));
         Ok(())
     }
 }

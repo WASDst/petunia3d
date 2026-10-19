@@ -949,4 +949,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         true
     }
+
+    /// C8 — modo da operação com vários elementos, escolhido no HUD da
+    /// ferramenta: extrusão (região, faces individuais, ao longo das normais) e
+    /// inset (região, individual). O modo pertence à ferramenta ativa.
+    pub fn set_operation_mode(&mut self, id: &str) -> bool {
+        match self.state.session.tools.active_tool.as_str() {
+            "extrude" => {
+                let Some(mode) = petunia_mesh::ExtrudeMode::from_id(id) else {
+                    return false;
+                };
+                self.state.tools.extrude_mode = mode;
+                true
+            }
+            "inset" => {
+                let Some(mode) = petunia_mesh::InsetMode::from_id(id) else {
+                    return false;
+                };
+                self.state.tools.inset_mode = mode;
+                true
+            }
+            _ => false,
+        }
+    }
 }

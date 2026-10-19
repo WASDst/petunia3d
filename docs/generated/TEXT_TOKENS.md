@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **2032**.
+Total de chaves de localização cadastradas: **2036**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -1755,7 +1755,11 @@ Total de chaves de localização cadastradas: **2032**.
 | `tools.measure` | Measure | Medir |
 | `tools.merge` | Merge | Fundir |
 | `tools.mirror` | Mirror | Espelho |
+| `tools.mode_along_normals` | Along normals | Ao longo das normais |
+| `tools.mode_individual` | Individual | Individual |
+| `tools.mode_region` | Region | Região |
 | `tools.move` | Move | Mover |
+| `tools.operation_mode` | Operation mode | Modo da operação |
 | `tools.paint` | Paint | Pintar |
 | `tools.picker` | Picker | Conta-gotas |
 | `tools.pivot` | Pivot | Pivô |

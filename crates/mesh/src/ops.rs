@@ -9,6 +9,44 @@ use crate::bevel::{BevelReport, MAX_BEVEL_SEGMENTS};
 use glam::Vec3;
 use std::collections::{HashMap, HashSet};
 
+/// Como a seleção de faces vira volume na extrusão.
+///
+/// A diferença real é o que acontece com a geometria compartilhada e a
+/// direção do movimento — o que a pessoa vê no HUD (C8).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ExtrudeMode {
+    /// Região: as faces mantêm os vértices compartilhados (a malha continua
+    /// fechada) e sobem juntas pela normal média da região.
+    #[default]
+    Region,
+    /// Cada face vira um prisma próprio, mas todas sobem pela normal da
+    /// região: as faces se separam sem mudar a direção.
+    Individual,
+    /// Cada face vira um prisma próprio e sobe pela sua própria normal.
+    AlongNormals,
+}
+
+impl ExtrudeMode {
+    /// Identificador estável (snapshot, comandos e interface).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Region => "region",
+            Self::Individual => "individual",
+            Self::AlongNormals => "along_normals",
+        }
+    }
+
+    /// Converte o identificador publicado pela interface.
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "region" => Some(Self::Region),
+            "individual" => Some(Self::Individual),
+            "along_normals" => Some(Self::AlongNormals),
+            _ => None,
+        }
+    }
+}
+
 impl Mesh {
     // ---------------- seleção ----------------
 
@@ -485,6 +523,16 @@ impl Mesh {
         crate::TopologyResult::from_counts(vb, fb, self.verts.len(), self.faces.len())
     }
 
+    /// Extrusão no modo escolhido (C8): região, faces individuais ou ao longo
+    /// das normais de cada face.
+    pub fn extrude_selected_with_mode(&mut self, dist: f32, mode: ExtrudeMode) {
+        match mode {
+            ExtrudeMode::Region => self.extrude_selected(dist),
+            ExtrudeMode::Individual => self.extrude_individual_with(dist, false),
+            ExtrudeMode::AlongNormals => self.extrude_individual_with(dist, true),
+        }
+    }
+
     pub fn extrude_selected(&mut self, dist: f32) {
         if !dist.is_finite() {
             return;
@@ -581,6 +629,13 @@ impl Mesh {
     /// Extrusão individual de cada face selecionada ao longo de sua própria normal (Alt+E).
     /// Gera prismas desacoplados sem compartilhar paredes laterais entre faces vizinhas.
     pub fn extrude_individual(&mut self, dist: f32) {
+        self.extrude_individual_with(dist, true);
+    }
+
+    /// Extrusão individual com a direção Escolhida: `along_face_normal` usa a
+    /// normal de cada face; senão todas as faces sobem pela normal da região
+    /// (o "individual" do Blender, que só separa as faces).
+    pub fn extrude_individual_with(&mut self, dist: f32, along_face_normal: bool) {
         if !dist.is_finite() {
             return;
         }
@@ -594,6 +649,15 @@ impl Mesh {
         if sel.is_empty() {
             return;
         }
+        // Normal da região: média das faces selecionadas (usada quando o
+        // movimento é comum a todas).
+        let mut region_normal = Vec3::ZERO;
+        if !along_face_normal {
+            for &fi in &sel {
+                region_normal += self.face_normal(fi);
+            }
+            region_normal = region_normal.normalize_or_zero();
+        }
 
         for &fi in &sel {
             let src = self.faces[fi].clone();
@@ -601,8 +665,13 @@ impl Mesh {
             if m < 3 {
                 continue;
             }
-            let normal = self.face_normal(fi);
-            let delta = normal.normalize_or_zero() * dist;
+            // A normal da região já vem normalizada: normalizar de novo
+            // mudaria os últimos bits e a região e "individual" divergiriam.
+            let delta = if along_face_normal {
+                self.face_normal(fi).normalize_or_zero() * dist
+            } else {
+                region_normal * dist
+            };
 
             // Cria novos vértices exclusivos para o topo desta face
             let mut top_verts = Vec::with_capacity(m);

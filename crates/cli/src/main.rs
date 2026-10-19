@@ -365,7 +365,10 @@ fn cmd_bench() -> Result<()> {
 
     // 2. Seleciona e extrude
     state.dispatch(&SelectAllCmd)?;
-    state.dispatch(&ExtrudeSelectedCmd { dist: 1.5 })?;
+    state.dispatch(&ExtrudeSelectedCmd {
+        dist: 1.5,
+        ..Default::default()
+    })?;
     let after_extrude = start.elapsed();
 
     // 3. Undo e Redo

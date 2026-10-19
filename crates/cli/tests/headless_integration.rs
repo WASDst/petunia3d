@@ -241,7 +241,10 @@ fn test_headless_complete_session_roundtrip() {
     }
     state.sync_selection();
     state
-        .dispatch(&petunia_core::ExtrudeSelectedCmd { dist: 2.0 })
+        .dispatch(&petunia_core::ExtrudeSelectedCmd {
+            dist: 2.0,
+            ..Default::default()
+        })
         .expect("Extrude");
 
     // Undo e Redo

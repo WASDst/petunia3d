@@ -966,6 +966,11 @@
       "revision": "árvore de trabalho sobre de656ab4 (commit desta entrega)",
       "document": "12-interchange/import-export-game-ready.md",
       "summary": "Importação de modelos corrigida (relato do usuário: não funcionava para nenhum formato e, principalmente, com textura). Quatro defeitos: (1) OBJ ignorava o .mtl (sem material e sem textura) — agora import_obj::import_obj_file lê .mtl, Kd, Ns→rugosidade, map_Kd e map_Bump, com o material por face e a textura espelhada no asset; (2) OBJ com vários objetos trazia só o primeiro — agora todos entram, com o nome do objeto do arquivo (como no Blender) ou o nome do arquivo; (3) .gltf com skin/animation e buffers externos falhava inteiro porque o rig era importado antes da tolerância — rig ilegível virou aviso; (4) não havia porta de entrada — o menu Arquivo ganhou Importar (modelo 3D, paleta) e os comandos file.import_obj/file.import_gltf passaram a pedir a importação (import_request no snapshot), com a interface abrindo o diálogo. Segurança: .mtl e texturas resolvidos só dentro da pasta do modelo (mesmo confinamento do glTF), com teste de path traversal. Feedback: arquivo sem malha vira recusa com status próprio; o import é desfazível por Undo. Matriz de capacidades separada por direção (import/export) com a união no formato. Gates: fmt limpo; clippy -D warnings (project, core, editor, config, ui-cxxqt; --all-targets) 0 avisos; project 297 lib + 19 pipeline (3 novos) + demais suítes, core 210, editor 148 (animation-workspace), config 27; ui-cxxqt offscreen: import_model 8 testes (novos), editor_parity 24, shell_v2 324 verificações (1 nova: file:menu-offers-the-model-import), ui_i18n_catalog 3. Defeito herdado corrigido no caminho: 53 textos do shell (painéis de camada/efeitos/gradiente/projeção da Onda C) estavam fora do catálogo nativo e faziam o gate de i18n falhar. Não executado: janela real com GPU, arrasto de arquivo, Windows, leitor de tela."
+    },
+    "shell-v2-roadmap-c8-modes-2026-10-19": {
+      "revision": "árvore de trabalho sobre 6305bab4 (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda C, parte 2: C8 (modos das operações com vários elementos, escolhidos no HUD da ferramenta). Extrusão com três modos — Região (bloco, malha fechada), Faces individuais (cada face vira prisma próprio, mesma direção) e Ao longo das normais (cada face pela sua própria normal) — e Inset com dois (Região, Individual). O modo pertence à ferramenta (ExtrudeSelectedCmd aceita modo explícito; None = o da ferramenta), é lembrado com as demais preferências e viaja no snapshot (tool_modal_modes/tool_modal_mode) com rótulos traduzidos; a interface mostra um controle segmentado no HUD, só quando a operação tem modo. Defeito achado e corrigido no caminho: a normal da região era normalizada duas vezes, fazendo 'individual' divergir da 'região' em 1e-8. Gates: fmt limpo; clippy -D warnings (mesh, core, editor, config, module-model, cli, ui-cxxqt; --all-targets) 0 avisos; mesh 272, core 211 (+ suítes), editor 148 + 4 novos (operation_mode_c8), config 27; ui-cxxqt offscreen: editor_parity 25, shell_v2 326 verificações (2 novas: hud:extrude-offers-its-modes e hud:mode-choice-reaches-the-tool), ui_i18n_catalog 3. Não executado: janela real com GPU (escolha do modo com mouse e teclado)."
     }
   },
   "tasks": [
@@ -5532,8 +5537,8 @@
         },
         {
           "title": "C8 Modos das operações com vários elementos (região, individuais, normais) no HUD.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c8-modes-2026-10-19"
         },
         {
           "title": "Executar e registrar os gates aplicáveis.",

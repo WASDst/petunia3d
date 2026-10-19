@@ -978,6 +978,30 @@ void checkWaveB(Harness &h, PetuniaShellWindow &window, PetuniaShellController *
         window.syncNow();
         settle(2);
         h.shot(window.viewport(), "wave_b_extrude_preview");
+
+        // C8: os modos da operação aparecem no HUD e a escolha chega à
+        // ferramenta (extrusão: região, faces individuais, ao longo das normais).
+        {
+            const auto modes = c->request("snapshot")["tool_modal_modes"].toArray();
+            auto *chooser = window.hud() ? window.hud()->modeChooser() : nullptr;
+            h.add("hud:extrude-offers-its-modes",
+                  modes.size() == 3 && chooser && chooser->isVisible() &&
+                      chooser->buttons().size() == 3,
+                  QStringLiteral("modos=%1 visivel=%2 botoes=%3")
+                      .arg(modes.size())
+                      .arg(chooser && chooser->isVisible())
+                      .arg(chooser ? chooser->buttons().size() : 0));
+            if (chooser) {
+                if (auto *button = chooser->button(QStringLiteral("individual")))
+                    button->click();
+                settle(2);
+                window.syncNow();
+            }
+            h.add("hud:mode-choice-reaches-the-tool",
+                  c->request("snapshot")["tool_modal_mode"].toString() ==
+                      QLatin1String("individual"),
+                  c->request("snapshot")["tool_modal_mode"].toString());
+        }
         c->request("cancel_tool_modal");
         h.add("preview:gone-after-cancel", c->request("snapshot")["tool_preview"].isNull());
         c->request("domain", {{"id", "object"}});

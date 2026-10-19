@@ -1432,15 +1432,27 @@ impl CommandContext<'_> {
                 }
             }
             ModalKind::Extrude if value != 0.0 => {
-                // Build topology once per absolute preview, then constrain the new cap.
-                mesh.extrude_selected(0.0);
-                for vertex in mesh.verts.iter_mut().filter(|v| v.selected) {
-                    vertex.pos = (vertex.vec() + direction * value).to_array();
-                }
-                if modal.flip_when_negative && value < 0.0 {
-                    for face in &mut mesh.faces {
-                        face.verts.reverse();
-                        face.uv.reverse();
+                // O modo escolhido (C8) define a topologia da prévia: região
+                // (manifold), faces separadas ou cada face pela própria normal.
+                match self.tools.extrude_mode {
+                    petunia_mesh::ExtrudeMode::Region => {
+                        // Build topology once per absolute preview, then constrain the new cap.
+                        mesh.extrude_selected(0.0);
+                        for vertex in mesh.verts.iter_mut().filter(|v| v.selected) {
+                            vertex.pos = (vertex.vec() + direction * value).to_array();
+                        }
+                        if modal.flip_when_negative && value < 0.0 {
+                            for face in &mut mesh.faces {
+                                face.verts.reverse();
+                                face.uv.reverse();
+                            }
+                        }
+                    }
+                    petunia_mesh::ExtrudeMode::Individual => {
+                        mesh.extrude_individual_with(value, false);
+                    }
+                    petunia_mesh::ExtrudeMode::AlongNormals => {
+                        mesh.extrude_individual_with(value, true);
                     }
                 }
             }

@@ -11,6 +11,7 @@
 class QCheckBox;
 class PetuniaNumberField;
 class PetuniaOperationCard;
+class PetuniaSegmented;
 class QVBoxLayout;
 
 /// HUD de operação: parâmetros VIVOS da operação em curso, sobre a vista
@@ -34,6 +35,9 @@ class PetuniaOperationHud : public QFrame {
     void dismissOperation();
     const QString &focusedOperation() const { return m_graphFocus; }
     PetuniaOperationCard *operationCard() const { return m_graphCard; }
+    /// Controle de modo da operação (C8): região, faces individuais ou ao
+    /// longo das normais. Nulo só antes do primeiro sync.
+    PetuniaSegmented *modeChooser() const { return m_modeChooser; }
     QPushButton *operationDoneButton() const { return m_graphDone; }
     /// Posição dentro de `area`: a que a pessoa escolheu arrastando o cartão (B5),
     /// presa à área, ou o canto superior esquerdo. Duplo clique volta ao canto.
@@ -68,6 +72,10 @@ class PetuniaOperationHud : public QFrame {
     QHash<QString, Form *> m_forms;
     PetuniaNumberField *m_modalValue{nullptr};
     QLabel *m_modalLabel{nullptr};
+    /// Modo da operação com vários elementos (C8): região, faces individuais ou
+    /// ao longo das normais. Fica escondido quando a operação não tem modo.
+    PetuniaSegmented *m_modeChooser{nullptr};
+    QString m_modeSignature;
     QWidget *m_bevelOptions{nullptr};
     QPushButton *m_loopCutConfirm{nullptr};
     QStringList m_active;

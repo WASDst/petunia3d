@@ -67,7 +67,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | C5  | Animate: bones/rigs/templates como módulo; timeline estilo motion design; **aba de Curvas**; morph targets | [ ] TODO |
 | C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [ ] TODO |
 | C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [ ] TODO |
-| C8  | Modos das operações com vários elementos selecionados: extrudar a região (manifold), faces individuais, ao longo das normais; idem para inset/bevel, escolhidos no HUD da ferramenta | [ ] TODO |
+| C8  | Modos das operações com vários elementos selecionados: extrudar a região (manifold), faces individuais, ao longo das normais; idem para inset/bevel, escolhidos no HUD da ferramenta | [x] DONE (código e testes) |
 
 ## Gap
 
@@ -175,6 +175,23 @@ Testes novos da entrega (todos passando): máscara da camada com inversão; orde
 
 Nota de infraestrutura: o vertex shader novo (`edge_line.vert`) entra na lista de fontes do teste de shaders, que compila cada fonte — sem isso o arquivo passaria despercebido.
 
+Onda C, parte 2 — C8 (modos das operações com vários elementos), 2026-10-19. Decisões em [ADR-C16, item 18](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuário).
+
+| Gate                                                                                 | Resultado                                                             | Status  |
+|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                                         | sem diferenças                                                      | pass    |
+| `cargo clippy -D warnings` (mesh, core, editor, config, module-model, cli, ui-cxxqt)  | 0 avisos                                                             | pass    |
+| `cargo test --lib` (mesh, core, editor `animation-workspace`, config)                 | 272 + 211 + 148 + 27 testes, 0 falhas                                | pass    |
+| `cargo test -p petunia_editor --test operation_mode_c8`                               | 4 testes, 0 falhas (modos publicados, escolha na ferramenta)         | pass    |
+| `cargo test -p petunia_ui_cxxqt --test editor_parity` (offscreen)                      | 25 testes, 0 falhas                                                  | pass    |
+| `cargo test -p petunia_ui_cxxqt --test shell_v2` (offscreen)                           | 326 verificações, 0 reprovadas (2 novas: modos no HUD)             | pass    |
+| `cargo test -p petunia_ui_cxxqt --test ui_i18n_catalog`                                | 3 testes, 0 falhas                                                   | pass    |
+| Janela real com GPU (escolha do modo com o mouse e pelo teclado)                      | não executado: precisa do usuário no app                           | not run |
+
+O que mudou (C8): a extrusão tem **três modos** — Região (a seleção sobe como um bloco, malha fechada), **Faces individuais** (cada face vira o seu prisma, mas todas sobem na mesma direção) e **Ao longo das normais** (cada face sobe pela sua própria normal). O Inset tem **dois** (Região e Individual). A escolha fica no HUD da ferramenta, num controle segmentado que só aparece quando a operação tem modo, e vale para as operações seguintes (é lembrada com as demais preferências da ferramenta).
+
+Defeito encontrado e corrigido no caminho: a normal da região era normalizada duas vezes na extrusão individual, o que fazia "individual" divergir da "região" nos últimos bits da posição (1e-8) — a normal agora é normalizada uma vez só, com teste que compara as duas direções.
+
 ## Risks
 
 - A cor por grupo muda o formato do documento: o campo é opcional (arquivos antigos abrem sem migração) e a validação rejeita valores inválidos.
@@ -183,4 +200,4 @@ Nota de infraestrutura: o vertex shader novo (`edge_line.vert`) entra na lista d
 
 ## Next
 
-Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados, grade, e — da Onda C parte 1 — os painéis de camada/efeitos/gradiente, a prateleira de pincéis e o wireframe nas bordas. Depois, a Onda C segue por C5 (que consome o registro animável) e C8 (modos no HUD de prévia).
+Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados, grade, e — da Onda C parte 1 — os painéis de camada/efeitos/gradiente, a prateleira de pincéis e o wireframe nas bordas. A Onda C já tem C1–C3 e C8; depois dela vêm C4 (nós), C5 (que consome o registro animável), C6 (galeria de assets) e C7 (grupo Referência).

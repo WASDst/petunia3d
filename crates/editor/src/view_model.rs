@@ -849,6 +849,10 @@ pub struct ShellViewModel {
     pub tool_modal_step: f32,
     pub tool_modal_min: f32,
     pub tool_modal_max: f32,
+    /// Modos da operação com vários elementos (C8), escolhidos no HUD.
+    pub tool_modal_modes: Vec<ToolModeModel>,
+    /// Modo atual da operação (C8).
+    pub tool_modal_mode: String,
     pub tool_options_active: bool,
     pub tool_options_title: String,
     pub tool_options_hint: String,
@@ -1918,6 +1922,8 @@ impl ShellViewModel {
             tool_modal_step: 0.1,
             tool_modal_min: 0.0,
             tool_modal_max: 0.0,
+            tool_modal_modes: Vec::new(),
+            tool_modal_mode: String::new(),
             tool_options_active: false,
             tool_options_title: String::new(),
             tool_options_hint: String::new(),
@@ -2170,6 +2176,15 @@ pub struct PaintActiveLayerModel {
     pub gradient_start: [f32; 2],
     pub gradient_end: [f32; 2],
     pub gradient_stops: Vec<PaintGradientStopModel>,
+}
+
+/// Modo de uma operação com vários elementos (C8), pronto para o HUD.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolModeModel {
+    /// Identificador estável (`region`, `individual`, `along_normals`).
+    pub id: String,
+    /// Rótulo traduzido.
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

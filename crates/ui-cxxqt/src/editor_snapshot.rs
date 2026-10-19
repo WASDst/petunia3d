@@ -1678,6 +1678,16 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("tool_modal_step".into(), json!(&vm.tool_modal_step));
     obj.insert("tool_modal_min".into(), json!(&vm.tool_modal_min));
     obj.insert("tool_modal_max".into(), json!(&vm.tool_modal_max));
+    obj.insert(
+        "tool_modal_modes".into(),
+        Value::Array(
+            vm.tool_modal_modes
+                .iter()
+                .map(|mode| json!({"id": mode.id, "label": mode.label}))
+                .collect(),
+        ),
+    );
+    obj.insert("tool_modal_mode".into(), json!(&vm.tool_modal_mode));
     obj.insert("tool_options_active".into(), json!(&vm.tool_options_active));
     obj.insert("tool_options_title".into(), json!(&vm.tool_options_title));
     obj.insert("tool_options_hint".into(), json!(&vm.tool_options_hint));

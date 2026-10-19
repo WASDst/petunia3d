@@ -306,7 +306,14 @@ fn test_h18_family_extrude_inset_bevel_pushpull_preconditions_and_undo() {
 
     // Precondição: Extrude com seleção vazia falha com erro
     state.selection.faces.clear();
-    assert!(state.dispatch(&ExtrudeSelectedCmd { dist: 1.0 }).is_err());
+    assert!(
+        state
+            .dispatch(&ExtrudeSelectedCmd {
+                dist: 1.0,
+                ..Default::default()
+            })
+            .is_err()
+    );
     assert_eq!(state.project.undo.depth().0, initial_undo);
 
     // Precondição: Inset com seleção vazia falha com erro
@@ -339,7 +346,12 @@ fn test_h18_family_extrude_inset_bevel_pushpull_preconditions_and_undo() {
     state.set_selection_domain(SelectionDomain::Face);
     state.selection.faces = vec![0];
     let faces_before = state.project.active_mesh().unwrap().faces.len();
-    state.dispatch(&ExtrudeSelectedCmd { dist: 1.0 }).unwrap();
+    state
+        .dispatch(&ExtrudeSelectedCmd {
+            dist: 1.0,
+            ..Default::default()
+        })
+        .unwrap();
     assert!(state.project.active_mesh().unwrap().faces.len() > faces_before);
     assert_eq!(state.project.undo.depth().0, initial_undo + 1);
 

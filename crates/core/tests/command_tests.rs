@@ -2127,7 +2127,12 @@ fn test_commands_operate_with_application_selection() {
     assert!(!state.project.active_mesh().unwrap().faces[0].selected);
     let initial_faces = state.project.active_mesh().unwrap().faces.len();
 
-    state.dispatch(&ExtrudeSelectedCmd { dist: 1.0 }).unwrap();
+    state
+        .dispatch(&ExtrudeSelectedCmd {
+            dist: 1.0,
+            ..Default::default()
+        })
+        .unwrap();
     // A extrusão de uma face de um cubo adiciona paredes laterais (+4 faces)
     assert!(state.project.active_mesh().unwrap().faces.len() > initial_faces);
     assert!(!state.session.selection.faces.is_empty());

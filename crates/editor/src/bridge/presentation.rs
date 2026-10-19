@@ -1362,6 +1362,55 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.tool_modal_step = kind.step();
             vm.tool_modal_min = minimum;
             vm.tool_modal_max = maximum;
+            // C8: modos da operação com vários elementos (extrusão/inset).
+            vm.tool_modal_modes = self.operation_modes(kind);
+            vm.tool_modal_mode = self.current_operation_mode(kind);
+        }
+    }
+
+    /// Modos que a operação corrente oferece (C8). Vazio para as operações sem
+    /// modo (a escolha não aparece no HUD).
+    fn operation_modes(&self, kind: ToolModalKind) -> Vec<ToolModeModel> {
+        let label = |id: petunia_config::i18n::TextId| self.state.t_id(id);
+        match kind {
+            ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual => {
+                vec![
+                    ToolModeModel {
+                        id: "region".to_string(),
+                        label: label(petunia_config::text_id::TOOLS_MODE_REGION),
+                    },
+                    ToolModeModel {
+                        id: "individual".to_string(),
+                        label: label(petunia_config::text_id::TOOLS_MODE_INDIVIDUAL),
+                    },
+                    ToolModeModel {
+                        id: "along_normals".to_string(),
+                        label: label(petunia_config::text_id::TOOLS_MODE_ALONG_NORMALS),
+                    },
+                ]
+            }
+            ToolModalKind::Inset => vec![
+                ToolModeModel {
+                    id: "region".to_string(),
+                    label: label(petunia_config::text_id::TOOLS_MODE_REGION),
+                },
+                ToolModeModel {
+                    id: "individual".to_string(),
+                    label: label(petunia_config::text_id::TOOLS_MODE_INDIVIDUAL),
+                },
+            ],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Modo atual da operação (C8).
+    fn current_operation_mode(&self, kind: ToolModalKind) -> String {
+        match kind {
+            ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual => {
+                self.state.tools.extrude_mode.id().to_string()
+            }
+            ToolModalKind::Inset => self.state.tools.inset_mode.id().to_string(),
+            _ => String::new(),
         }
     }
 

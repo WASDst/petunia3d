@@ -1020,6 +1020,13 @@ pub mod text_id {
         TextId::new("tools.poly_pen_mode_polygons_hint");
     pub const STATUS_POLY_PEN_PAINTED: TextId = TextId::new("status.poly_pen_painted");
 
+    /// Modos das operações com vários elementos (C8), escolhidos no HUD.
+    pub const TOOLS_MODE_REGION: TextId = TextId::new("tools.mode_region");
+    pub const TOOLS_MODE_INDIVIDUAL: TextId = TextId::new("tools.mode_individual");
+    pub const TOOLS_MODE_ALONG_NORMALS: TextId = TextId::new("tools.mode_along_normals");
+    /// Rótulo do grupo de modos no HUD ("Modo da operação").
+    pub const TOOLS_OPERATION_MODE: TextId = TextId::new("tools.operation_mode");
+
     pub const PREFERENCES_VIEWPORT_MATCAP: TextId = TextId::new("preferences.viewport_matcap");
     pub const PREFERENCES_VIEWPORT_MATCAP_HINT: TextId =
         TextId::new("preferences.viewport_matcap_hint");
@@ -1718,6 +1725,10 @@ pub mod text_id {
         TOOLS_POLY_PEN_MODE_POINTS_HINT,
         TOOLS_POLY_PEN_MODE_EDGES_HINT,
         TOOLS_POLY_PEN_MODE_POLYGONS_HINT,
+        TOOLS_MODE_REGION,
+        TOOLS_MODE_INDIVIDUAL,
+        TOOLS_MODE_ALONG_NORMALS,
+        TOOLS_OPERATION_MODE,
         STATUS_POLY_PEN_PAINTED,
         PREFERENCES_VIEWPORT_MATCAP,
         PREFERENCES_VIEWPORT_MATCAP_HINT,
