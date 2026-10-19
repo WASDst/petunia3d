@@ -63,6 +63,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Bibliotecas nativas que o editor compila: `wayland-sys` (via o diálogo de
+      # arquivos `rfd`) procura `wayland-client` pelo pkg-config, e o `bindgen` do
+      # `xatlas-rs-v2` (malha) precisa da libclang.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libwayland-dev libclang-dev
+
       # A versão vem do rust-toolchain.toml do repositório.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
