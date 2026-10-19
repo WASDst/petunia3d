@@ -221,3 +221,8 @@ Debate técnico entre o usuário e o assistente (postura definida em `AGENTS.md`
     - **O modo pertence à ferramenta, não ao comando.** `ExtrudeSelectedCmd` aceita um modo explícito (`None` = o da ferramenta); a ferramenta guarda a escolha e a lembra com as demais preferências.
     - **A normal da região é normalizada uma vez só.** A extrusão individual reaproveita a normal média da região; normalizar duas vezes fazia "individual" divergir da "região" nos últimos bits (1e-8) — o defeito foi achado por um teste que compara as duas direções.
     - **O modo viaja no snapshot** (`tool_modal_modes`, `tool_modal_mode`), com rótulos traduzidos; a interface não monta a lista de modos por conta própria (UI fina: nada de regra de modelagem no widget).
+19. **C4 — nós (2026-10-19):**
+    - **Soltar um fio no vazio é uma intenção, não um erro.** No grafo de materiais, o menu de nós cria o nó **já ligado** à saída arrastada, na posição da soltura, com a entrada compatível escolhida pelo **tipo** da porta; um tipo incompatível é recusado **antes** de criar o nó (nada de nó órfão). No grafo de objetos, soltar no vazio abre o **picker de objeto** (o alvo de uma operação).
+    - **O alvo de uma operação é escolhido num picker buscável**, não num menu de lista: o menu "Aplicar em…" virou o picker, que aceita busca por texto, setas e Enter.
+    - **O operando da booleana é visível no grafo como fantasma.** O objeto-ferramenta fica escondido no documento (é o que a booleana consome), então no grafo ele aparece esmaecido, com a dica no tooltip dizendo o motivo — a informação não depende só da cor.
+    - **As portas tipadas são o contrato**: entrada e saída têm tipo, e a ligação com tipo trocado é recusada pelo grafo, não pela interface.

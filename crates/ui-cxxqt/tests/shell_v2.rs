@@ -47,6 +47,7 @@ fn shell_v2_regions_layout_focus_and_theme() {
     let missing: Vec<&str> = [
         "file:menu-offers-the-model-import",
         "parts:reference-group-is-first",
+        "graph:boolean-operand-shows-as-a-ghost",
         "paint:native-property-sections",
         "hud:extrude-offers-its-modes",
         "hud:mode-choice-reaches-the-tool",

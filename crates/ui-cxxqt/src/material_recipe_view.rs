@@ -171,6 +171,19 @@ pub(crate) fn command_for(
                 .as_str()
                 .ok_or("Tipo de nó inválido")?
                 .to_string(),
+            // C4: opcionalmente já ligado à saída arrastada, na posição da
+            // soltura (menu ao arrastar uma saída).
+            link: match request["from"].as_str() {
+                Some(_) => Some((uuid(request, "from")?, socket(request, "from_socket")?)),
+                None => None,
+            },
+            position: match request["x"].as_f64() {
+                Some(x) => Some([
+                    x as f32,
+                    request["y"].as_f64().ok_or("Número inválido: y")? as f32,
+                ]),
+                None => None,
+            },
         },
         "material_recipe_connect" => RecipeOp::Connect {
             from: uuid(request, "from")?,
@@ -221,7 +234,25 @@ mod tests {
         assert_eq!(
             cmd.op,
             RecipeOp::AddNode {
-                kind: "checker".into()
+                kind: "checker".into(),
+                link: None,
+                position: None
+            }
+        );
+        // C4: o pedido de nó já ligado traz a saída e a posição.
+        let linked = command_for(
+            "material_recipe_add",
+            &json!({"kind": "tint", "from": id.to_string(), "from_socket": 0, "x": 12.0, "y": 34.0}),
+            Some(id),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            linked.op,
+            RecipeOp::AddNode {
+                kind: "tint".into(),
+                link: Some((id, 0)),
+                position: Some([12.0, 34.0])
             }
         );
         let set = command_for(

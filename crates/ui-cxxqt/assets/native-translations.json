@@ -6130,5 +6130,21 @@
   "Apagar referência": {
     "pt-BR": "Apagar referência",
     "en": "Delete reference"
+  },
+  "Escolher objeto": {
+    "pt-BR": "Escolher objeto",
+    "en": "Choose object"
+  },
+  "Buscar objeto": {
+    "pt-BR": "Buscar objeto",
+    "en": "Search object"
+  },
+  "Objetos da cena": {
+    "pt-BR": "Objetos da cena",
+    "en": "Scene objects"
+  },
+  "Operando de booleana — o objeto fica escondido no documento": {
+    "pt-BR": "Operando de booleana — o objeto fica escondido no documento",
+    "en": "Boolean operand — the object is hidden in the document"
   }
 }

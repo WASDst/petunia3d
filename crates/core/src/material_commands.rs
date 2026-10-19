@@ -391,6 +391,10 @@ pub enum RecipeOp {
     Create,
     AddNode {
         kind: String,
+        /// C4: liga o nó novo à saída que foi arrastada (menu ao arrastar).
+        link: Option<(Uuid, u16)>,
+        /// Posição do nó novo no editor.
+        position: Option<[f32; 2]>,
     },
     Connect {
         from: Uuid,
@@ -489,7 +493,53 @@ impl Command for MaterialRecipeCmd {
             .ok_or_else(|| CommandError::Execution("material has no recipe".into()))?;
         let result = match &self.op {
             RecipeOp::Create => Ok(()),
-            RecipeOp::AddNode { kind } => recipe.add_node(kind).map(|_| ()).map_err(refuse),
+            RecipeOp::AddNode {
+                kind,
+                link,
+                position,
+            } => {
+                // A porta de entrada compatível é resolvida **antes** de criar o
+                // nó: um tipo incompatível não pode deixar nó órfão.
+                let target_input = match link {
+                    Some((from, socket)) => {
+                        let Some(spec) = petunia_project::material_recipe::default_spec(kind)
+                        else {
+                            return Err(CommandError::Execution("Tipo de nó desconhecido".into()));
+                        };
+                        let (inputs, _) = petunia_project::material_recipe::sockets(&spec);
+                        let source_type = recipe
+                            .graph
+                            .nodes
+                            .iter()
+                            .find(|node| node.id == *from)
+                            .and_then(|node| {
+                                let (_, outputs) =
+                                    petunia_project::material_recipe::sockets(&node.spec);
+                                outputs.get(*socket as usize).copied()
+                            });
+                        inputs
+                            .iter()
+                            .position(|kind| Some(*kind) == source_type)
+                            .map(|input| input as u16)
+                            .ok_or_else(|| {
+                                CommandError::Execution(
+                                    "Nenhuma entrada do nó novo aceita esse tipo".into(),
+                                )
+                            })?
+                    }
+                    None => 0,
+                };
+                let id = recipe.add_node(kind).map_err(refuse)?;
+                if let Some(spot) = position {
+                    recipe.positions.insert(id, *spot);
+                }
+                if let Some((from, socket)) = link {
+                    recipe
+                        .connect(*from, *socket, id, target_input)
+                        .map_err(refuse)?;
+                }
+                Ok(())
+            }
             RecipeOp::Connect {
                 from,
                 from_socket,
@@ -564,6 +614,80 @@ mod recipe_tests {
         if last { nodes.last() } else { nodes.first() }.unwrap().id
     }
 
+    /// C4: o nó novo já nasce ligado à saída arrastada, na posição da soltura.
+    #[test]
+    fn adding_a_node_can_link_it_to_a_dragged_output() {
+        let (mut state, id) = state_with_material();
+        state
+            .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Create))
+            .expect("cria a receita");
+        // A saída do nó "Imagem" (0) alimenta um nó novo.
+        let source = recipe_node(&state, id, false);
+        let before = material(&state, id)
+            .recipe
+            .as_ref()
+            .unwrap()
+            .graph
+            .nodes
+            .len();
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::AddNode {
+                    kind: "tint".to_string(),
+                    link: Some((source, 0)),
+                    position: Some([12.0, 34.0]),
+                },
+            ))
+            .expect("cria o nó ligado");
+        let recipe = material(&state, id).recipe.as_ref().unwrap();
+        assert_eq!(recipe.graph.nodes.len(), before + 1);
+        // A ligação existe e a posição foi gravada.
+        assert!(
+            recipe
+                .graph
+                .edges
+                .iter()
+                .any(|edge| edge.from == source && edge.to != source),
+            "o nó novo ficou ligado à saída arrastada"
+        );
+        let created = recipe.graph.nodes.last().unwrap();
+        assert_eq!(recipe.positions.get(&created.id), Some(&[12.0, 34.0]));
+
+        // Um tipo incompatível é recusado e não deixa nó órfão.
+        let nodes_before = material(&state, id)
+            .recipe
+            .as_ref()
+            .unwrap()
+            .graph
+            .nodes
+            .len();
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(
+                    id,
+                    RecipeOp::AddNode {
+                        kind: "checker".to_string(),
+                        link: Some((source, 0)),
+                        position: None,
+                    },
+                ))
+                .is_err(),
+            "o nó sem entrada de textura não aceita a saída arrastada"
+        );
+        assert_eq!(
+            material(&state, id)
+                .recipe
+                .as_ref()
+                .unwrap()
+                .graph
+                .nodes
+                .len(),
+            nodes_before,
+            "nada foi criado"
+        );
+    }
+
     #[test]
     fn recipe_ops_are_undoable_and_regenerate_material_maps() {
         let (mut state, id) = state_with_material();
@@ -586,6 +710,8 @@ mod recipe_tests {
                 id,
                 RecipeOp::AddNode {
                     kind: "checker".into(),
+                    link: None,
+                    position: None,
                 },
             ))
             .unwrap();
@@ -595,6 +721,8 @@ mod recipe_tests {
                 id,
                 RecipeOp::AddNode {
                     kind: "output".into(),
+                    link: None,
+                    position: None,
                 },
             ))
             .unwrap();
@@ -702,7 +830,9 @@ mod recipe_tests {
                 .dispatch(&MaterialRecipeCmd::new(
                     id,
                     RecipeOp::AddNode {
-                        kind: "tint".into()
+                        kind: "tint".into(),
+                        link: None,
+                        position: None
                     }
                 ))
                 .is_err(),
@@ -721,7 +851,9 @@ mod recipe_tests {
                 .dispatch(&MaterialRecipeCmd::new(
                     id,
                     RecipeOp::AddNode {
-                        kind: "shader".into()
+                        kind: "shader".into(),
+                        link: None,
+                        position: None
                     }
                 ))
                 .is_err()

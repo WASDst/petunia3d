@@ -976,6 +976,11 @@
       "revision": "árvore de trabalho sobre 8828fa37 (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Onda C, parte 3: C7 (grupo especial Referência, sempre o primeiro da lista de Partes). As imagens de referência viram linhas de um grupo 'Referência' no topo da lista de Partes, com olho (mostrar/ocultar) e cadeiro; o botão direito apaga a referência. Girar, mover no eixo e escalar continuam no painel de Referências (o grupo é atalho, não segunda fonte). O grupo só aparece com imagem carregada. Gates: fmt limpo; clippy -D warnings; ui-cxxqt offscreen: shell_v2 327 verificações (1 nova: parts:reference-group-is-first), ui_i18n_catalog 3; não executado: janela real com GPU."
+    },
+    "shell-v2-roadmap-c4-nodes-2026-10-19": {
+      "revision": "árvore de trabalho sobre 4b8443de (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda C, parte 4: C4 (nós). As portas tipadas já existiam; esta entrega fecha as três peças: (1) menu ao arrastar uma saída — soltar o fio no vazio abre o menu de nós e, no grafo de materiais, o nó novo nasce ligado à saída arrastada na posição da soltura, com a entrada compatível escolhida pelo tipo (tipo incompatível é recusado sem deixar nó órfão); (2) picker de objeto — o alvo de uma operação passa a ser escolhido numa lista buscável (o antigo menu 'Aplicar em…' virou o picker), e soltar o fio no vazio no grafo de objetos abre o mesmo picker; (3) booleana com operando visível/fantasma — o objeto-ferramenta, escondido no documento, aparece esmaecido no grafo, com a dica no tooltip. No mesmo lote: morph targets (blend shapes) no crate de malha, com mistura linear, recusas tipadas e 11 testes. Gates: fmt limpo; clippy -D warnings; core 212 (+1 novo), mesh 283 (+11), ui-cxxqt offscreen: shell_v2 328 verificações (1 nova: graph:boolean-operand-shows-as-a-ghost), ui_i18n_catalog 3; não executado: janela real com GPU (arrastar fio, picker, fantasma)."
     }
   },
   "tasks": [
@@ -5522,8 +5527,8 @@
         },
         {
           "title": "C4 Nós como DAG com portas tipadas e booleana com operando visível/fantasma.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c4-nodes-2026-10-19"
         },
         {
           "title": "C5 Animate: módulo de rig, timeline estilo motion design, aba de Curvas e morph targets.",

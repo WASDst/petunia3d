@@ -47,6 +47,8 @@ class PetuniaNodeCanvas : public QGraphicsView {
     int nodeCount() const { return m_nodes.size(); }
     int wireCount() const { return m_wires.size(); }
     QStringList nodeIds() const;
+    /// C4: nós que são operandos de booleana (desenhados como fantasma).
+    QStringList ghostNodeIds() const;
     QString selectedNodeId() const { return m_selected; }
     void selectNode(const QString &id);
     /// Texto lido por tecnologias assistivas: tipo, estado e ligações do nó.
@@ -123,6 +125,11 @@ class PetuniaNodeCanvas : public QGraphicsView {
     void showRecipeConnectMenu(const QPoint &globalPos);
     void normalizeRecipe(const QJsonObject &recipe, QJsonArray &nodes, QJsonArray &edges) const;
     void showAddMenu(const QPoint &globalPos);
+    /// C4: menu de nós que já nasce ligado a uma saída arrastada.
+    void showAddMenu(const QPoint &globalPos, const QString &linkFrom, int linkSocket,
+                     const QPointF &at);
+    /// C4: picker de objeto (lista buscável) para escolher o alvo de uma operação.
+    void showObjectPicker(const QPoint &globalPos, const QString &operation);
     void deleteSelected();
     PetuniaNodeItem *nodeAt(const QPointF &scenePos) const;
     QJsonObject nodeRow(const QString &id) const;

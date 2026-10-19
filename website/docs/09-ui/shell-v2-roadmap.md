@@ -63,7 +63,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | C1  | Camadas: opções da camada ativa no painel, efeitos como sub-camadas, máscara em camada e efeito         | [x] DONE (código e testes) |
 | C2  | Paint: ferramenta única "Projeção"; pintar só a seleção; isolar para pintura (fantasma/raio-x)          | [x] DONE (código e testes) |
 | C3  | Gradiente como camada de preenchimento editável (tipos como opção do painel)                            | [x] DONE (código e testes) |
-| C4  | Nós: DAG com portas tipadas, picker de objeto, menu ao arrastar uma saída, booleana com operando visível/fantasma | [ ] TODO |
+| C4  | Nós: DAG com portas tipadas, picker de objeto, menu ao arrastar uma saída, booleana com operando visível/fantasma | [x] DONE (código e testes) |
 | C5  | Animate: bones/rigs/templates como módulo; timeline estilo motion design; **aba de Curvas**; morph targets | [ ] TODO |
 | C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [ ] TODO |
 | C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [x] DONE (código e testes) |
@@ -203,6 +203,24 @@ Onda C, parte 3 — C7 (grupo Referência nas Partes), 2026-10-19.
 | Janela real com GPU (grupo, olho, apagar pelo menu)         | não executado: precisa do usuário no app              | not run |
 
 O que mudou (C7): as imagens de referência ganham um **grupo próprio, sempre no topo da lista de Partes** — com o olho (mostrar/ocultar) e o cadeiro na linha, e o botão direito com "Apagar referência". Girar, mover no eixo e escalar continuam no painel de Referências (o grupo em Partes é o atalho, não uma segunda verdade). O grupo só aparece quando há imagem carregada; slots vazios não viram linha.
+
+Onda C, parte 4 — C4 (nós: portas tipadas, picker de objeto, menu ao arrastar uma saída, booleana com operando fantasma), 2026-10-19.
+
+| Gate                                                            | Resultado                                                          | Status  |
+|-----------------------------------------------------------------|--------------------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                    | sem diferenças                                                     | pass    |
+| `cargo clippy -D warnings` (core, mesh, ui-cxxqt)                | 0 avisos                                                           | pass    |
+| `cargo test -p petunia_core --lib`                              | 212 testes, 0 falhas (1 novo: nó criado já ligado)                 | pass    |
+| `cargo test -p petunia_mesh --lib`                              | 283 testes, 0 falhas (11 dos morph targets)                        | pass    |
+| `cargo test -p petunia_ui_cxxqt --test shell_v2` (offscreen)     | 328 verificações, 0 reprovadas (1 nova do C4)                     | pass    |
+| `cargo test -p petunia_ui_cxxqt --test ui_i18n_catalog`          | 3 testes, 0 falhas                                                 | pass    |
+| Janela real com GPU (arrastar fio, picker, fantasma)             | não executado: precisa do usuário no app                           | not run |
+
+O que mudou (C4): as **portas tipadas** já existiam no grafo de materiais (entrada/saída por tipo, recusadas quando o tipo não bate). Esta entrega fecha as três peças que faltavam:
+
+- **Menu ao arrastar uma saída**: soltar um fio no vazio abre o menu de nós; no grafo de materiais, o nó novo **nasce ligado** à saída arrastada, na posição da soltura, com a entrada compatível escolhida pelo tipo (um tipo incompatível é recusado e não deixa nó órfão).
+- **Picker de objeto**: o alvo de uma operação é escolhido numa lista **buscável** (o antigo menu "Aplicar em…" virou o picker) — e soltar um fio no vazio no grafo de objetos abre o mesmo picker.
+- **Booleana com operando visível/fantasma**: o objeto que serve de ferramenta fica escondido no documento; no grafo ele aparece **esmaecido**, com a dica no tooltip dizendo por quê (não só pela cor).
 
 ## Risks
 

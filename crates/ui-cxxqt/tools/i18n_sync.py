@@ -787,6 +787,11 @@ PT_TO_EN = {
     "Pincel %1": "Brush %1",
     "Nenhum preset ainda. Salve o pincel atual para vê-lo aqui.": "No preset yet. Save the current brush to see it here.",
     "máscara": "mask",
+    # C4 (2026-10-19): picker de objeto e menu ao arrastar uma saída
+    "Escolher objeto": "Choose object",
+    "Buscar objeto": "Search object",
+    "Objetos da cena": "Scene objects",
+    "Operando de booleana — o objeto fica escondido no documento": "Boolean operand — the object is hidden in the document",
     # C7 (2026-10-19): grupo Referência na lista de Partes
     "Referência": "Reference",
     "Apagar referência": "Delete reference",

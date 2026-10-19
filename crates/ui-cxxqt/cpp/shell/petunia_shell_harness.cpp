@@ -1123,11 +1123,16 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         auto *tree = window.structure()->tree();
         const auto model = tree->model();
         const auto first = model->index(0, 0);
-        const QString title = first.data().toString();
+        // A species da linha (não o rótulo): o check independe do idioma.
+        const QString kind = first.data(Qt::UserRole + 2).toString();
+        const QString id = first.data(Qt::UserRole).toString();
         const bool hasChild = first.isValid() && model->hasChildren(first);
         h.add("parts:reference-group-is-first",
-              loaded && first.isValid() && title.contains(QStringLiteral("Referência")) && hasChild,
-              QStringLiteral("linha0='%1' filhos=%2").arg(title).arg(hasChild));
+              loaded && first.isValid() && kind == QLatin1String("reference_group") &&
+                  id == QLatin1String("reference-group") && hasChild,
+              QStringLiteral("linha0='%1' especie='%2' filhos=%3")
+                  .arg(first.data().toString(), kind)
+                  .arg(hasChild));
     }
 
     // Arquivo > Importar: a importação de modelo precisa estar no menu (a
@@ -1255,6 +1260,15 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         h.add("hud:done-dismisses-operation", !hud->activeSections().contains("graph_operation") && hud->focusedOperation().isEmpty());
         h.add("graph:boolean-appears-as-tool-card", ops->toolCards().size() == 1,
               QString::number(ops->toolCards().size()));
+        // C4: o operando da booleana aparece como fantasma no grafo (o objeto
+        // fica escondido no documento).
+        {
+            auto *nodeCanvas = qobject_cast<PetuniaNodeCanvas *>(
+                window.drawerRegion()->findChild<PetuniaNodeCanvas *>());
+            const auto ghosts = nodeCanvas ? nodeCanvas->ghostNodeIds() : QStringList();
+            h.add("graph:boolean-operand-shows-as-a-ghost", !ghosts.isEmpty(),
+                  ghosts.join(","));
+        }
         h.add("graph:bake-hidden-until-applied", !ops->bakeButton()->isVisibleTo(ops));
         const auto graph = c->state()["op_graph"].toObject();
         const auto toolRows = graph["as_tool"].toArray();

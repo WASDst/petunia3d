@@ -8,6 +8,10 @@
 #include <QAccessibleWidget>
 #include <QPointer>
 #include <QContextMenuEvent>
+#include <QDialog>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QVBoxLayout>
 #include <QFocusEvent>
 #include <QGraphicsObject>
 #include <QGraphicsPathItem>
@@ -119,7 +123,17 @@ class PetuniaNodeItem : public QGraphicsObject {
     void setSelectedNode(bool selected) { m_selected = selected; update(); }
     void setActive(bool active) { m_active = active; update(); }
     void setFocused(bool focused) { m_focused = focused; update(); }
-    void setRow(const QJsonObject &row) { m_row = row; update(); }
+    void setRow(const QJsonObject &row) {
+        m_row = row;
+        // C4: o fantasma avisa por que está esmaecido (e por tooltip/ leitor
+        // de tela, não só pela cor).
+        if (isGhost()) {
+            setToolTip(tr("Operando de booleana — o objeto fica escondido no documento"));
+        } else {
+            setToolTip(portSummary());
+        }
+        update();
+    }
 
     qreal bodyHeight() const {
         const int rows = int(std::max(m_inputs.size(), m_outputs.size()));
@@ -157,10 +171,17 @@ class PetuniaNodeItem : public QGraphicsObject {
         return -1;
     }
 
+    /// C4: operando de booleana — o objeto está escondido no documento, então
+    /// o nó aparece esmaecido (fantasma).
+    bool isGhost() const { return m_row["ghost"].toBool(); }
+
     void paint(QPainter *p, const QStyleOptionGraphicsItem *, QWidget *) override {
         const auto &t = PetuniaTheme::instance();
         const bool known = m_row["known"].toBool(true);
         const bool enabled = m_row["enabled"].toBool(true);
+        const bool ghost = isGhost();
+        if (ghost)
+            p->setOpacity(0.45);
         const QRectF body(0, 0, kNodeWidth, bodyHeight());
         p->setRenderHint(QPainter::Antialiasing);
         p->setBrush(t.bgSurface());
@@ -553,6 +574,14 @@ PetuniaNodeCanvas::~PetuniaNodeCanvas() {
         QAccessible::deleteAccessibleInterface(id);
 }
 
+QStringList PetuniaNodeCanvas::ghostNodeIds() const {
+    QStringList out;
+    for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it)
+        if (it.value()->isGhost())
+            out << it.key();
+    return out;
+}
+
 QStringList PetuniaNodeCanvas::nodeIds() const {
     QStringList ids;
     for (const auto &row : m_nodeRows)
@@ -656,12 +685,33 @@ void PetuniaNodeCanvas::sync(const QJsonObject &state) {
     for (const auto &n : nodes) {
         const auto o = n.toObject();
         signature += o["id"].toString() + QLatin1Char(':') + o["title"].toString() + QLatin1Char(':') +
-                     o["type_id"].toString() + QLatin1Char(';');
+                     o["type_id"].toString() +
+                     (o["ghost"].toBool() ? QStringLiteral(":g") : QString()) + QLatin1Char(';');
     }
     for (const auto &e : edges) {
         const auto o = e.toObject();
         signature += o["from"].toString() + QLatin1Char('>') + o["from_port_name"].toString() + QLatin1Char('>') +
                      o["to"].toString() + QLatin1Char('>') + o["to_port_name"].toString() + QLatin1Char(';');
+    }
+    // C4: o operando de uma booleana (a ferramenta) é o objeto que fica
+    // escondido no documento; no grafo ele aparece como fantasma.
+    if (m_domain == Domain::Operations) {
+        QSet<QString> tools;
+        for (const auto &value : edges) {
+            const auto edge = value.toObject();
+            if (edge["to_port_name"].toString() == QLatin1String("tool"))
+                tools.insert(edge["from"].toString());
+        }
+        if (!tools.isEmpty()) {
+            QJsonArray marked;
+            for (const auto &value : nodes) {
+                auto row = value.toObject();
+                if (tools.contains(row["id"].toString()))
+                    row.insert("ghost", true);
+                marked.append(row);
+            }
+            nodes = marked;
+        }
     }
     m_nodeRows = nodes;
     m_edgeRows = edges;
@@ -1304,41 +1354,9 @@ void PetuniaNodeCanvas::keyReleaseEvent(QKeyEvent *event) {
 void PetuniaNodeCanvas::showConnectMenu(const QPoint &globalPos) {
     if (!isOperation(m_selected))
         return;
-    QMenu menu(this);
-    menu.setAccessibleName(tr("Aplicar em"));
-    const auto applied = targetsOf(m_selected);
-    const QString op = m_selected;
-    int count = 0;
-    for (const auto &row : m_nodeRows) {
-        const auto o = row.toObject();
-        if (o["type_id"].toString() != QLatin1String("petunia.object"))
-            continue;
-        // A própria ferramenta não pode ser alvo da sua operação.
-        bool isTool = false;
-        for (const auto &edge : m_edgeRows) {
-            const auto e = edge.toObject();
-            if (e["to"].toString() == op && e["to_port_name"].toString() == QLatin1String("tool") &&
-                e["from"].toString() == o["id"].toString())
-                isTool = true;
-        }
-        if (isTool)
-            continue;
-        auto *action = menu.addAction(o["title"].toString());
-        action->setCheckable(true);
-        action->setChecked(applied.contains(o["id"].toString()));
-        action->setData(o["id"].toString());
-        ++count;
-    }
-    if (count == 0) {
-        menu.addAction(tr("Nenhum objeto disponível"))->setEnabled(false);
-    }
-    if (auto *chosen = menu.exec(globalPos)) {
-        const QString target = chosen->data().toString();
-        if (chosen->isChecked())
-            connectOperation(op, target);
-        else
-            disconnectOperation(op, target);
-    }
+    // C4: o alvo de uma operação é escolhido no picker buscável (o mesmo que
+    // abre quando um fio é solto no vazio).
+    showObjectPicker(globalPos, m_selected);
 }
 
 void PetuniaNodeCanvas::showRecipeConnectMenu(const QPoint &globalPos) {
@@ -1385,7 +1403,66 @@ void PetuniaNodeCanvas::showRecipeConnectMenu(const QPoint &globalPos) {
     }
 }
 
+namespace {
+/// C4: picker de objeto — lista buscável para escolher o alvo de uma operação
+/// (o alvo do menu "Aplicar em…" e o alvo de um arrasto solto no vazio).
+class ObjectPicker : public QDialog {
+    // Sem Q_OBJECT: o picker vive neste arquivo e não precisa de sinais
+    // próprios (o moc do build não processa este .cpp).
+
+  public:
+    explicit ObjectPicker(const QList<QPair<QString, QString>> &entries, QWidget *parent)
+        : QDialog(parent) {
+        setWindowTitle(tr("Escolher objeto"));
+        setAccessibleName(tr("Escolher objeto"));
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(8, 8, 8, 8);
+        m_search = new QLineEdit(this);
+        m_search->setPlaceholderText(tr("Buscar objeto"));
+        m_search->setAccessibleName(tr("Buscar objeto"));
+        layout->addWidget(m_search);
+        m_list = new QListWidget(this);
+        m_list->setAccessibleName(tr("Objetos da cena"));
+        layout->addWidget(m_list);
+        for (const auto &entry : entries) {
+            auto *item = new QListWidgetItem(entry.first, m_list);
+            item->setData(Qt::UserRole, entry.second);
+        }
+        connect(m_search, &QLineEdit::textChanged, this, [this](const QString &text) {
+            for (int i = 0; i < m_list->count(); ++i) {
+                auto *item = m_list->item(i);
+                const bool matches = text.isEmpty() ||
+                    item->text().contains(text, Qt::CaseInsensitive);
+                item->setHidden(!matches);
+                if (matches && m_list->currentRow() < 0)
+                    m_list->setCurrentRow(i);
+            }
+        });
+        connect(m_list, &QListWidget::itemActivated, this, [this](QListWidgetItem *) { accept(); });
+        connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem *) { accept(); });
+        m_search->setFocus();
+    }
+
+    /// Id do objeto escolhido (vazio se cancelado).
+    QString chosenId() const {
+        const auto *item = m_list->currentItem();
+        return item ? item->data(Qt::UserRole).toString() : QString();
+    }
+
+  private:
+    QLineEdit *m_search{nullptr};
+    QListWidget *m_list{nullptr};
+};
+} // namespace
+
 void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos) {
+    showAddMenu(globalPos, QString(), -1, QPointF());
+}
+
+/// C4: o menu de nós pode abrir já ligado a uma saída arrastada (com a
+/// posição da soltura), para o nó novo nascer onde o fio foi solto.
+void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos, const QString &linkFrom, int linkSocket,
+                                    const QPointF &at) {
     if (m_domain == Domain::Material) {
         QMenu menu(this);
         menu.setAccessibleName(tr("Adicionar nó de material"));
@@ -1405,15 +1482,23 @@ void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos) {
             }
             menu.addAction(petuniaTr(kind["label"].toString()))->setData(kind["id"].toString());
         }
-        if (auto *chosen = menu.exec(globalPos); chosen && !chosen->data().toString().isEmpty())
-            m_controller->request(QStringLiteral("material_recipe_add"), {{"kind", chosen->data().toString()}});
+        if (auto *chosen = menu.exec(globalPos); chosen && !chosen->data().toString().isEmpty()) {
+            QJsonObject args{{"kind", chosen->data().toString()}};
+            if (!linkFrom.isEmpty() && linkSocket >= 0) {
+                args.insert("from", linkFrom);
+                args.insert("from_socket", linkSocket);
+                args.insert("x", at.x());
+                args.insert("y", at.y());
+            }
+            m_controller->request(QStringLiteral("material_recipe_add"), args);
+        }
         return;
     }
     QMenu menu(this);
     menu.setAccessibleName(tr("Adicionar operação"));
     auto *boolean = menu.addAction(PetuniaIcons::get(QStringLiteral("boolean_cut")), tr("Booleana (objeto ativo é a ferramenta)"));
     auto *mirror = menu.addAction(PetuniaIcons::get(QStringLiteral("mirror")), tr("Mirror (espelhar)"));
-    auto *symmetry = menu.addAction(PetuniaIcons::get(QStringLiteral("symmetrize")), tr("Symmetry (simetrizar)"));
+    auto *symmetry = menu.addAction(PetuniaIcons::get(QStringLiteral("symmetry")), tr("Symmetry (simetrizar)"));
     menu.setEnabled(!m_activeAsset.isEmpty());
     auto *chosen = menu.exec(globalPos);
     if (chosen == boolean)
@@ -1423,6 +1508,39 @@ void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos) {
     else if (chosen == symmetry)
         m_controller->request(QStringLiteral("graph_add_operation"), {{"kind", "symmetry"}});
 }
+
+/// C4: picker de objeto — lista buscável dos objetos da cena (sem a própria
+/// ferramenta da operação, que não pode ser alvo de si mesmo).
+void PetuniaNodeCanvas::showObjectPicker(const QPoint &globalPos, const QString &operation) {
+    QList<QPair<QString, QString>> entries;
+    for (const auto &row : m_nodeRows) {
+        const auto o = row.toObject();
+        if (o["type_id"].toString() != QLatin1String("petunia.object"))
+            continue;
+        const QString id = o["id"].toString();
+        bool isTool = false;
+        for (const auto &edge : m_edgeRows) {
+            const auto e = edge.toObject();
+            if (e["to"].toString() == operation &&
+                e["to_port_name"].toString() == QLatin1String("tool") &&
+                e["from"].toString() == id)
+                isTool = true;
+        }
+        if (isTool)
+            continue;
+        entries.append({o["title"].toString(), id});
+    }
+    if (entries.isEmpty())
+        return;
+    ObjectPicker picker(entries, this);
+    picker.move(globalPos);
+    if (picker.exec() == QDialog::Accepted) {
+        const QString target = picker.chosenId();
+        if (!target.isEmpty())
+            connectOperation(operation, target);
+    }
+}
+
 
 void PetuniaNodeCanvas::contextMenuEvent(QContextMenuEvent *event) {
     if (event->reason() == QContextMenuEvent::Mouse) {
@@ -1632,8 +1750,17 @@ void PetuniaNodeCanvas::mouseReleaseEvent(QMouseEvent *event) {
         m_ghost = nullptr;
         auto *target = nodeAt(scenePos);
         auto *source = m_nodes.value(from); // pode ter sumido num sync durante o arrasto
-        if (m_domain == Domain::Material && source && target && target->id() != from &&
-            m_wireFromSocket < source->outputCount()) {
+        const int socket = m_wireFromSocket;
+        if (!target && source && m_domain == Domain::Material &&
+            socket < source->outputCount()) {
+            // C4: soltar no vazio abre o menu de nós; o nó novo já fica ligado
+            // à saída arrastada e nasce onde o fio foi solto.
+            showAddMenu(event->globalPosition().toPoint(), from, socket, scenePos);
+        } else if (!target && source && m_domain != Domain::Material) {
+            // C4: no grafo de objetos, soltar no vazio abre o picker de objeto.
+            showObjectPicker(event->globalPosition().toPoint(), from);
+        } else if (m_domain == Domain::Material && source && target && target->id() != from &&
+            socket < source->outputCount()) {
             // Solta sobre uma entrada: essa; senão a primeira entrada do mesmo tipo.
             const QString type = source->outputType(m_wireFromSocket);
             int socket = target->inputAt(scenePos);
