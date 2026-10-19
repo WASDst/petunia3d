@@ -971,6 +971,11 @@
       "revision": "árvore de trabalho sobre 6305bab4 (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Onda C, parte 2: C8 (modos das operações com vários elementos, escolhidos no HUD da ferramenta). Extrusão com três modos — Região (bloco, malha fechada), Faces individuais (cada face vira prisma próprio, mesma direção) e Ao longo das normais (cada face pela sua própria normal) — e Inset com dois (Região, Individual). O modo pertence à ferramenta (ExtrudeSelectedCmd aceita modo explícito; None = o da ferramenta), é lembrado com as demais preferências e viaja no snapshot (tool_modal_modes/tool_modal_mode) com rótulos traduzidos; a interface mostra um controle segmentado no HUD, só quando a operação tem modo. Defeito achado e corrigido no caminho: a normal da região era normalizada duas vezes, fazendo 'individual' divergir da 'região' em 1e-8. Gates: fmt limpo; clippy -D warnings (mesh, core, editor, config, module-model, cli, ui-cxxqt; --all-targets) 0 avisos; mesh 272, core 211 (+ suítes), editor 148 + 4 novos (operation_mode_c8), config 27; ui-cxxqt offscreen: editor_parity 25, shell_v2 326 verificações (2 novas: hud:extrude-offers-its-modes e hud:mode-choice-reaches-the-tool), ui_i18n_catalog 3. Não executado: janela real com GPU (escolha do modo com mouse e teclado)."
+    },
+    "shell-v2-roadmap-c7-reference-group-2026-10-19": {
+      "revision": "árvore de trabalho sobre 8828fa37 (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda C, parte 3: C7 (grupo especial Referência, sempre o primeiro da lista de Partes). As imagens de referência viram linhas de um grupo 'Referência' no topo da lista de Partes, com olho (mostrar/ocultar) e cadeiro; o botão direito apaga a referência. Girar, mover no eixo e escalar continuam no painel de Referências (o grupo é atalho, não segunda fonte). O grupo só aparece com imagem carregada. Gates: fmt limpo; clippy -D warnings; ui-cxxqt offscreen: shell_v2 327 verificações (1 nova: parts:reference-group-is-first), ui_i18n_catalog 3; não executado: janela real com GPU."
     }
   },
   "tasks": [
@@ -5532,8 +5537,8 @@
         },
         {
           "title": "C7 Grupo especial Referência no painel de Partes.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c7-reference-group-2026-10-19"
         },
         {
           "title": "C8 Modos das operações com vários elementos (região, individuais, normais) no HUD.",

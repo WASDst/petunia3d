@@ -46,6 +46,7 @@ fn shell_v2_regions_layout_focus_and_theme() {
     let names: Vec<&str> = checks.iter().filter_map(|c| c["name"].as_str()).collect();
     let missing: Vec<&str> = [
         "file:menu-offers-the-model-import",
+        "parts:reference-group-is-first",
         "paint:native-property-sections",
         "hud:extrude-offers-its-modes",
         "hud:mode-choice-reaches-the-tool",

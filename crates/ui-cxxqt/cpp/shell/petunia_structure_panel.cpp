@@ -476,6 +476,17 @@ void PetuniaStructurePanel::onClicked(const QModelIndex &proxyIndex) {
     if (ws == QLatin1String("UV"))
         return;
 
+    // C7: linha de referência — o olho mostra e esconde a imagem, o cadeiro
+    // trava; as demais operações ficam no painel de Referências.
+    if (kindAt(proxyIndex) == QLatin1String("reference")) {
+        const QString axis = groupAt(proxyIndex);
+        if (source.column() == Visible)
+            m_controller->request(QStringLiteral("toggle_reference_visible"), {{"axis_str", axis}});
+        else if (source.column() == Locked)
+            m_controller->request(QStringLiteral("toggle_reference_lock"), {{"axis_str", axis}});
+        return;
+    }
+
     // Linha de grupo: as três colunas agem no grupo inteiro.
     if (kindAt(proxyIndex) == QLatin1String("group")) {
         const QString group = groupAt(proxyIndex);
@@ -599,6 +610,22 @@ void PetuniaStructurePanel::sync(const QJsonObject &state) {
 }
 
 namespace {
+/// Identificador da linha de uma referência ("reference:<eixo>").
+QString referenceItemId(const QString &axis) {
+    return QStringLiteral("reference:") + axis;
+}
+
+/// Referências com imagem carregada: são as que viram linhas nas Partes.
+QJsonArray referenceSlotsWithImage(const QJsonObject &state) {
+    QJsonArray out;
+    for (const auto &value : state["reference_slots"].toArray()) {
+        const auto slot = value.toObject();
+        if (slot["has_image"].toBool())
+            out.append(slot);
+    }
+    return out;
+}
+
 /// Itens de uma linha com as quatro colunas; só o nome é editável.
 QList<QStandardItem *> makeRow(QStandardItem *name) {
     auto *eye = new QStandardItem;
@@ -847,12 +874,18 @@ void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
     QStringList groupOrder;
     for (const auto &value : groups)
         groupOrder << value.toObject()["name"].toString();
+    // C7: o grupo "Referência" é sempre o primeiro da lista de Partes.
+    const auto referenceSlots = referenceSlotsWithImage(state);
     QString signature;
     for (const auto &name : groupOrder)
         signature += QStringLiteral("g:") + name + QLatin1Char(';');
     for (const auto &value : items) {
         const auto o = value.toObject();
         signature += o["id"].toString() + QLatin1Char('@') + o["collection"].toString() + QLatin1Char(';');
+    }
+    for (const auto &value : referenceSlots) {
+        const auto slot = value.toObject();
+        signature += QStringLiteral("r:") + slot["axis"].toString() + QLatin1Char(';');
     }
 
     m_syncing = true;
@@ -861,6 +894,33 @@ void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
         m_rowItems.clear();
         m_model->removeRows(0, m_model->rowCount());
         QHash<QString, QStandardItem *> groupItems;
+        // C7: "Referência" primeiro, sempre — as imagens de referência não são
+        // partes da cena, mas precisam estar à mão no mesmo lugar.
+        QStandardItem *referenceGroup = nullptr;
+        if (!referenceSlots.isEmpty()) {
+            auto *item = new QStandardItem(tr("Referência"));
+            item->setData(QStringLiteral("reference-group"), IdRole);
+            item->setData(QStringLiteral("reference_group"), KindRole);
+            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            referenceGroup = item;
+            m_model->appendRow(makeRow(item));
+            m_rowItems.insert(QStringLiteral("reference-group"), item);
+        }
+        for (const auto &value : referenceSlots) {
+            const auto slot = value.toObject();
+            const QString axis = slot["axis"].toString();
+            const QString label = slot["image_name"].toString().isEmpty()
+                ? slot["title"].toString()
+                : slot["image_name"].toString();
+            auto *item = new QStandardItem(label);
+            item->setData(referenceItemId(axis), IdRole);
+            item->setData(QStringLiteral("reference"), KindRole);
+            item->setData(axis, GroupRole);
+            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            if (referenceGroup)
+                referenceGroup->appendRow(makeRow(item));
+            m_rowItems.insert(referenceItemId(axis), item);
+        }
         for (const auto &name : groupOrder) {
             auto *item = new QStandardItem(name);
             item->setData(groupItemId(name), IdRole);
@@ -892,6 +952,29 @@ void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
         for (const auto &collapsed : std::as_const(m_collapsed)) {
             if (auto *item = m_rowItems.value(groupItemId(collapsed)))
                 m_tree->setExpanded(m_proxy->mapFromSource(item->index()), false);
+        }
+    }
+
+    // C7: as linhas de referência mostram o olho e o cadeiro do slot.
+    for (const auto &value : referenceSlots) {
+        const auto slot = value.toObject();
+        auto *name = m_rowItems.value(referenceItemId(slot["axis"].toString()));
+        if (!name)
+            continue;
+        const auto sourceName = name->index();
+        auto *eye = m_model->itemFromIndex(sourceName.siblingAtColumn(Visible));
+        auto *lock = m_model->itemFromIndex(sourceName.siblingAtColumn(Locked));
+        if (eye) {
+            const bool visible = slot["visible"].toBool();
+            eye->setIcon(stateIcon(visible ? QStringLiteral("eye") : QStringLiteral("eye_hidden"), false, !visible));
+            eye->setToolTip(visible ? tr("Visível — clique para ocultar") : tr("Oculto — clique para exibir"));
+            eye->setData(visible ? tr("Visível") : tr("Oculto"), Qt::AccessibleTextRole);
+        }
+        if (lock) {
+            const bool locked = slot["locked"].toBool();
+            lock->setIcon(stateIcon(locked ? QStringLiteral("lock") : QStringLiteral("unlock"), false, !locked));
+            lock->setToolTip(locked ? tr("Bloqueado — clique para liberar") : tr("Livre — clique para bloquear"));
+            lock->setData(locked ? tr("Bloqueado") : tr("Livre"), Qt::AccessibleTextRole);
         }
     }
 
@@ -1148,6 +1231,16 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
     // Cena: linha de grupo, de parte ou área vazia.
     if (proxy.isValid() && kindAt(proxy) == QLatin1String("group")) {
         showGroupMenu(groupAt(proxy), m_tree->viewport()->mapToGlobal(pos));
+        return;
+    }
+    // C7: na referência, o menu do botão direito apaga a imagem.
+    if (proxy.isValid() && kindAt(proxy) == QLatin1String("reference")) {
+        const QString axis = groupAt(proxy);
+        QMenu menu(this);
+        auto *remove = menu.addAction(tr("Apagar referência"));
+        auto *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (picked == remove)
+            m_controller->request(QStringLiteral("remove_reference_slot"), {{"axis_str", axis}});
         return;
     }
     if (!proxy.isValid()) {

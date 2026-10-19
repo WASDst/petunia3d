@@ -6122,5 +6122,13 @@
   "Modo da operação": {
     "pt-BR": "Modo da operação",
     "en": "Operation mode"
+  },
+  "Referência": {
+    "pt-BR": "Referência",
+    "en": "Reference"
+  },
+  "Apagar referência": {
+    "pt-BR": "Apagar referência",
+    "en": "Delete reference"
   }
 }

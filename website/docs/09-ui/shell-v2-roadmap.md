@@ -66,7 +66,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | C4  | Nós: DAG com portas tipadas, picker de objeto, menu ao arrastar uma saída, booleana com operando visível/fantasma | [ ] TODO |
 | C5  | Animate: bones/rigs/templates como módulo; timeline estilo motion design; **aba de Curvas**; morph targets | [ ] TODO |
 | C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [ ] TODO |
-| C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [ ] TODO |
+| C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [x] DONE (código e testes) |
 | C8  | Modos das operações com vários elementos selecionados: extrudar a região (manifold), faces individuais, ao longo das normais; idem para inset/bevel, escolhidos no HUD da ferramenta | [x] DONE (código e testes) |
 
 ## Gap
@@ -191,6 +191,18 @@ Onda C, parte 2 — C8 (modos das operações com vários elementos), 2026-10-19
 O que mudou (C8): a extrusão tem **três modos** — Região (a seleção sobe como um bloco, malha fechada), **Faces individuais** (cada face vira o seu prisma, mas todas sobem na mesma direção) e **Ao longo das normais** (cada face sobe pela sua própria normal). O Inset tem **dois** (Região e Individual). A escolha fica no HUD da ferramenta, num controle segmentado que só aparece quando a operação tem modo, e vale para as operações seguintes (é lembrada com as demais preferências da ferramenta).
 
 Defeito encontrado e corrigido no caminho: a normal da região era normalizada duas vezes na extrusão individual, o que fazia "individual" divergir da "região" nos últimos bits da posição (1e-8) — a normal agora é normalizada uma vez só, com teste que compara as duas direções.
+
+Onda C, parte 3 — C7 (grupo Referência nas Partes), 2026-10-19.
+
+| Gate                                                        | Resultado                                             | Status  |
+|-------------------------------------------------------------|-------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                | sem diferenças                                        | pass    |
+| `cargo clippy -D warnings` (crates afetados)                | 0 avisos                                              | pass    |
+| `cargo test -p petunia_ui_cxxqt --test shell_v2` (offscreen) | 327 verificações, 0 reprovadas (1 nova do C7)        | pass    |
+| `cargo test -p petunia_ui_cxxqt --test ui_i18n_catalog`     | 3 testes, 0 falhas                                    | pass    |
+| Janela real com GPU (grupo, olho, apagar pelo menu)         | não executado: precisa do usuário no app              | not run |
+
+O que mudou (C7): as imagens de referência ganham um **grupo próprio, sempre no topo da lista de Partes** — com o olho (mostrar/ocultar) e o cadeiro na linha, e o botão direito com "Apagar referência". Girar, mover no eixo e escalar continuam no painel de Referências (o grupo em Partes é o atalho, não uma segunda verdade). O grupo só aparece quando há imagem carregada; slots vazios não viram linha.
 
 ## Risks
 

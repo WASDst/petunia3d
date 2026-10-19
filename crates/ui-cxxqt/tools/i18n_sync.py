@@ -787,6 +787,9 @@ PT_TO_EN = {
     "Pincel %1": "Brush %1",
     "Nenhum preset ainda. Salve o pincel atual para vê-lo aqui.": "No preset yet. Save the current brush to see it here.",
     "máscara": "mask",
+    # C7 (2026-10-19): grupo Referência na lista de Partes
+    "Referência": "Reference",
+    "Apagar referência": "Delete reference",
     # C8 (2026-10-19): modos das operações com vários elementos
     "Modo da operação": "Operation mode",
     # Importação de modelos (2026-10-19): menu Arquivo e diálogo de arquivos

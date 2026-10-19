@@ -63,6 +63,10 @@
 #include <QSplitter>
 #include <QStandardPaths>
 
+// Carrega uma imagem de referência num slot (mesma porta do painel de Referências).
+extern "C" bool petunia_qt_reference_load(const char *, const char *, uint32_t, uint32_t,
+                                          const uint8_t *, size_t);
+
 // Exportada pelo QtGui (é o que o QTest usa para disparar QShortcut).
 Q_GUI_EXPORT bool qt_sendShortcutOverrideEvent(QObject *o, ulong timestamp, int k, Qt::KeyboardModifiers mods,
                                                 const QString &text, bool autorep, ushort count);
@@ -1107,6 +1111,24 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
     h.add("shell:regions-exist", window.appBar() && window.toolRail() && window.viewportHeader() &&
                                      window.structure() && window.properties() && window.drawer() &&
                                      window.statusRegion() && window.hud() && window.contextActions());
+
+    // C7: o grupo "Referência" é sempre o primeiro da lista de Partes.
+    {
+        const uint8_t pixels[] = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255};
+        const bool loaded =
+            petunia_qt_reference_load("front", "harness.png", 2, 2, pixels, sizeof(pixels));
+        settle(4);
+        window.syncNow();
+        settle(2);
+        auto *tree = window.structure()->tree();
+        const auto model = tree->model();
+        const auto first = model->index(0, 0);
+        const QString title = first.data().toString();
+        const bool hasChild = first.isValid() && model->hasChildren(first);
+        h.add("parts:reference-group-is-first",
+              loaded && first.isValid() && title.contains(QStringLiteral("Referência")) && hasChild,
+              QStringLiteral("linha0='%1' filhos=%2").arg(title).arg(hasChild));
+    }
 
     // Arquivo > Importar: a importação de modelo precisa estar no menu (a
     // porta que faltava para o usuário alcançar o importador). A busca é pelo
