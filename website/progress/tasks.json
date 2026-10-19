@@ -5313,7 +5313,7 @@
       "description": "Seletor de cor único com paletas, cursor do brush 3D/2D, quadro de prévia de ferramentas e registro de propriedades animáveis.",
       "document": "09-ui/shell-v2-roadmap.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-18",
+      "updated": "2026-10-19",
       "baseline": "ADR-C16; começa depois da Onda A.",
       "checkpoints": [
         {
@@ -5342,6 +5342,26 @@
           "evidence": null
         },
         {
+          "title": "B6 Eixos sem atravessar objetos (Y oculto por padrão) e grade configurável com botão na vista.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B7 Trava de valores por canal, com cadeado dentro do campo.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B8 Linguagem visual: guia de estilo aprovado e passada de polimento.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B9 Menus em torta (primitivas, vista, domínio de seleção) com teclado e lista.",
+          "completed": false,
+          "evidence": null
+        },
+        {
           "title": "Executar e registrar os gates aplicáveis.",
           "completed": false,
           "evidence": null
@@ -5360,7 +5380,7 @@
       "description": "Camadas com efeitos e máscaras, Projeção única, gradiente, grafo DAG, timeline com aba de Curvas e galeria de assets.",
       "document": "09-ui/shell-v2-roadmap.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-18",
+      "updated": "2026-10-19",
       "baseline": "ADR-C16; começa depois da Onda B.",
       "checkpoints": [
         {
@@ -5395,6 +5415,11 @@
         },
         {
           "title": "C7 Grupo especial Referência no painel de Partes.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C8 Modos das operações com vários elementos (região, individuais, normais) no HUD.",
           "completed": false,
           "evidence": null
         },

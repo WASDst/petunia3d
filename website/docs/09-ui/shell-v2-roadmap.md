@@ -45,6 +45,10 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | B3  | Quadro de prévia de ferramentas na viewport (extrude, inset, bevel, knife) com HUD numérico  | [ ] TODO |
 | B4  | Registro de propriedades animáveis (tipo, faixa, unidade)                                    | [ ] TODO |
 | B5  | Todo diálogo/modal movível e redimensionável (Preferências, Referências, primitivas, cor), com posição e tamanho lembrados | [ ] TODO |
+| B6  | Overlays da vista: eixo Y oculto por padrão e eixos sem atravessar objetos (teste de profundidade, esmaecidos); grade com extensão e tamanho do ladrilho configuráveis e botão de ligar/desligar no cabeçalho da vista | [ ] TODO |
+| B7  | Travar valores: cadeado pequeno dentro do próprio campo, à direita; trava por canal (posição/rotação/escala × X/Y/Z) respeitada por gizmo, modal e teclado | [ ] TODO |
+| B8  | Linguagem visual da viewport e da GUI: estudo de referência, guia de estilo e passada de polimento (ícones, espaçamento, feedback de seleção/hover/ferramenta, gizmos, overlays, tipografia) | [ ] TODO |
+| B9  | Menus em torta (pie): Shift+A primitivas, vista da câmera, domínio de seleção (objeto/vértice/aresta/face), com teclado e alternativa em lista | [ ] TODO |
 
 ## Onda C — grandes
 
@@ -57,6 +61,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | C5  | Animate: bones/rigs/templates como módulo; timeline estilo motion design; **aba de Curvas**; morph targets | [ ] TODO |
 | C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [ ] TODO |
 | C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [ ] TODO |
+| C8  | Modos das operações com vários elementos selecionados: extrudar a região (manifold), faces individuais, ao longo das normais; idem para inset/bevel, escolhidos no HUD da ferramenta | [ ] TODO |
 
 ## Gap
 
@@ -64,6 +69,14 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 - O menu de botão direito só tem "Origem para o cursor"; o pivô é calculado na projeção, sem deslocamento próprio persistido.
 - O seletor de cor é um diálogo pequeno com confirmação; a opacidade do brush é repetida no painel de Paint.
 - A timeline não tem registro de propriedades nem editor de curvas.
+
+## Notas de design — pedidos de 2026-10-19
+
+- **B6 eixos e grade.** O estado já tem `GridSettings` (tamanho, subdivisões, opacidade) e `show_grid`: falta expor na interface (Preferências e um botão no cabeçalho da vista). O eixo Y vertical atravessando o objeto é ruído visual: oculto por padrão, X/Z no chão, e todos os eixos com teste de profundidade (não aparecem por dentro dos objetos), cada um ligável nos overlays.
+- **B7 trava de valores.** Referência de ergonomia: o cadeado por canal ao lado de cada campo de transformação (Blender). A trava é dado do objeto (por canal), não da interface: gizmo, modal, campos e scripts precisam respeitá-la, com o motivo exibido quando recusam.
+- **B8 linguagem visual.** Antes de polir peça por peça, um guia de estilo com referências e capturas (antes/depois), aprovado com o usuário; depois a passada no shell inteiro. É alicerce: a Onda C cria muita interface e deve nascer no estilo novo.
+- **B9 menus em torta.** O shell antigo tinha um `PetuniaPieMenu` (removido na U19); o novo é um componente do shell v2: abre no ponteiro, escolhe por direção ou número, Esc cancela, navegável por teclado e com nomes acessíveis, respeitando movimento reduzido; cada torta tem a mesma lista também em menu comum.
+- **C8 modos de operação.** O núcleo já tem `ModalKind::ExtrudeIndividual`; faltam o modo "ao longo das normais", o mesmo leque para inset e bevel, e a escolha visível no HUD da ferramenta (não escondida em atalho).
 
 ## Design — aba de Curvas da timeline
 
@@ -85,7 +98,7 @@ Onda A, executada em 2026-10-18 no fim da implementação (árvore de trabalho s
 | `shell_v2` (harness): 231 verificações, 42 novas desta onda e do conserto do gizmo            | 0 reprovadas; binário rodado 5 vezes seguidas sem falha           | pass    |
 | `xtask docs-generate --check`                                                                 | sem drift                                                         | pass    |
 | `verify-progress.cjs` e `progress.test.cjs`                                                   | 135 processos consistentes; 6/6                                   | pass    |
-| Janela real com GPU (menus de Pivô/Cursor, canvas de nós, UV, árvore de Partes)               | não executado                                                     | not run |
+| Janela real com GPU (menus de Pivô/Cursor, canvas de nós, UV, árvore de Partes)               | conferido pelo usuário no app (Linux), 2026-10-19: "tudo funcionou" | pass    |
 | Windows, leitor de tela, alto contraste, escalas 150%/200%                                    | não executado                                                     | not run |
 
 Segunda leva (A9–A15), 2026-10-19: Rust 92 binários, 1602 testes, 0 falhas, GL sem SKIPPED; clippy `-D warnings` limpo; Qt offscreen 49 testes, 0 falhas; `shell_v2` com 258 verificações, 0 reprovadas, em 5 execuções seguidas; `docs-generate --check` sem drift. Defeitos reais achados pelos testes no caminho: o Ctrl+G de Partes deixava o grupo antigo vazio (agora removido) e, no canvas de nós, o filtro de teclas do shell mandava Ctrl+G para "agrupar objetos" (agora o canvas declara a tecla como sua).
