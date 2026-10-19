@@ -5320,7 +5320,7 @@
       "id": "U32",
       "phase": "slint-gl",
       "title": "Shell v2 — Onda B (alicerces)",
-      "description": "Seletor de cor único com paletas, cursor do brush 3D/2D, quadro de prévia de ferramentas e registro de propriedades animáveis.",
+      "description": "Seletor de cor único com paletas, cursor do brush 3D/2D, quadro de prévia de ferramentas e registro de propriedades animáveis. Pedidos de 2026-10-19: seleção fiel ao que se vê (B10) e gizmo do Selecionar configurável (B11).",
       "document": "09-ui/shell-v2-roadmap.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-19",
@@ -5375,6 +5375,21 @@
           "title": "Executar e registrar os gates aplicáveis.",
           "completed": true,
           "evidence": "shell-v2-roadmap-b-2026-10-19"
+        },
+        {
+          "title": "B10 Seleção de componentes fiel ao que se vê (oclusão no Sólido; através no Raio-X/Wireframe), política explícita e controle no cabeçalho, com teste de regressão.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B11 Gizmo do Selecionar configurável nas Preferências (mover, escalar e/ou rotacionar).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates de B10/B11.",
+          "completed": false,
+          "evidence": null
         }
       ],
       "documents": [
