@@ -26,6 +26,8 @@ PetuniaVector3Field::PetuniaVector3Field(QWidget *parent)
         connect(m_fields[i], &PetuniaNumberField::commitRequested, this, [this, i](const QString &, double val, const QString &text) {
             emit commitRequested(i, val, text);
         });
+        connect(m_fields[i], &PetuniaNumberField::lockToggled, this,
+                [this, i](const QString &, bool locked) { emit lockToggled(i, locked); });
         connect(m_fields[i], &PetuniaNumberField::editCanceled, this, [this, i]() {
             emit editCanceled(i);
         });
@@ -158,4 +160,20 @@ void PetuniaVector3Field::updateLayoutDirection(int width) {
         m_layout->activate();
         updateGeometry();
     }
+}
+
+void PetuniaVector3Field::setLockable(bool lockable) {
+    for (auto *field : m_fields)
+        if (field)
+            field->setLockable(lockable);
+}
+
+void PetuniaVector3Field::setLocked(int axis, bool locked) {
+    if (auto *f = field(axis))
+        f->setLocked(locked);
+}
+
+bool PetuniaVector3Field::isLocked(int axis) const {
+    auto *f = field(axis);
+    return f && f->isLocked();
 }

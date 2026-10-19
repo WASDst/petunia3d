@@ -63,6 +63,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -123,6 +124,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |

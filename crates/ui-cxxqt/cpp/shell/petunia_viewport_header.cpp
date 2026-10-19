@@ -3,6 +3,12 @@
 #include "../petunia_theme.h"
 #include "petunia_i18n.h"
 #include "petunia_segmented.h"
+#include "../petunia_number_field.h"
+
+#include <QCheckBox>
+#include <QFormLayout>
+#include <QJsonArray>
+#include <QWidgetAction>
 
 #include <QActionGroup>
 #include <QFrame>
@@ -73,6 +79,13 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     m_display = makeMenuButton(QStringLiteral("shading_solid"), tr("Modo de exibição"));
     m_overlays = makeMenuButton(QStringLiteral("overlays"), tr("Overlays da vista"));
     m_camera = makeMenuButton(QStringLiteral("camera"), tr("Câmera e navegação"));
+    m_grid = makeToggle(QStringLiteral("grid_overlay"), tr("Grade da vista"));
+    m_grid->setPopupMode(QToolButton::MenuButtonPopup);
+    m_grid->setToolTip(tr("Grade: clique liga/desliga; a seta abre tamanho, ladrilho e eixos"));
+    connect(m_grid, &QToolButton::clicked, this, [this] {
+        if (!m_syncing)
+            m_controller->request(QStringLiteral("toggle_grid"));
+    });
     m_split = makeToggle(QStringLiteral("split_view"), tr("Dividir a vista 3D"));
     connect(m_split, &QToolButton::clicked, this, [this] {
         if (!m_syncing)
@@ -80,12 +93,14 @@ PetuniaViewportHeader::PetuniaViewportHeader(PetuniaShellController *controller,
     });
     m_layout->addWidget(m_display);
     m_layout->addWidget(m_overlays);
+    m_layout->addWidget(m_grid);
     m_layout->addWidget(m_camera);
     m_layout->addWidget(m_split);
 
     buildDisplayMenu();
     buildOverlaysMenu();
     buildCameraMenu();
+    buildGridMenu();
     connect(&PetuniaTheme::instance(), &PetuniaTheme::changed, this, &PetuniaViewportHeader::applyMetrics);
     applyMetrics();
 }
@@ -163,6 +178,80 @@ void PetuniaViewportHeader::buildOverlaysMenu() {
     m_overlays->setMenu(menu);
 }
 
+void PetuniaViewportHeader::buildGridMenu() {
+    auto *menu = new QMenu(m_grid);
+    m_gridOptions = new QWidget(menu);
+    m_gridOptions->setObjectName(QStringLiteral("viewport-grid-options"));
+    m_gridOptions->setAccessibleName(tr("Opções da grade"));
+    const auto &theme = PetuniaTheme::instance();
+    auto *form = new QFormLayout(m_gridOptions);
+    form->setContentsMargins(theme.space(3), theme.space(2), theme.space(3), theme.space(2));
+    auto field = [&](const QString &id, const QString &label, double lo, double hi, double step, const QString &suffix) {
+        auto *f = new PetuniaNumberField(m_gridOptions);
+        f->setPropertyId(id);
+        f->setRange(lo, hi);
+        f->setSingleStep(step);
+        f->setSuffix(suffix);
+        f->setAccessibleName(label);
+        f->setMinimumWidth(theme.scaled(110));
+        connect(f, &PetuniaNumberField::commitRequested, this, [this](const QString &, double) { commitGrid(); });
+        form->addRow(label, f);
+        return f;
+    };
+    m_gridSize = field(QStringLiteral("grid_size"), tr("Extensão (metade)"), 1, 1000, 1, QStringLiteral(" m"));
+    m_gridSpacing = field(QStringLiteral("grid_spacing"), tr("Lado do ladrilho"), 0.01, 100, 0.1, QStringLiteral(" m"));
+    m_gridOpacity = field(QStringLiteral("grid_opacity"), tr("Opacidade"), 5, 100, 5, QStringLiteral(" %"));
+    auto *axes = new QWidget(m_gridOptions);
+    auto *row = new QHBoxLayout(axes);
+    row->setContentsMargins(0, 0, 0, 0);
+    const char *names[] = {"X", "Y", "Z"};
+    for (int i = 0; i < 3; ++i) {
+        auto *check = new QCheckBox(QLatin1String(names[i]), axes);
+        check->setObjectName(QStringLiteral("grid-axis-%1").arg(QString::fromLatin1(names[i]).toLower()));
+        check->setAccessibleName(tr("Mostrar o eixo %1").arg(QLatin1String(names[i])));
+        connect(check, &QCheckBox::toggled, this, [this, i](bool) {
+            if (!m_syncing)
+                m_controller->request(QStringLiteral("toggle_world_axis"), {{"axis", i}});
+        });
+        row->addWidget(check);
+        m_gridAxes[i] = check;
+    }
+    row->addStretch(1);
+    form->addRow(tr("Eixos"), axes);
+    auto *action = new QWidgetAction(menu);
+    action->setDefaultWidget(m_gridOptions);
+    menu->addAction(action);
+    // Preferência persistida: grava ao fechar o menu, não a cada tecla.
+    connect(menu, &QMenu::aboutToHide, this, [this] { m_controller->request(QStringLiteral("preferences_save")); });
+    m_grid->setMenu(menu);
+}
+
+void PetuniaViewportHeader::commitGrid() {
+    if (m_syncing)
+        return;
+    m_controller->request(QStringLiteral("set_viewport_grid"), {{"size", m_gridSize->value()},
+                                                                {"spacing", m_gridSpacing->value()},
+                                                                {"opacity", m_gridOpacity->value() / 100.0}});
+}
+
+void PetuniaViewportHeader::syncGrid(const QJsonObject &grid) {
+    if (grid.isEmpty())
+        return;
+    const QSignalBlocker block(m_grid);
+    m_grid->setChecked(grid["visible"].toBool(true));
+    if (!m_gridSize->hasFocus())
+        m_gridSize->setValue(grid["size"].toDouble(20));
+    if (!m_gridSpacing->hasFocus())
+        m_gridSpacing->setValue(grid["spacing"].toDouble(1));
+    if (!m_gridOpacity->hasFocus())
+        m_gridOpacity->setValue(grid["opacity"].toDouble(0.5) * 100.0);
+    const auto axes = grid["axes"].toArray();
+    for (int i = 0; i < 3; ++i) {
+        const QSignalBlocker blockAxis(m_gridAxes[i]);
+        m_gridAxes[i]->setChecked(axes.at(i).toBool(i != 1));
+    }
+}
+
 void PetuniaViewportHeader::buildCameraMenu() {
     auto *menu = new QMenu(m_camera);
     struct View { const char *label; const char *command; const char *keymap; };
@@ -200,7 +289,7 @@ void PetuniaViewportHeader::applyMetrics() {
     m_layout->setSpacing(theme.space(1));
     const int height = theme.compactControlHeight();
     const QSize icon(theme.iconPx(), theme.iconPx());
-    for (auto *button : {m_snap, m_proportional, m_display, m_overlays, m_camera, m_split}) {
+    for (auto *button : {m_snap, m_proportional, m_display, m_overlays, m_grid, m_camera, m_split}) {
         button->setIconSize(icon);
         button->setMinimumHeight(height);
         button->setMinimumWidth(height);
@@ -302,6 +391,7 @@ void PetuniaViewportHeader::sync(const QJsonObject &state) {
             action->setText(text);
     }
     m_overlays->setVisible(true);
+    syncGrid(state["viewport_grid"].toObject());
     m_split->setVisible(modeling || uv || paint);
     m_surfaceMode->setVisible(uv || paint);
     m_syncing = false;

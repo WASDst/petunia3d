@@ -30,6 +30,9 @@ class PetuniaViewportHeader : public QWidget {
     PetuniaSegmented *surfaceMode() const { return m_surfaceMode; }
     void setSurfaceMode(const QString &mode);
     bool compact() const { return m_compact; }
+    /// Botão da grade: clique liga/desliga; a seta abre tamanho, ladrilho, opacidade e eixos (B6).
+    QToolButton *gridButton() const { return m_grid; }
+    QWidget *gridOptions() const { return m_gridOptions; }
 
   protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -40,6 +43,9 @@ class PetuniaViewportHeader : public QWidget {
     void buildDisplayMenu();
     void buildOverlaysMenu();
     void buildCameraMenu();
+    void buildGridMenu();
+    void syncGrid(const QJsonObject &grid);
+    void commitGrid();
     void applyMetrics();
     void applyCompact(bool compact);
     QString shortcutText(const QString &action) const;
@@ -55,6 +61,12 @@ class PetuniaViewportHeader : public QWidget {
     QToolButton *m_overlays{nullptr};
     QToolButton *m_camera{nullptr};
     QToolButton *m_split{nullptr};
+    QToolButton *m_grid{nullptr};
+    QWidget *m_gridOptions{nullptr};
+    class PetuniaNumberField *m_gridSize{nullptr};
+    class PetuniaNumberField *m_gridSpacing{nullptr};
+    class PetuniaNumberField *m_gridOpacity{nullptr};
+    class QCheckBox *m_gridAxes[3]{};
     QWidget *m_domainSeparator{nullptr};
     QHash<QString, QAction *> m_shadingActions;
     QHash<QString, QAction *> m_overlayActions;

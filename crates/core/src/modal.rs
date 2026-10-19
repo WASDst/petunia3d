@@ -1772,8 +1772,16 @@ impl CommandContext<'_> {
                 {
                     return Err(ModalError::InvalidInput);
                 }
+                // Canais travados (B7) voltam ao valor de antes do gesto.
+                let (transform, euler) =
+                    source
+                        .transform_locks
+                        .constrain(&source.transform, source.rotation, transform);
                 changed |= transform != source.transform;
-                next.set_object_transform(transform);
+                match euler {
+                    Some(euler) => next.set_object_transform_with_euler(transform, euler),
+                    None => next.set_object_transform(transform),
+                }
             }
             updates.push(next);
         }

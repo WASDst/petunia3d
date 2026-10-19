@@ -71,6 +71,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -116,6 +117,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -131,7 +133,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (94 atalhos)
+### Perfil: `3ds-max` (96 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -174,6 +176,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>E</kbd> |
@@ -218,6 +221,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -230,7 +234,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender` (93 atalhos)
+### Perfil: `blender` (95 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -271,6 +275,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
 | `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -316,6 +321,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -328,7 +334,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender-notebook` (94 atalhos)
+### Perfil: `blender-notebook` (96 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -370,6 +376,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
 | `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -415,6 +422,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -427,7 +435,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `cinema-4d` (95 atalhos)
+### Perfil: `cinema-4d` (97 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -470,6 +478,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -515,6 +524,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -527,7 +537,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `maya` (94 atalhos)
+### Perfil: `maya` (96 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -570,6 +580,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>E</kbd> |
@@ -614,6 +625,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -626,7 +638,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-notebook` (94 atalhos)
+### Perfil: `petunia-notebook` (96 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -668,6 +680,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
 | `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -713,6 +726,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
@@ -725,7 +739,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-simple` (94 atalhos)
+### Perfil: `petunia-simple` (96 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -767,6 +781,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -812,6 +827,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |

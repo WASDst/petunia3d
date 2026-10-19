@@ -32,6 +32,7 @@ pub mod split_view;
 pub mod theme;
 pub mod thumbnail;
 pub mod tool_catalog;
+pub mod tool_preview;
 pub mod tr;
 pub mod view_layout;
 pub use host::DesktopHost;
@@ -128,6 +129,11 @@ pub struct ViewportRenderState {
     pub selection_thickness: f32,
     /// Overlays: grade e wireframe opcional sobre as faces.
     pub show_grid: bool,
+    /// Eixos do mundo: liga/desliga geral e cada um (X, Y, Z) — B6.
+    pub show_axes: bool,
+    pub axes_visible: [bool; 3],
+    /// Extensão, ladrilho e opacidade da grade (preferência).
+    pub grid: petunia_render::frame::RenderGrid,
     /// Componente sob o cursor (preselection).
     pub hover: petunia_core::HoverTarget,
     /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
@@ -157,6 +163,15 @@ impl Default for ViewportRenderState {
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
             show_grid: true,
+            show_axes: true,
+            axes_visible: [true, false, true],
+            grid: petunia_render::frame::RenderGrid {
+                size: 20.0,
+                spacing: 1.0,
+                opacity: 0.5,
+                show_isometric_guide: false,
+                isometric_angle_deg: 30.0,
+            },
             hover: petunia_core::HoverTarget::None,
             studio_light_follows_camera: true,
             matcap: false,

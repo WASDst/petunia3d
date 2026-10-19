@@ -1,4 +1,7 @@
 #include "petunia_tool_rail.h"
+#include <algorithm>
+#include <QPainter>
+#include "../petunia_color_picker.h"
 #include "../petunia_icons.h"
 #include "../petunia_theme.h"
 #include "petunia_i18n.h"
@@ -30,6 +33,14 @@ PetuniaToolRail::PetuniaToolRail(PetuniaShellController *controller, QWidget *pa
     m_layout = new QVBoxLayout(m_column);
     m_scroll->setWidget(m_column);
     root->addWidget(m_scroll, 1);
+
+    m_color = new QToolButton(this);
+    m_color->setProperty("role", QStringLiteral("rail"));
+    m_color->setToolTip(tr("Cor do pincel — clique para escolher"));
+    m_color->setAccessibleName(tr("Cor do pincel"));
+    m_color->setVisible(false);
+    connect(m_color, &QToolButton::clicked, this, [this] { openColor(); });
+    root->addWidget(m_color);
 
     m_expand = new QToolButton(this);
     m_expand->setProperty("role", QStringLiteral("rail"));
@@ -188,7 +199,48 @@ void PetuniaToolRail::refreshStates(const QJsonObject &state) {
     applyRoving();
 }
 
+void PetuniaToolRail::applyBrushColor(const QColor &color) {
+    m_controller->request(QStringLiteral("paint_color"), {{"r", color.redF()}, {"g", color.greenF()}, {"b", color.blueF()}});
+    m_controller->request(QStringLiteral("brush_opacity"), {{"value", color.alphaF()}});
+}
+
+void PetuniaToolRail::openColor() {
+    const QColor before = m_brushColor;
+    PetuniaColorPickerPopover picker(this);
+    picker.setTitle(tr("Cor do pincel"));
+    picker.setColor(before);
+    connect(&picker, &PetuniaColorPickerPopover::colorChanged, this, [this](const QColor &c) { applyBrushColor(c); });
+    if (picker.exec() != QDialog::Accepted)
+        applyBrushColor(before); // Cancelar devolve a cor que estava
+}
+
 void PetuniaToolRail::sync(const QJsonObject &state) {
+    // Indicador da cor do pincel: só no PAINT (onde o pincel existe).
+    const bool paint = state["workspace"].toString().compare(QLatin1String("Paint"), Qt::CaseInsensitive) == 0;
+    m_color->setVisible(paint);
+    if (paint) {
+        const auto rgb = state["paint_color"].toArray();
+        if (rgb.size() >= 3) {
+            const QColor color = QColor::fromRgbF(float(rgb[0].toDouble()), float(rgb[1].toDouble()), float(rgb[2].toDouble()),
+                                                  float(std::clamp(state["brush_opacity"].toDouble(1.0), 0.0, 1.0)));
+            if (color != m_brushColor || m_color->icon().isNull()) {
+                m_brushColor = color;
+                const auto &theme = PetuniaTheme::instance();
+                const int side = theme.iconPx() + theme.scaled(4);
+                QPixmap swatch(side, side);
+                swatch.fill(Qt::transparent);
+                QPainter painter(&swatch);
+                painter.setRenderHint(QPainter::Antialiasing);
+                painter.setPen(QPen(theme.borderStrong(), 1));
+                painter.setBrush(QColor(color.red(), color.green(), color.blue()));
+                painter.drawRoundedRect(QRectF(0.5, 0.5, side - 1, side - 1), 3, 3);
+                painter.end();
+                m_color->setIcon(QIcon(swatch));
+                m_color->setIconSize(QSize(side, side));
+                m_color->setAccessibleDescription(color.name().toUpper());
+            }
+        }
+    }
     const auto catalog = state["tool_catalog"].toArray();
     QString signature;
     for (const auto &value : catalog)

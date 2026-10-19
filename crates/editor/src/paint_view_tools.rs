@@ -3,7 +3,7 @@
 
 use petunia_core::{SelectionDomain, Workspace};
 
-use crate::projection::{pick_face_hit, project_world_point};
+use crate::projection::{active_world_matrix, pick_face_hit, project_world_point};
 use crate::{PetuniaViewport, SlintUiBridge};
 
 /// Abaixo deste lado (fração da textura), a caixa é um clique.
@@ -23,7 +23,124 @@ fn in_triangle(p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> bool {
     !(negative && positive)
 }
 
+/// Pesos baricêntricos de `p` no triângulo `abc` (2D). `None` se degenerado.
+fn barycentric_2d(p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> Option<[f32; 3]> {
+    let denom = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+    if !denom.is_finite() || denom.abs() < 1.0e-12 {
+        return None;
+    }
+    let w0 = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / denom;
+    let w1 = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / denom;
+    Some([w0, w1, 1.0 - w0 - w1])
+}
+
+/// Pesos baricêntricos de `p` (sobre o plano) no triângulo `abc` (3D).
+fn barycentric_3d(p: glam::Vec3, a: glam::Vec3, b: glam::Vec3, c: glam::Vec3) -> Option<[f32; 3]> {
+    let (v0, v1, v2) = (b - a, c - a, p - a);
+    let (d00, d01, d11) = (v0.dot(v0), v0.dot(v1), v1.dot(v1));
+    let (d20, d21) = (v2.dot(v0), v2.dot(v1));
+    let denom = d00 * d11 - d01 * d01;
+    if !denom.is_finite() || denom.abs() < 1.0e-12 {
+        return None;
+    }
+    let w1 = (d11 * d20 - d01 * d21) / denom;
+    let w2 = (d00 * d21 - d01 * d20) / denom;
+    Some([1.0 - w1 - w2, w1, w2])
+}
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
+    /// Ponto da textura (fração, y para baixo, como o canvas 2D) sob `(x, y)` px
+    /// da viewport na PAINT — o cursor do pincel espelhado no 2D (ADR-C16, B2).
+    pub fn brush_texture_point_at(&self, x: f32, y: f32) -> Option<[f32; 2]> {
+        if self.state.workspace != Workspace::Paint {
+            return None;
+        }
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 || !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let camera = &self.state.session.camera;
+        let (origin, direction) = camera.ray(x / width * 2.0 - 1.0, 1.0 - y / height * 2.0);
+        let (face_index, hit) = pick_face_hit(&self.state, origin, direction)?;
+        let world = active_world_matrix(&self.state);
+        if !world.determinant().is_finite() || world.determinant().abs() < 1.0e-12 {
+            return None;
+        }
+        let local = world.inverse().transform_point3(hit);
+        let mesh = self.state.project.active_mesh()?;
+        let face = mesh.faces.get(face_index)?;
+        let position = |corner: usize| {
+            face.verts
+                .get(corner)
+                .and_then(|&vertex| mesh.verts.get(vertex as usize))
+                .map(|vertex| vertex.vec())
+        };
+        for [a, b, c] in mesh.face_triangle_corners(face_index) {
+            let (Some(pa), Some(pb), Some(pc)) = (position(a), position(b), position(c)) else {
+                continue;
+            };
+            let (Some(ua), Some(ub), Some(uc)) = (face.uv.get(a), face.uv.get(b), face.uv.get(c))
+            else {
+                continue;
+            };
+            let Some(w) = barycentric_3d(local, pa, pb, pc) else {
+                continue;
+            };
+            if w.iter().any(|weight| *weight < -1.0e-3) {
+                continue;
+            }
+            let u = ua[0] * w[0] + ub[0] * w[1] + uc[0] * w[2];
+            let v = ua[1] * w[0] + ub[1] * w[1] + uc[1] * w[2];
+            if u.is_finite() && v.is_finite() {
+                return Some([u, 1.0 - v]);
+            }
+        }
+        None
+    }
+
+    /// Posição (px da viewport) do ponto da superfície com a fração de textura
+    /// `(tx, ty)` — o cursor do canvas 2D espelhado na vista 3D (B2). `None` fora
+    /// de qualquer ilha UV ou atrás da câmera.
+    pub fn texture_point_to_viewport(&self, tx: f32, ty: f32) -> Option<[f32; 2]> {
+        if self.state.workspace != Workspace::Paint || !tx.is_finite() || !ty.is_finite() {
+            return None;
+        }
+        let mesh = self.state.project.active_mesh()?;
+        let point = [tx, 1.0 - ty];
+        let world = active_world_matrix(&self.state);
+        for (face_index, face) in mesh.faces.iter().enumerate() {
+            for [a, b, c] in mesh.face_triangle_corners(face_index) {
+                let (Some(&ua), Some(&ub), Some(&uc)) =
+                    (face.uv.get(a), face.uv.get(b), face.uv.get(c))
+                else {
+                    continue;
+                };
+                if !in_triangle(point, ua, ub, uc) {
+                    continue;
+                }
+                let Some(w) = barycentric_2d(point, ua, ub, uc) else {
+                    continue;
+                };
+                let corner = |corner: usize| {
+                    face.verts
+                        .get(corner)
+                        .and_then(|&vertex| mesh.verts.get(vertex as usize))
+                        .map(|vertex| vertex.vec())
+                };
+                let (Some(pa), Some(pb), Some(pc)) = (corner(a), corner(b), corner(c)) else {
+                    continue;
+                };
+                let local = pa * w[0] + pb * w[1] + pc * w[2];
+                return project_world_point(
+                    &self.state.session.camera,
+                    self.viewport_size,
+                    world.transform_point3(local),
+                );
+            }
+        }
+        None
+    }
+
     /// Seleção de faces no canvas 2D com a ferramenta Select. `(x0, y0)` e
     /// `(x1, y1)` são frações da textura (origem no canto superior esquerdo).
     /// Um clique escolhe a face sob o ponto (Alt: a ilha UV inteira; Shift
@@ -185,8 +302,68 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 }
 
 #[cfg(test)]
+mod mirror_tests {
+    use crate::{PlaceholderViewport, SlintUiBridge, UiIntent};
+    use petunia_core::{AppState, Workspace};
+
+    fn paint_bridge() -> SlintUiBridge<PlaceholderViewport> {
+        let mut b = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+        b.resize_viewport(800, 600);
+        b.apply(UiIntent::SetWorkspace(Workspace::Paint));
+        b
+    }
+
+    /// B2: o cursor no centro da vista cai no cubo; o ponto da textura volta ao
+    /// mesmo pixel da vista (ida e volta 3D → UV → 3D).
+    #[test]
+    fn brush_cursor_round_trips_between_view_and_texture() {
+        let b = paint_bridge();
+        let diag = format!(
+            "workspace={:?} size={:?} active={:?}",
+            b.state.workspace,
+            b.viewport_size,
+            b.state.project.active().map(|a| a.name.clone())
+        );
+        let texture = b
+            .brush_texture_point_at(400.0, 300.0)
+            .unwrap_or_else(|| panic!("sem ponto da textura no centro: {diag}"));
+        assert!(
+            texture.iter().all(|v| (0.0..=1.0).contains(v)),
+            "{texture:?}"
+        );
+        let view = b
+            .texture_point_to_viewport(texture[0], texture[1])
+            .expect("ponto da textura volta à vista");
+        assert!(
+            (view[0] - 400.0).hypot(view[1] - 300.0) < 2.0,
+            "ida e volta: {view:?}"
+        );
+        assert!(b.brush_texture_point_at(f32::NAN, 1.0).is_none());
+        assert!(
+            b.texture_point_to_viewport(7.0, 7.0).is_none(),
+            "fora de toda ilha UV"
+        );
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use super::in_triangle;
+    use super::{barycentric_2d, barycentric_3d, in_triangle};
+
+    #[test]
+    fn barycentric_weights_round_trip_and_reject_degenerate_triangles() {
+        let w =
+            barycentric_2d([0.25, 0.25], [0.0, 0.0], [1.0, 0.0], [0.0, 1.0]).expect("triângulo");
+        assert!(
+            (w[0] - 0.5).abs() < 1e-5 && (w[1] - 0.25).abs() < 1e-5 && (w[2] - 0.25).abs() < 1e-5
+        );
+        assert!(barycentric_2d([0.0, 0.0], [0.0, 0.0], [1.0, 1.0], [2.0, 2.0]).is_none());
+        let p = glam::Vec3::new(0.25, 0.25, 0.0);
+        let w =
+            barycentric_3d(p, glam::Vec3::ZERO, glam::Vec3::X, glam::Vec3::Y).expect("triângulo");
+        assert!((w[0] - 0.5).abs() < 1e-5, "{w:?}");
+        assert!(barycentric_3d(p, glam::Vec3::ZERO, glam::Vec3::X, glam::Vec3::X * 2.0).is_none());
+    }
 
     #[test]
     fn point_in_triangle_includes_edges_and_rejects_outside() {

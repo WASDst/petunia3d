@@ -61,6 +61,7 @@ class PetuniaEditorCanvas : public QWidget {
     bool reloadCanvasImage();
     /// Anel do pincel sobre o canvas, com o mesmo diâmetro do carimbo.
     void drawPaintCursor(QPainter &) const;
+    void drawPaintGhost(QPainter &) const;
     bool isPaintBrushTool() const;
     QString m_mode;
     QJsonObject m_state;

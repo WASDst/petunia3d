@@ -802,6 +802,9 @@ impl Keybinds {
             ("view.camera_persp", "Numpad 0"),
             ("view.camera_opposite", "Numpad 9"),
             ("view.isolate", "Numpad /"),
+            // Menus em torta da vista 3D (ADR-C16, B9). Adicionar usa `model.primitives`.
+            ("view.pie_view", "Alt+V"),
+            ("model.pie_select_domain", "Alt+D"),
             ("window.command_palette", "Ctrl+P"),
             ("window.reference_manager", "Shift+R"),
             ("model.select_vertex", "1"),

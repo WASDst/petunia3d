@@ -31,6 +31,8 @@ pub mod module;
 pub mod object_metadata_commands;
 pub mod op_graph_commands;
 pub mod origin_commands;
+pub mod palette_commands;
+pub mod transform_lock_commands;
 pub use object_metadata_commands::SetAssetSelectionColorCmd;
 pub mod picking;
 pub mod poly_pen;
@@ -205,6 +207,7 @@ pub use shape_builder::{
 pub mod scene_commands;
 pub mod solid_commands;
 pub use measure_commands::{AddMeasurementCmd, ClearMeasurementsCmd, MIN_MEASURE_DISTANCE};
+pub use palette_commands::{PaletteCmd, PaletteOp};
 pub use scene_commands::{
     GroupSelectionCmd, MoveAssetsCmd, RenameGroupCmd, SetGroupColorCmd, UngroupCmd,
 };
@@ -220,6 +223,7 @@ pub use spatial_query::{
     CompanionViewState, GeometryRepresentation, ScaleToDimensionCmd, SpatialFrame,
     SpatialFrameKind, SpatialQueryInspector, SpatialQueryKind, SpatialQueryResult, VolumeFrame,
 };
+pub use transform_lock_commands::SetTransformLockCmd;
 pub mod surface_commands;
 pub use state::{
     ASSET_NAME_MAX_LEN, ActiveTool, ActiveToolSessionKind, AnnotationItem, AnnotationStroke,

@@ -137,6 +137,8 @@ pub struct ViewportRenderSettings {
     pub show_overlays: bool,
     pub show_grid: bool,
     pub show_axes: bool,
+    /// Eixos do mundo visíveis (X, Y, Z); valem só com `show_axes`.
+    pub axes_visible: [bool; 3],
     pub grid: RenderGrid,
     /// Leitura das arestas por modo (DRAW = feições, POLY = topologia).
     pub edge_mode: EdgeMode,
@@ -177,8 +179,9 @@ impl Default for ViewportRenderSettings {
             show_overlays: true,
             show_grid: true,
             show_axes: true,
+            axes_visible: [true, false, true],
             grid: RenderGrid {
-                size: 10.0,
+                size: 20.0,
                 spacing: 1.0,
                 opacity: 0.5,
                 show_isometric_guide: false,

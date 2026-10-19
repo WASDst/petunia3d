@@ -1,4 +1,6 @@
 #include "petunia_workspace_sections.h"
+#include <algorithm>
+#include <cmath>
 
 #include "../petunia_color_picker.h"
 #include "../petunia_icons.h"
@@ -88,20 +90,21 @@ PetuniaPaintTargetForm::PetuniaPaintTargetForm(QWidget *parent) : PetuniaBoundFo
 
 PetuniaBrushForm::PetuniaBrushForm(QWidget *parent) : PetuniaBoundForm(parent) {
     auto *form = workspaceForm(this);
-    m_color = new QPushButton(tr("Cor do pincel…"), this);
+    // Cor do pincel sempre visível (ADR-C16, B1): o painel fica embutido e aplica ao
+    // vivo. O alfa da cor É a opacidade do pincel (a linha "Opacidade" saiu: A8).
+    m_color = new PetuniaColorPanel(this);
     m_color->setAccessibleName(tr("Cor do pincel"));
     form->addRow(m_color);
-    connect(m_color, &QPushButton::clicked, this, [this] {
-        PetuniaColorPickerPopover picker(this);
-        picker.setTitle(tr("Cor do pincel"));
-        picker.setColor(m_color->property("petuniaColor").value<QColor>());
-        if (picker.exec() == QDialog::Accepted) {
-            const auto c = picker.color();
-            send(QStringLiteral("paint_color"), {{"r", c.redF()}, {"g", c.greenF()}, {"b", c.blueF()}});
+    connect(m_color, &PetuniaColorPanel::colorChanged, this, [this](const QColor &c) {
+        if (m_syncingColor)
+            return;
+        send(QStringLiteral("paint_color"), {{"r", c.redF()}, {"g", c.greenF()}, {"b", c.blueF()}});
+        if (std::abs(c.alphaF() - m_lastOpacity) > 1e-4) {
+            m_lastOpacity = c.alphaF();
+            send(QStringLiteral("brush_opacity"), {{"value", c.alphaF()}});
         }
     });
     number(form, tr("Tamanho (px)"), "brush_size", "brush_size", "value", 1, 2048, 1);
-    number(form, tr("Opacidade"), "brush_opacity", "brush_opacity", "value", 0, 1);
     number(form, tr("Dureza"), "brush_hardness", "brush_hardness", "value", 0, 1);
     choice(form, tr("Ponta"), "brush_panel.tip", "set_brush_tip", "tip", {"round", "square", "diamond"},
            {tr("Redonda"), tr("Quadrada"), tr("Losango")});
@@ -144,16 +147,16 @@ void PetuniaBrushForm::afterSync(const QJsonObject &state) {
     const auto rgb = state["paint_color"].toArray();
     if (rgb.size() < 3)
         return;
-    const QColor color = QColor::fromRgbF(float(rgb[0].toDouble()), float(rgb[1].toDouble()), float(rgb[2].toDouble()));
-    if (m_color->property("petuniaColor").value<QColor>() == color)
+    const double opacity = std::clamp(state["brush_opacity"].toDouble(1.0), 0.0, 1.0);
+    const QColor color = QColor::fromRgbF(float(rgb[0].toDouble()), float(rgb[1].toDouble()), float(rgb[2].toDouble()),
+                                          float(opacity));
+    m_lastOpacity = opacity;
+    if (m_color->color() == color)
         return;
-    m_color->setProperty("petuniaColor", color);
-    // Amostra da cor atual ao lado do texto; o nome acessível leva o valor.
-    const int side = PetuniaTheme::instance().scaled(14);
-    QPixmap swatch(side, side);
-    swatch.fill(color);
-    m_color->setIcon(QIcon(swatch));
+    m_syncingColor = true;
+    m_color->setColor(color);
     m_color->setAccessibleDescription(color.name().toUpper());
+    m_syncingColor = false;
 }
 
 // ── PAINT: Camada ativa ─────────────────────────────────────────────────────

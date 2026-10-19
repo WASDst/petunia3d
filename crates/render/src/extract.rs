@@ -72,6 +72,9 @@ fn overlay_key(settings: &ViewportRenderSettings) -> u64 {
     h.mix(u64::from(settings.show_overlays));
     h.mix(u64::from(settings.show_grid));
     h.mix(u64::from(settings.show_axes));
+    for visible in settings.axes_visible {
+        h.mix(u64::from(visible));
+    }
     for value in [
         settings.grid.size,
         settings.grid.spacing,

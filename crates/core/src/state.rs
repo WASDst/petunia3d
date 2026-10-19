@@ -1099,21 +1099,27 @@ impl PivotPoint {
 /// Configurações do Grid 3D e guias axiais/isométricos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GridSettings {
+    /// Meia extensão da grade em metros (a grade cobre `-size..=size`).
     pub size: f32,
-    pub subdivisions: f32,
+    /// Lado de cada ladrilho em metros.
+    pub spacing: f32,
     pub opacity: f32,
     pub show_isometric_guide: bool,
     pub isometric_angle_deg: f32,
+    /// Eixos do mundo visíveis (X, Y, Z). O Y nasce oculto: a linha vertical
+    /// atravessa os objetos e polui a leitura (ADR-C16, B6).
+    pub axes: [bool; 3],
 }
 
 impl Default for GridSettings {
     fn default() -> Self {
         Self {
             size: 20.0,
-            subdivisions: 1.0,
-            opacity: 0.4,
+            spacing: 1.0,
+            opacity: 0.5,
             show_isometric_guide: false,
             isometric_angle_deg: 30.0,
+            axes: [true, false, true],
         }
     }
 }

@@ -35,6 +35,18 @@ class PetuniaOperationHud : public QFrame {
     const QString &focusedOperation() const { return m_graphFocus; }
     PetuniaOperationCard *operationCard() const { return m_graphCard; }
     QPushButton *operationDoneButton() const { return m_graphDone; }
+    /// Posição dentro de `area`: a que a pessoa escolheu arrastando o cartão (B5),
+    /// presa à área, ou o canto superior esquerdo. Duplo clique volta ao canto.
+    QPoint placement(const QSize &area, int margin) const;
+    bool hasCustomPlacement() const { return m_customPos; }
+    void resetPlacement();
+
+  protected:
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
   private:
     class Form;
@@ -64,4 +76,8 @@ class PetuniaOperationHud : public QFrame {
     PetuniaOperationCard *m_graphCard{nullptr};
     QPushButton *m_graphDone{nullptr};
     QString m_primitiveKind;
+    bool m_customPos{false};
+    QPoint m_pos;
+    bool m_dragging{false};
+    QPoint m_dragOffset;
 };

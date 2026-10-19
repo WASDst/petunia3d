@@ -1,5 +1,8 @@
 #include "petunia_shell_window.h"
 
+#include "../petunia_dialog_chrome.h"
+#include "petunia_pie_menu.h"
+
 #include "../petunia_command_palette.h"
 #include "../petunia_editor_panel.h"
 #include "../petunia_gl_widget.h"
@@ -30,6 +33,7 @@
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QComboBox>
+#include <QCursor>
 #include <QDialog>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -591,7 +595,7 @@ void PetuniaShellWindow::repositionOverlays() {
     const int margin = theme.space(3);
     if (m_hud && m_hud->isVisible()) {
         m_hud->adjustSize();
-        m_hud->move(margin, margin);
+        m_hud->move(m_hud->placement(m_viewArea->size(), margin));
         m_hud->raise();
     }
     if (m_context && m_context->isVisible()) {
@@ -740,6 +744,7 @@ void PetuniaShellWindow::openPreferences() {
     auto *close = new QPushButton(tr("Fechar"), &dialog);
     layout->addWidget(close);
     connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+    PetuniaDialogChrome::install(&dialog, QStringLiteral("preferences"));
     petuniaLocalize(&dialog);
     dialog.exec();
     m_controller.request(QStringLiteral("preferences_save"));
@@ -755,6 +760,7 @@ void PetuniaShellWindow::openReferences() {
     auto *panel = new PetuniaEditorPanel(QStringLiteral("REFERENCES"), &dialog);
     panel->setTransport([this](const QString &a, const QJsonObject &args) { return m_controller.request(a, args); });
     layout->addWidget(panel);
+    PetuniaDialogChrome::install(&dialog, QStringLiteral("references"));
     petuniaLocalize(&dialog);
     dialog.exec();
 }
@@ -877,6 +883,85 @@ bool PetuniaShellWindow::handleShortcut(QKeyEvent *key) {
     return false;
 }
 
+bool PetuniaShellWindow::handlePieShortcut(QKeyEvent *key, QWidget *target) {
+    if (!qobject_cast<PetuniaGlWidget *>(target) || key->isAutoRepeat())
+        return false;
+    const auto &state = m_controller.state();
+    const auto map = state["shortcut_map"].toObject();
+    const QKeySequence pressed(key->keyCombination());
+    auto matches = [&](const char *action) {
+        const QString text = map.value(QLatin1String(action)).toString();
+        return !text.isEmpty() && QKeySequence(text, QKeySequence::PortableText) == pressed;
+    };
+    // Com uma operação em curso (G/R/S, primitiva, loop cut) a tecla é da operação.
+    if (state["tool_modal_active"].toBool() || state["primitive_active"].toBool())
+        return false;
+    const bool model = state["workspace"].toString().compare(QLatin1String("Model"), Qt::CaseInsensitive) == 0;
+    QString kind;
+    if (model && matches("model.primitives"))
+        kind = QStringLiteral("add");
+    else if (matches("view.pie_view"))
+        kind = QStringLiteral("view");
+    else if (model && matches("model.pie_select_domain"))
+        kind = QStringLiteral("select");
+    if (kind.isEmpty())
+        return false;
+    openPie(kind, QCursor::pos());
+    return true;
+}
+
+PetuniaPieMenu *PetuniaShellWindow::openPie(const QString &kind, const QPoint &globalPos) {
+    QVector<PetuniaPieItem> items;
+    QString title;
+    auto command = [this](const QString &id) { return [this, id] { m_controller.command(id); }; };
+    if (kind == QLatin1String("add")) {
+        title = tr("Adicionar");
+        struct P { const char *id; const char *label; const char *icon; };
+        const P prims[] = {{"cube", "Cubo", "cube"},         {"sphere", "Esfera", "sphere"},
+                           {"cylinder", "Cilindro", "cylinder"}, {"cone", "Cone", "cone"},
+                           {"torus", "Toro", "torus"},       {"plane", "Plano", "plane"},
+                           {"icosphere", "Icosfera", "icosphere"}, {"capsule", "Cápsula", "capsule"}};
+        for (const auto &prim : prims)
+            items.append({QLatin1String(prim.id), tr(prim.label), QLatin1String(prim.icon),
+                          command(QStringLiteral("model.add_%1").arg(QLatin1String(prim.id)))});
+    } else if (kind == QLatin1String("view")) {
+        title = tr("Vista");
+        struct V { const char *id; const char *label; const char *command; const char *icon; };
+        const V views[] = {{"top", "Topo", "view.top", "view_top"},
+                           {"right", "Direita", "view.right", "view_right"},
+                           {"front", "Frente", "view.front", "view_front"},
+                           {"iso", "Isométrica", "view.isometric_ne", "view_perspective"},
+                           {"bottom", "Base", "view.bottom", "view_bottom"},
+                           {"frame", "Enquadrar seleção", "view.frame_selection", "frame_selection"},
+                           {"back", "Trás", "view.back", "view_back"},
+                           {"left", "Esquerda", "view.left", "view_left"}};
+        for (const auto &view : views)
+            items.append({QLatin1String(view.id), tr(view.label), QLatin1String(view.icon),
+                          command(QLatin1String(view.command))});
+    } else if (kind == QLatin1String("select")) {
+        title = tr("Selecionar");
+        struct D { const char *id; const char *label; const char *icon; };
+        const D domains[] = {{"object", "Objeto", "mode_object"}, {"vertex", "Vértice", "select_vertex"},
+                             {"edge", "Aresta", "select_edge"},   {"face", "Face", "select_face"}};
+        for (const auto &domain : domains) {
+            const QString id = QLatin1String(domain.id);
+            items.append({id, tr(domain.label), QLatin1String(domain.icon),
+                          [this, id] { m_controller.request(QStringLiteral("domain"), {{"id", id}}); }});
+        }
+    } else {
+        return nullptr;
+    }
+    auto *pie = new PetuniaPieMenu(title, this);
+    pie->setItems(items);
+    const QPointer<QWidget> invoker = QApplication::focusWidget();
+    connect(pie, &PetuniaPieMenu::closed, this, [invoker] {
+        if (invoker && invoker->isVisible())
+            invoker->setFocus(Qt::PopupFocusReason);
+    });
+    pie->popup(globalPos);
+    return pie;
+}
+
 bool PetuniaShellWindow::eventFilter(QObject *watched, QEvent *event) {
     if (watched == m_viewArea && event->type() == QEvent::Resize) {
         repositionOverlays();
@@ -934,6 +1019,8 @@ bool PetuniaShellWindow::eventFilter(QObject *watched, QEvent *event) {
     const bool fileChord = key->modifiers() & Qt::ControlModifier;
     if (editable && !fileChord)
         return QMainWindow::eventFilter(watched, event);
+    if (!editable && handlePieShortcut(key, target))
+        return true;
     if (handleShortcut(key))
         return true;
     if (editable)

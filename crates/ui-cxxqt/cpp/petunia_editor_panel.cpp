@@ -1,4 +1,5 @@
 #include "petunia_editor_panel.h"
+#include "petunia_brush_cursor.h"
 #include "petunia_color_picker.h"
 #include "petunia_number_field.h"
 #include "petunia_vector3_field.h"
@@ -556,6 +557,11 @@ PetuniaEditorCanvas::PetuniaEditorCanvas(const QString &mode, QWidget *parent)
                       : mode == "UV"  ? tr("Editor UV")
                                       : tr("Dope Sheet e editor de curvas"));
     if (mode == "PAINT") {
+        // Eco do cursor da vista 3D (B2): repinta quando ele anda lá.
+        connect(&PetuniaBrushMirror::instance(), &PetuniaBrushMirror::changed, this, [this] {
+            if (!underMouse())
+                update();
+        });
         // Wireframe (UVs) sobre a pintura: ligar/desligar sem abrir seção nenhuma.
         m_uvOverlayButton = new QToolButton(this);
         m_uvOverlayButton->setCheckable(true);
@@ -796,6 +802,8 @@ void PetuniaEditorCanvas::paintEvent(QPaintEvent *) {
         (m_mode == "UV" && m_state["uv_show_texture"].toBool());
     if (paintSurface && underMouse() && isPaintBrushTool())
         drawPaintCursor(p);
+    else if (m_mode == "PAINT" && isPaintBrushTool())
+        drawPaintGhost(p);
 }
 bool PetuniaEditorCanvas::isPaintBrushTool() const {
     static const QStringList tools{
@@ -807,52 +815,28 @@ bool PetuniaEditorCanvas::isPaintBrushTool() const {
     return tools.contains(m_state["active_tool"].toString());
 }
 void PetuniaEditorCanvas::drawPaintCursor(QPainter &p) const {
-    // Mesmo diâmetro (px de tela) do carimbo no viewport e no canvas.
-    const double diameter = qMax(2.0, m_state["brush_size"].toDouble(1.0) * 16.0);
-    const double radius = diameter * 0.5;
-    const bool erase =
-        m_state["active_tool"].toString() == QStringLiteral("eraser");
-    const double hardness =
-        qBound(0.0, m_state["brush_hardness"].toDouble(0.0), 1.0);
-    const double strength = qBound(
-        0.0,
-        m_state["brush_opacity"].toDouble(1.0) *
-            m_state["brush_flow"].toDouble(1.0),
-        1.0);
-    QColor tint(181, 140, 255);
-    const auto color = m_state["paint_color"].toArray();
-    if (color.size() >= 3)
-        tint = QColor::fromRgbF(color[0].toDouble(), color[1].toDouble(),
-                                color[2].toDouble());
-    const QColor ring =
-        erase ? QColor(239, 107, 115) : QColor(255, 255, 255, 221);
-    QColor fill = erase ? QColor(239, 107, 115) : tint;
-    fill.setAlphaF(0.04 + 0.32 * strength);
-    p.save();
-    p.setRenderHint(QPainter::Antialiasing, true);
-    p.setBrush(fill);
-    p.setPen(QPen(ring, 1.5));
-    p.drawEllipse(m_mousePos, radius, radius);
-    // Contorno escuro interno: lê bem sobre pintura clara e escura.
-    p.setBrush(Qt::NoBrush);
-    p.setPen(QPen(QColor(0, 0, 0, 170), 1.0));
-    p.drawEllipse(m_mousePos, qMax(1.0, radius - 1.5),
-                  qMax(1.0, radius - 1.5));
-    if (m_state["active_tool"].toString() != QStringLiteral("pixel") &&
-        hardness > 0.02 && hardness < 0.98 && diameter > 10.0) {
-        p.setPen(QPen(QColor(255, 255, 255, 178), 1.0));
-        p.drawEllipse(m_mousePos, radius * hardness, radius * hardness);
-    }
-    p.setPen(QPen(QColor(0, 0, 0, 170), 1.0));
-    p.setBrush(QColor(255, 255, 255));
-    p.drawEllipse(m_mousePos, 1.5, 1.5);
-    p.restore();
+    // Mesmo desenho do cursor da vista 3D (dureza, opacidade, dispersão, tamanho).
+    petuniaDrawBrushCursor(p, m_state, {m_mousePos, 1.0, 0.0, false});
+}
+void PetuniaEditorCanvas::drawPaintGhost(QPainter &p) const {
+    // Ponteiro na vista 3D: eco tracejado no ponto da textura sob ele (B2).
+    const auto &mirror = PetuniaBrushMirror::instance();
+    if (!mirror.hasTexturePoint())
+        return;
+    const QRectF area = canvasRect();
+    const QPointF t = mirror.texturePoint();
+    const QPointF at(area.left() + t.x() * area.width(), area.top() + t.y() * area.height());
+    petuniaDrawBrushCursor(p, m_state, {at, 1.0, 0.0, true});
 }
 void PetuniaEditorCanvas::enterEvent(QEnterEvent *event) {
     QWidget::enterEvent(event);
     update();
 }
 void PetuniaEditorCanvas::leaveEvent(QEvent *event) {
+    if (PetuniaBrushMirror::instance().hasViewPoint()) {
+        petuniaRequest("brush_mirror_clear");
+        PetuniaBrushMirror::instance().clear();
+    }
     QWidget::leaveEvent(event);
     update();
 }
@@ -969,6 +953,12 @@ void PetuniaEditorCanvas::mouseMoveEvent(QMouseEvent *e) {
     } else if (m_stroking) {
         m_previous = e->position();
         stroke(e->position(), 1);
+    } else if (m_mode == "PAINT" && isPaintBrushTool()) {
+        // Eco do cursor na vista 3D: o ponto da superfície com esta UV (B2).
+        const auto n = normalized(e->position());
+        PetuniaBrushMirror::instance().adopt(
+            petuniaRequest("brush_texture_hover", {{"x", n.x()}, {"y", n.y()}}));
+        update();
     }
     e->accept();
 }

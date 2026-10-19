@@ -1,6 +1,6 @@
 # Shell v2 — roteiro de Poly, Paint, UV, Animate, Nós e Assets (2026-10-18)
 
-> Status: **aprovado** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario)). A Onda A está em implementação; B e C seguem depois dela. Referências de outros softwares (Blender, Photoshop, Affinity, Cavalry, Vegas) servem de **referência de ergonomia**, nunca de código ou recurso copiado.
+> Status: **aprovado** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario)). Ondas A e B implementadas (2026-10-19); B8 aguarda a aprovação do guia de estilo; a Onda C vem depois. Referências de outros softwares (Blender, Photoshop, Affinity, Cavalry, Vegas) servem de **referência de ergonomia**, nunca de código ou recurso copiado.
 
 ## Intent
 
@@ -21,7 +21,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | A5  | Nós: navegação infinita (roda/trackpad, botão direito, Espaço, Alt+setas), zoom no cursor e "Enquadrar tudo" (botão, Home, F) | [x] DONE (código e testes; gates no fim) |
 | A6  | Paint: botão no canvas 2D para alternar o wireframe UV sobre a pintura (a UV já o mostra)      | [x] DONE (código e testes; gates no fim) |
 | A7  | UV: mover várias ilhas de uma vez (pressionar numa selecionada mantém tudo) e caixa de seleção | [x] DONE (código e testes; gates no fim) |
-| A8  | Remover a opacidade duplicada do Paint                                                         | [ ] TODO (depende de B1: a opacidade passa para o seletor de cor) |
+| A8  | Remover a opacidade duplicada do Paint                                                         | [x] DONE (a opacidade é o alfa do seletor de cor embutido no pincel) |
 
 ### Onda A, segunda leva — relatos de uso de 2026-10-18 (tarde)
 
@@ -40,15 +40,15 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 
 | ID  | Item                                                                                       | Status   |
 |-----|--------------------------------------------------------------------------------------------|----------|
-| B1  | `PetuniaColorPanel` único (roda, modos, RGB/HSL+alfa, hex, paletas CRUD) e cor fixa no rail | [ ] TODO |
-| B2  | Cursor do brush no 3D e no 2D (dureza, opacidade, jitter) e posição espelhada 3D↔2D         | [ ] TODO |
-| B3  | Quadro de prévia de ferramentas na viewport (extrude, inset, bevel, knife) com HUD numérico  | [ ] TODO |
-| B4  | Registro de propriedades animáveis (tipo, faixa, unidade)                                    | [ ] TODO |
-| B5  | Todo diálogo/modal movível e redimensionável (Preferências, Referências, primitivas, cor), com posição e tamanho lembrados | [ ] TODO |
-| B6  | Overlays da vista: eixo Y oculto por padrão e eixos sem atravessar objetos (teste de profundidade, esmaecidos); grade com extensão e tamanho do ladrilho configuráveis e botão de ligar/desligar no cabeçalho da vista | [ ] TODO |
-| B7  | Travar valores: cadeado pequeno dentro do próprio campo, à direita; trava por canal (posição/rotação/escala × X/Y/Z) respeitada por gizmo, modal e teclado | [ ] TODO |
-| B8  | Linguagem visual da viewport e da GUI: estudo de referência, guia de estilo e passada de polimento (ícones, espaçamento, feedback de seleção/hover/ferramenta, gizmos, overlays, tipografia) | [ ] TODO |
-| B9  | Menus em torta (pie): Shift+A primitivas, vista da câmera, domínio de seleção (objeto/vértice/aresta/face), com teclado e alternativa em lista | [ ] TODO |
+| B1  | `PetuniaColorPanel` único (roda, modos, RGB/HSL+alfa, hex, paletas CRUD) e cor fixa no rail | [x] DONE (código e testes) |
+| B2  | Cursor do brush no 3D e no 2D (dureza, opacidade, jitter) e posição espelhada 3D↔2D         | [x] DONE (código e testes) |
+| B3  | Quadro de prévia de ferramentas na viewport (extrude, inset, bevel, knife) com HUD numérico  | [x] DONE (código e testes) |
+| B4  | Registro de propriedades animáveis (tipo, faixa, unidade)                                    | [x] DONE (contrato e testes; a GUI o consome na C5) |
+| B5  | Todo diálogo/modal movível e redimensionável (Preferências, Referências, primitivas, cor), com posição e tamanho lembrados | [x] DONE (código e testes) |
+| B6  | Overlays da vista: eixo Y oculto por padrão e eixos sem atravessar objetos (teste de profundidade, esmaecidos); grade com extensão e tamanho do ladrilho configuráveis e botão de ligar/desligar no cabeçalho da vista | [x] DONE (código e testes) |
+| B7  | Travar valores: cadeado pequeno dentro do próprio campo, à direita; trava por canal (posição/rotação/escala × X/Y/Z) respeitada por gizmo, modal e teclado | [x] DONE (código e testes) |
+| B8  | Linguagem visual da viewport e da GUI: estudo de referência, guia de estilo e passada de polimento (ícones, espaçamento, feedback de seleção/hover/ferramenta, gizmos, overlays, tipografia) | [-] IN PROGRESS (guia proposto em [linguagem visual](visual-language.md), aguarda aprovação) |
+| B9  | Menus em torta (pie): Shift+A primitivas, vista da câmera, domínio de seleção (objeto/vértice/aresta/face), com teclado e alternativa em lista | [x] DONE (código e testes) |
 
 ## Onda C — grandes
 
@@ -67,7 +67,8 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 
 - Hoje `DeleteAssetCmd` não limpa grupos vazios; o grupo só guarda nome (`Project.collections: Vec<String>`).
 - O menu de botão direito só tem "Origem para o cursor"; o pivô é calculado na projeção, sem deslocamento próprio persistido.
-- O seletor de cor é um diálogo pequeno com confirmação; a opacidade do brush é repetida no painel de Paint.
+- ~~O seletor de cor é um diálogo pequeno com confirmação; a opacidade do brush é repetida no painel de Paint.~~ Resolvido na Onda B (B1/A8).
+- `view.frame_selection` só agenda `camera_frame` e nada o consome no shell Qt: enquadrar pode não mover a câmera (achado nos testes da Onda B, tarefa separada).
 - A timeline não tem registro de propriedades nem editor de curvas.
 
 ## Notas de design — pedidos de 2026-10-19
@@ -105,6 +106,22 @@ Segunda leva (A9–A15), 2026-10-19: Rust 92 binários, 1602 testes, 0 falhas, G
 
 Correções de teste feitas no caminho (registradas por honestidade): a primeira versão do check de órbita só olhava depois de soltar o botão e passava sem a correção; o check de "clique reduz a seleção UV" contava ilhas em vez de faces e partia de uma seleção que o Undo já tinha desfeito.
 
+Onda B (B1–B7, B9) e A8, 2026-10-19, testes só no fim da onda (pedido do usuário). Ambiente igual ao da Onda A.
+
+| Gate                                                                                          | Resultado                                                                 | Status  |
+|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                                                  | sem diferenças (depois de formatar o teste novo)                          | pass    |
+| `cargo clippy -D warnings` (8 crates, `--all-targets --all-features`)                         | 0 avisos                                                                  | pass    |
+| `cargo test --no-fail-fast` (7 crates, `--all-features`, `PETUNIA_REQUIRE_GL=1`)              | 1615 testes, 0 falhas, GL sem SKIPPED; + ida e volta 3D↔UV no bridge      | pass    |
+| `cargo test -p petunia_ui_cxxqt -- --test-threads=1` (offscreen)                              | 49 testes, 0 falhas (contratos, i18n, bridge, editor_parity, `shell_v2`)  | pass    |
+| `shell_v2` (harness): 303 verificações, 45 novas da Onda B                                    | 0 reprovadas em 5 execuções seguidas                                      | pass    |
+| `xtask docs-generate --check`                                                                 | sem drift (regenerado pelos atalhos novos Alt+V e Alt+D)                  | pass    |
+| `verify-progress.cjs`, `progress.test.cjs`, `verify-agent-docs.py`                            | 135 processos consistentes; 6/6; links e catálogo consistentes            | pass    |
+| Janela real com GPU (Wayland: mover/redimensionar diálogos, tortas, cadeados, eco do pincel)  | não executado: precisa do usuário no app                                  | not run |
+| Windows, leitor de tela, alto contraste, escalas 150%/200%                                    | não executado                                                             | not run |
+
+Correção de teste feita no caminho (por honestidade): a primeira versão do check do eco do pincel apontava o centro da vista, mas checks anteriores giram a câmera e movem o cubo e o ponto caía fora do objeto. O check passou a partir de um ponto da textura visível e fazer a ida e volta (erro medido: 0,00 px). A lógica Rust não mudou, e um teste de bridge isolado já passava.
+
 ## Risks
 
 - A cor por grupo muda o formato do documento: o campo é opcional (arquivos antigos abrem sem migração) e a validação rejeita valores inválidos.
@@ -113,4 +130,4 @@ Correções de teste feitas no caminho (registradas por honestidade): a primeira
 
 ## Next
 
-Concluir a Onda A, rodar os gates no fim e só então abrir B1 e B4, que destravam o resto.
+Conferência do usuário no app real (diálogos no Wayland, tortas, cadeados, eco do pincel, grade). Depois, aprovação do [guia de estilo](visual-language.md) (B8) e abertura da Onda C, começando por C5 (que consome o registro animável) e C8 (modos no HUD de prévia).

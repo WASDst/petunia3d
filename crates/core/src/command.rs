@@ -4022,6 +4022,16 @@ impl Command for SetAssetTransformCmd {
         let target_pos = self.translation.unwrap_or(asset.position);
         let target_rot = self.rotation_euler_deg.unwrap_or(asset.rotation);
         let target_scale = self.scale.unwrap_or(asset.scale);
+        if let Some((channel, axis)) = asset.transform_locks.first_violation(
+            [asset.position, asset.rotation, asset.scale],
+            [target_pos, target_rot, target_scale],
+        ) {
+            return Err(CommandError::Execution(format!(
+                "{} {} está travada",
+                channel.label(),
+                petunia_project::transform_locks::axis_label(axis)
+            )));
+        }
 
         if target_pos == asset.position
             && target_rot == asset.rotation

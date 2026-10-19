@@ -180,3 +180,10 @@ Debate técnico entre o usuário e o assistente (postura definida em `AGENTS.md`
 11. **Medida é dado do documento.** A ferramenta Medir grava `project.measurements` com Undo (dois cliques, prévia, Esc cancela); `measure.clear` limpa.
 12. **Arrastar para ajustar números é global.** Um único filtro (`PetuniaScrub`) vale para todo campo numérico, pelo valor (fora de edição) e pelo nome; clique sem arrasto continua levando ao editor.
 13. **Grupos de nós no documento.** `OpGraph.groups` é opcional (arquivos antigos abrem sem migração), validado como entrada hostil e editado por `GraphOp` com Undo. No canvas de nós, Ctrl+G, Ctrl+A e F2 são do canvas, não atalhos globais (antes Ctrl+G agrupava objetos da cena).
+14. **Decisões de implementação da Onda B (2026-10-19), sujeitas à revisão do usuário:**
+    - **Paletas** são dados do documento: `Project.palettes` é opcional e validado como entrada hostil, e `PaletteCmd` tem Undo. A paleta do projeto (`palette`) continua sendo a primeira da lista.
+    - **Diálogos usam moldura própria** (`PetuniaDialogChrome`). O Wayland pode não decorar `QDialog`, então mover e redimensionar passam pelo compositor (`startSystemMove`/`startSystemResize`), com fallback manual, Ctrl+Alt+setas como alternativa ao ponteiro e geometria lembrada.
+    - **Grade e eixos são preferência do usuário**, não do documento. O Y nasce oculto, e há um teto de linhas para um ladrilho minúsculo não travar o desenho.
+    - **Travas de transform são dados do objeto** (`Asset::transform_locks`, com Undo). Elas valem no modal de objeto (gizmo e G/R/S), no valor digitado (recusa com o motivo) e no nudge. Sempre serializadas, porque o layout posicional legado (postcard) não tolera campo omitido no meio do `Asset`.
+    - **Tortas** abrem só na vista 3D. Adicionar usa a tecla de `model.primitives` (Shift+A); Vista e Domínio ganharam `view.pie_view` (Alt+V) e `model.pie_select_domain` (Alt+D), remapeáveis. A alternativa em lista é uma preferência lembrada.
+    - **Registro animável** (`petunia_project::animatable`) é só contrato: id, dono, tipo, unidade e faixa. Ele recusa valores fora da faixa em vez de grampear. A Onda C5 o consome.
