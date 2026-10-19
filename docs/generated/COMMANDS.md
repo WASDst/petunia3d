@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **240**.
+Total de comandos registrados no motor: **241**.
 
 ## Tabela Geral de Comandos
 
@@ -78,6 +78,7 @@ Total de comandos registrados no motor: **240**.
 | `material.edit` | **Edit Material** | `Model` | Sim | Materials | Edit a scalar or color property of a material |
 | `material.remove` | **Remove Material** | `Model` | Sim | Materials | Remove the specified material from the project |
 | `material.set_properties` | **Set Material Properties** | `Model` | Sim | Materials | Set multiple PBR properties of a material in a single atomic transaction |
+| `measure.clear` | **Clear Measurements** | `Model` | Sim | Modeling | Remove every measurement made with the Measure tool |
 | `model.add_capsule` | **Add Capsule** | `Model` | Não | Modeling | Add a capsule primitive |
 | `model.add_circle` | **Add Circle** | `Model` | Não | Modeling | Add a circle/disc primitive |
 | `model.add_cone` | **Add Cone** | `Model` | Não | Modeling | Add a cone primitive |

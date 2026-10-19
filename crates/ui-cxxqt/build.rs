@@ -33,6 +33,7 @@ fn main() {
         .cpp_file("cpp/petunia_expression.h")
         .cpp_file("cpp/petunia_number_field.h")
         .cpp_file("cpp/petunia_number_field.cpp")
+        .cpp_file("cpp/petunia_scrub.cpp")
         .cpp_file("cpp/petunia_vector3_field.h")
         .cpp_file("cpp/petunia_vector3_field.cpp")
         .cpp_file("cpp/petunia_property_group.h")

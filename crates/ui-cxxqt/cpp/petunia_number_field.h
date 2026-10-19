@@ -14,8 +14,10 @@
 ///   Esc restaura. Aceita expressões determinísticas ("2+3*4", "1,5/2", "pi").
 ///   Expressão inválida mantém o rascunho, marca o campo (borda tracejada +
 ///   descrição acessível) e **não** altera a cena. A roda do mouse nunca altera
-///   o valor. O arrasto (scrub) só existe no rótulo do eixo/prefixo e há sempre
-///   a alternativa de digitar. Focar e sair sem editar não emite nada.
+///   o valor. O arrasto (scrub) vale no prefixo do eixo, no **valor** (campo fora
+///   de edição) e no **nome** do campo (ver PetuniaScrub); há sempre a alternativa
+///   de digitar, e um clique sem arrasto leva ao editor. Focar e sair sem editar
+///   não emite nada.
 ///
 /// O widget é apresentação pura: não conhece unidades de documento nem regras
 /// de snap; recebe valor/faixa/unidade do host e emite sinais semânticos.
@@ -72,6 +74,21 @@ public:
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
+
+    /// Arrastar para ajustar: o campo aceita o gesto fora de edição e quando não é
+    /// somente leitura. O filtro `PetuniaScrub` aciona estes passos pelo valor e
+    /// pelo nome do campo; o prefixo os usa direto.
+    bool canScrub() const { return isEnabled() && !m_readOnly && !m_isEditing; }
+    /// Pelo nome do campo o gesto vale mesmo com o campo focado (o primeiro campo de um
+    /// diálogo já abre com foco): o arrasto encerra a edição e passa a ajustar o número.
+    bool canScrubFromLabel() const { return isEnabled() && !m_readOnly; }
+    void scrubArm(const QPoint &globalPos);
+    void scrubMove(const QPoint &globalPos, Qt::KeyboardModifiers modifiers);
+    /// Solta: confirma o arrasto, ou (clique sem arrasto) leva ao editor.
+    void scrubEnd();
+    bool isScrubbing() const { return m_scrubbing; }
+    /// Editor interno (para o filtro reconhecer cliques sobre o valor).
+    QLineEdit *valueEditor() const { return m_lineEdit; }
 
 signals:
     void valueChanged(double value);

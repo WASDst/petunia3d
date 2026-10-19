@@ -365,6 +365,8 @@ void PetuniaEditorPanel::setupSettings() {
            "set_gizmo_size", "size", 48, 160, 4);
     number(gizmos, tr("Espessura dos gizmos"), "gizmo_thickness",
            "set_gizmo_thickness", "thickness", 1, 6, 0.25);
+    number(gizmos, tr("Opacidade do cubo de navegação"), "nav_cube_opacity",
+           "set_nav_cube_opacity", "opacity", 0.2, 1, 0.05);
     auto *keymap = page(tr("Atalhos"));
     rows(keymap, tr("Perfis"), "keymap_profiles", "activate_keymap_profile");
     text(keymap, tr("Novo perfil"), {}, "create_keymap_profile", "name");

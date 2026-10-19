@@ -10,12 +10,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let unsupported_profile = self.state.workspace == Workspace::Model
             && self.state.active_tool == "select"
             && self.active_profile_resources().is_some();
+        // Só o bloqueio tira as alças: um objeto oculto continua transformável.
         let unavailable_asset = self.state.workspace == Workspace::Model
-            && self
-                .state
-                .project
-                .active()
-                .is_none_or(|asset| asset.locked || !asset.visible);
+            && self.state.project.active().is_none_or(|asset| asset.locked);
         if unsupported_profile || unavailable_asset {
             gizmo.visible = false;
             gizmo.clear_handle_geometry();

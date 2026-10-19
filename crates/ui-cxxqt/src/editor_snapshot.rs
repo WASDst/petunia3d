@@ -516,6 +516,7 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("selection_thickness".into(), json!(&vm.selection_thickness));
     obj.insert("gizmo_size".into(), json!(&vm.gizmo_size));
     obj.insert("gizmo_thickness".into(), json!(&vm.gizmo_thickness));
+    obj.insert("nav_cube_opacity".into(), json!(&vm.nav_cube_opacity));
     obj.insert("selection_color_hex".into(), json!(&vm.selection_color_hex));
     obj.insert("show_xray".into(), json!(&vm.show_xray));
     obj.insert(
@@ -584,6 +585,7 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("dimension_x".into(), json!(&vm.dimension_x));
     obj.insert("dimension_y".into(), json!(&vm.dimension_y));
     obj.insert("measure_visible".into(), json!(&vm.measure_visible));
+    obj.insert("measure_pending".into(), json!(&vm.measure_pending));
     obj.insert("measure_commands".into(), json!(&vm.measure_commands));
     obj.insert("measure_text".into(), json!(&vm.measure_text));
     obj.insert("measure_x".into(), json!(&vm.measure_x));

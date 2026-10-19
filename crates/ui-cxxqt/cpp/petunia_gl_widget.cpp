@@ -373,9 +373,15 @@ bool PetuniaGlWidget::syncNavCube() {
 void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
     if (!syncNavCube())
         return;
-    m_navCube.paint(painter, m_navHover,
-                    m_navHover.type != PetuniaNavCube::Hit::Type::None ||
-                        m_isGizmoInteracting);
+    // Opacidade global do cubo (Preferências); em uso — mouse sobre ele ou
+    // arrastando — volta à total para continuar legível.
+    const bool inUse = m_navHover.type != PetuniaNavCube::Hit::Type::None ||
+                       m_isGizmoInteracting;
+    const double opacity = qBound(0.2, m_overlayState["nav_cube_opacity"].toDouble(1.0), 1.0);
+    painter.save();
+    painter.setOpacity(inUse ? 1.0 : opacity);
+    m_navCube.paint(painter, m_navHover, inUse);
+    painter.restore();
 }
 
 /// Executa o pedido do cubo (face, aresta, canto, bússola, início ou menu).
@@ -564,6 +570,16 @@ void PetuniaGlWidget::mousePressEvent(QMouseEvent *event) {
             event->accept();
             return;
         }
+        if (tool == "measure") {
+            // Dois cliques: o primeiro marca, a prévia segue o mouse, o segundo grava.
+            const double nx = event->position().x() / qMax(1, width());
+            const double ny = event->position().y() / qMax(1, height());
+            adoptSnapshot(petuniaRequest("measure_click", {{"norm_x", nx}, {"norm_y", ny}}));
+            emit selectionChanged();
+            update();
+            event->accept();
+            return;
+        }
         m_regionSelecting =
             tool == "select" || tool == "lasso_select" ||
             (m_overlayState["workspace"] == "Animate" &&
@@ -653,6 +669,15 @@ void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
     if (m_regionSelecting) {
         if (m_regionPoints.size() < 4096)
             m_regionPoints << event->position();
+        update();
+        event->accept();
+        return;
+    }
+    if (activeTool == "measure" && m_overlayState["measure_pending"].toBool()) {
+        // Medida em andamento: a outra ponta segue o ponteiro (sem Undo).
+        adoptSnapshot(petuniaRequest("measure_hover",
+                                     {{"norm_x", event->position().x() / qMax(1, width())},
+                                      {"norm_y", event->position().y() / qMax(1, height())}}));
         update();
         event->accept();
         return;

@@ -176,3 +176,7 @@ Debate técnico entre o usuário e o assistente (postura definida em `AGENTS.md`
 7. **Efeitos como sub-camadas** da camada, ambos com máscara, com cache por camada e invalidação por tile (orçamento de hardware modesto).
 8. **Nós como grafo acíclico (DAG)** com portas tipadas, cache por nó e detecção de ciclos; um nó de objeto pode alimentar várias operações sem nó especial. UV e pintura à mão **não** viram nós.
 9. **`3D-Nav-Viz5.gif`** é só referência visual do usuário: fica fora do repositório para sempre (excluído localmente em `.git/info/exclude`), sem entrada em `ATTRIBUTION.md`.
+10. **Oculto não é bloqueado.** Um objeto oculto continua selecionável (Partes, nós) e transformável (gizmo, campos, teclado); só `locked` recusa. Selecionar tudo e clicar na vista continuam ignorando o que está oculto.
+11. **Medida é dado do documento.** A ferramenta Medir grava `project.measurements` com Undo (dois cliques, prévia, Esc cancela); `measure.clear` limpa.
+12. **Arrastar para ajustar números é global.** Um único filtro (`PetuniaScrub`) vale para todo campo numérico, pelo valor (fora de edição) e pelo nome; clique sem arrasto continua levando ao editor.
+13. **Grupos de nós no documento.** `OpGraph.groups` é opcional (arquivos antigos abrem sem migração), validado como entrada hostil e editado por `GraphOp` com Undo. No canvas de nós, Ctrl+G, Ctrl+A e F2 são do canvas, não atalhos globais (antes Ctrl+G agrupava objetos da cena).

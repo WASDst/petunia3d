@@ -56,6 +56,23 @@ pub enum GraphOp {
         node: Uuid,
         position: [f32; 2],
     },
+    /// Move vários nós de uma vez (arrastar uma multisseleção): um único Undo.
+    MoveNodes {
+        moves: Vec<(Uuid, [f32; 2])>,
+    },
+    /// Reúne nós num quadro nomeado do editor de nós (Ctrl+G).
+    GroupNodes {
+        nodes: Vec<Uuid>,
+        name: Option<String>,
+    },
+    /// Desfaz o grupo, mantendo os nós (Ctrl+Shift+G).
+    Ungroup {
+        group: Uuid,
+    },
+    RenameGroup {
+        group: Uuid,
+        name: String,
+    },
     /// Make Editable: grava o resultado avaliado na malha do objeto e remove as
     /// operações que agiam sobre ele.
     Bake {
@@ -192,6 +209,16 @@ fn apply(document: &mut Project, op: &GraphOp) -> Result<(), CommandError> {
             .op_graph
             .set_position(*node, *position)
             .map_err(refuse),
+        GraphOp::MoveNodes { moves } => document.op_graph.set_positions(moves).map_err(refuse),
+        GraphOp::GroupNodes { nodes, name } => document
+            .op_graph
+            .group_nodes(nodes, name.as_deref())
+            .map(|_| ())
+            .map_err(refuse),
+        GraphOp::Ungroup { group } => document.op_graph.ungroup(*group).map_err(refuse),
+        GraphOp::RenameGroup { group, name } => {
+            document.op_graph.rename_group(*group, name).map_err(refuse)
+        }
         GraphOp::Bake { target } => {
             let index = asset_index(document, *target)?;
             let operations: Vec<Uuid> = document
@@ -254,14 +281,22 @@ impl Command for OpGraphCmd {
             GraphOp::Unapply { .. } => "remove operation from object",
             GraphOp::RemoveNode { .. } => "remove operation",
             GraphOp::MoveNode { .. } => "move node",
+            GraphOp::MoveNodes { .. } => "move nodes",
+            GraphOp::GroupNodes { .. } => "group nodes",
+            GraphOp::Ungroup { .. } => "ungroup nodes",
+            GraphOp::RenameGroup { .. } => "rename node group",
             GraphOp::Bake { .. } => "make editable",
         }
     }
 
     fn changes(&self) -> ProjectChanges {
         match self.op {
-            // Posição de nó não altera geometria.
-            GraphOp::MoveNode { .. } => ProjectChanges::NONE,
+            // Posição de nó e grupos (quadros do editor) não alteram geometria.
+            GraphOp::MoveNode { .. }
+            | GraphOp::MoveNodes { .. }
+            | GraphOp::GroupNodes { .. }
+            | GraphOp::Ungroup { .. }
+            | GraphOp::RenameGroup { .. } => ProjectChanges::NONE,
             _ => ProjectChanges::GEOMETRY,
         }
     }
@@ -318,6 +353,74 @@ mod tests {
     use crate::state::AppState;
     use petunia_mesh::Mesh;
     use petunia_project::Asset;
+
+    #[test]
+    fn node_groups_are_commands_with_one_undo_step_each() {
+        let (mut state, wall, cutter) = state_with_two_cubes();
+        state
+            .dispatch(&OpGraphCmd::new(GraphOp::AddBoolean {
+                tool: cutter,
+                targets: vec![wall],
+                operation: "difference".into(),
+                hide_tool: true,
+            }))
+            .unwrap();
+        let nodes: Vec<Uuid> = state
+            .project
+            .project
+            .op_graph
+            .nodes
+            .iter()
+            .map(|n| n.id)
+            .collect();
+        assert!(nodes.len() >= 2);
+        let depth = state.project.undo.depth().0;
+        state
+            .dispatch(&OpGraphCmd::new(GraphOp::GroupNodes {
+                nodes: nodes.clone(),
+                name: Some("Parede".into()),
+            }))
+            .unwrap();
+        assert_eq!(state.project.undo.depth().0, depth + 1);
+        let group = state.project.project.op_graph.groups[0].id;
+        state
+            .dispatch(&OpGraphCmd::new(GraphOp::RenameGroup {
+                group,
+                name: "Fachada".into(),
+            }))
+            .unwrap();
+        assert_eq!(state.project.project.op_graph.groups[0].name, "Fachada");
+        assert!(state.undo());
+        assert_eq!(state.project.project.op_graph.groups[0].name, "Parede");
+        // Mover em bloco: um passo; agrupar nada ou nó inexistente é recusado.
+        let moves: Vec<(Uuid, [f32; 2])> = nodes.iter().map(|id| (*id, [3.0, 4.0])).collect();
+        let depth = state.project.undo.depth().0;
+        state
+            .dispatch(&OpGraphCmd::new(GraphOp::MoveNodes { moves }))
+            .unwrap();
+        assert_eq!(state.project.undo.depth().0, depth + 1);
+        assert!(
+            state
+                .dispatch(&OpGraphCmd::new(GraphOp::GroupNodes {
+                    nodes: vec![Uuid::new_v4()],
+                    name: None,
+                }))
+                .is_err()
+        );
+        assert!(
+            state
+                .dispatch(&OpGraphCmd::new(GraphOp::Ungroup {
+                    group: Uuid::new_v4()
+                }))
+                .is_err()
+        );
+        state
+            .dispatch(&OpGraphCmd::new(GraphOp::Ungroup { group }))
+            .unwrap();
+        assert!(state.project.project.op_graph.groups.is_empty());
+        assert!(state.undo());
+        assert_eq!(state.project.project.op_graph.groups.len(), 1);
+    }
 
     fn state_with_two_cubes() -> (AppState, Uuid, Uuid) {
         let mut state = AppState::default();

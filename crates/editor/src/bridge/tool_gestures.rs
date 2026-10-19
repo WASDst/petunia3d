@@ -953,6 +953,21 @@ mod contextual_selection_tests {
         assert_eq!(b.state.project.undo.depth(), depth);
     }
 
+    #[test]
+    fn nav_cube_opacity_is_clamped_validated_and_published() {
+        let mut b = bridge();
+        assert_eq!(b.state.ui.nav_cube_opacity, 1.0, "padrão: opaco");
+        assert!(b.set_nav_cube_opacity(0.5));
+        assert_eq!(b.view_model().nav_cube_opacity, 0.5);
+        assert!(!b.set_nav_cube_opacity(0.5), "sem mudança");
+        assert!(!b.set_nav_cube_opacity(f32::NAN));
+        assert!(!b.set_nav_cube_opacity(f32::INFINITY));
+        assert!(b.set_nav_cube_opacity(0.0));
+        assert_eq!(b.state.ui.nav_cube_opacity, 0.2, "nunca some por completo");
+        assert!(b.set_nav_cube_opacity(9.0));
+        assert_eq!(b.state.ui.nav_cube_opacity, 1.0);
+    }
+
     fn origin_of(g: &GizmoModel) -> [f32; 2] {
         [g.origin_x, g.origin_y]
     }

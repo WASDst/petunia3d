@@ -339,6 +339,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.cancel_transform() {
             return true;
         }
+        if self.cancel_measure() {
+            return true;
+        }
         if self.state.session.edit_pivot {
             return self.cancel_edit_pivot();
         }

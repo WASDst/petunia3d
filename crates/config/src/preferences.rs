@@ -133,6 +133,10 @@ fn default_gizmo_thickness() -> f32 {
     2.0
 }
 
+fn default_nav_cube_opacity() -> f32 {
+    1.0
+}
+
 fn default_snap_radius_px() -> f32 {
     12.0
 }
@@ -158,6 +162,9 @@ pub struct UserPreferences {
     pub gizmo_size: f32,
     /// Espessura do traço dos gizmos de transformação, px lógicos (1..=6).
     pub gizmo_thickness: f32,
+    /// Opacidade do cubo de navegação da vista 3D (0,2..=1). Em uso (mouse sobre
+    /// ele ou arrastando) o cubo volta à opacidade total.
+    pub nav_cube_opacity: f32,
     /// Idioma escolhido explicitamente; None preserva o idioma do host/CLI.
     pub language: Option<String>,
     /// Escala da interface (1.0 = 100%, até 2.0 = 200%).
@@ -243,6 +250,7 @@ impl Default for UserPreferences {
             selection_thickness: 2.0,
             gizmo_size: default_gizmo_size(),
             gizmo_thickness: default_gizmo_thickness(),
+            nav_cube_opacity: default_nav_cube_opacity(),
             ui_scale: 1.0,
             language: None,
             model_quick_actions: Vec::new(),
@@ -301,6 +309,11 @@ impl UserPreferences {
             || !(1.0..=6.0).contains(&preferences.gizmo_thickness)
         {
             preferences.gizmo_thickness = default_gizmo_thickness();
+        }
+        if !preferences.nav_cube_opacity.is_finite()
+            || !(0.2..=1.0).contains(&preferences.nav_cube_opacity)
+        {
+            preferences.nav_cube_opacity = default_nav_cube_opacity();
         }
         if !preferences.snap_radius_px.is_finite()
             || !(4.0..=48.0).contains(&preferences.snap_radius_px)
@@ -407,6 +420,7 @@ mod tests {
             selection_thickness: 3.5,
             gizmo_size: 96.0,
             gizmo_thickness: 3.0,
+            nav_cube_opacity: 0.5,
             ui_scale: 1.25,
             model_quick_actions: vec!["model.join".to_string()],
             colorblind_axes: false,
@@ -450,7 +464,7 @@ mod tests {
         assert_eq!(UserPreferences::load_from_path(&path).unwrap(), updated);
         fs::write(
             &path,
-            "selection_thickness = nan\ninvert_vertical_drag = true\ngizmo_size = 5000.0\ngizmo_thickness = nan\n",
+            "selection_thickness = nan\ninvert_vertical_drag = true\ngizmo_size = 5000.0\ngizmo_thickness = nan\nnav_cube_opacity = 7.5\n",
         )
         .unwrap();
         let sanitized = UserPreferences::load_from_path(&path).unwrap();
@@ -463,6 +477,10 @@ mod tests {
         assert_eq!(
             sanitized.gizmo_thickness, 2.0,
             "espessura não finita volta ao padrão"
+        );
+        assert_eq!(
+            sanitized.nav_cube_opacity, 1.0,
+            "opacidade fora da faixa volta ao padrão"
         );
         fs::remove_file(&path).unwrap();
         assert_eq!(

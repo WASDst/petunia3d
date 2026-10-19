@@ -37,6 +37,9 @@ pub const OP_GRAPH_SCHEMA_VERSION: u32 = 1;
 /// Limites duros (dados de arquivo são hostis).
 pub const MAX_NODES: usize = 512;
 pub const MAX_EDGES: usize = 2048;
+/// Limites dos grupos de nós (o arquivo é entrada hostil).
+pub const MAX_GROUPS: usize = 256;
+pub const MAX_GROUP_NAME_CHARS: usize = 64;
 /// Triângulos máximos aceitos como entrada de uma booleana.
 pub const MAX_BOOLEAN_FACES: usize = 400_000;
 
@@ -335,12 +338,24 @@ pub struct OpEdge {
     pub to_port: u16,
 }
 
+/// Grupo de nós: organização visual do editor de nós (um quadro nomeado em volta
+/// dos membros). Não afeta a avaliação do grafo. Um nó pertence a no máximo um grupo.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NodeGroup {
+    pub id: Uuid,
+    pub name: String,
+    pub nodes: Vec<Uuid>,
+}
+
 /// Grafo de operações do documento.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OpGraph {
     pub schema_version: u32,
     pub nodes: Vec<OpNode>,
     pub edges: Vec<OpEdge>,
+    /// Grupos de nós (opcional no arquivo: documentos antigos abrem sem grupos).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<NodeGroup>,
     /// Sobe a cada mutação (invalidação de caches externos).
     pub revision: u64,
 }
@@ -351,6 +366,7 @@ impl Default for OpGraph {
             schema_version: OP_GRAPH_SCHEMA_VERSION,
             nodes: Vec::new(),
             edges: Vec::new(),
+            groups: Vec::new(),
             revision: 0,
         }
     }
@@ -379,7 +395,168 @@ impl OpGraph {
     }
 
     fn bump(&mut self) {
+        self.prune_groups();
         self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Tira dos grupos o que já não é válido: membros que sumiram ou repetidos,
+    /// grupos vazios, excesso de grupos e nomes vazios ou longos demais. Devolve
+    /// quantas correções fez (sem subir a revisão).
+    pub fn prune_groups(&mut self) -> usize {
+        if self.groups.is_empty() {
+            return 0;
+        }
+        let alive: HashSet<Uuid> = self.nodes.iter().map(|node| node.id).collect();
+        let mut seen = HashSet::new();
+        let mut fixes = 0;
+        for group in &mut self.groups {
+            let before = group.nodes.len();
+            group
+                .nodes
+                .retain(|id| alive.contains(id) && seen.insert(*id));
+            fixes += before - group.nodes.len();
+            if group.name.trim().is_empty() {
+                group.name = "Grupo".to_string();
+                fixes += 1;
+            }
+            if group.name.chars().count() > MAX_GROUP_NAME_CHARS {
+                group.name = group.name.chars().take(MAX_GROUP_NAME_CHARS).collect();
+                fixes += 1;
+            }
+        }
+        let before = self.groups.len();
+        self.groups.retain(|group| !group.nodes.is_empty());
+        if self.groups.len() > MAX_GROUPS {
+            self.groups.truncate(MAX_GROUPS);
+        }
+        fixes + (before - self.groups.len())
+    }
+
+    // ── Grupos de nós ───────────────────────────────────────────────────────
+
+    /// Reúne `nodes` num grupo novo (tirando-os de qualquer grupo anterior).
+    /// Sem `name`, usa "Grupo de nós N". Devolve o id do grupo.
+    pub fn group_nodes(&mut self, nodes: &[Uuid], name: Option<&str>) -> Result<Uuid, GraphError> {
+        let mut members: Vec<Uuid> = Vec::new();
+        for id in nodes {
+            if self.node(*id).is_none() {
+                return Err(GraphError::UnknownNode(*id));
+            }
+            if !members.contains(id) {
+                members.push(*id);
+            }
+        }
+        if members.is_empty() {
+            return Err(GraphError::InvalidParam {
+                key: "nodes".into(),
+                reason: "no nodes to group".into(),
+            });
+        }
+        // Valida tudo antes de mexer: uma recusa não pode deixar o grafo alterado.
+        let explicit_name = match name.map(str::trim) {
+            Some(name) if !name.is_empty() => Some(self.checked_group_name(name, None)?),
+            _ => None,
+        };
+        let freed = self
+            .groups
+            .iter()
+            .filter(|group| group.nodes.iter().all(|id| members.contains(id)))
+            .count();
+        if self.groups.len() - freed >= MAX_GROUPS {
+            return Err(GraphError::TooLarge("groups"));
+        }
+        for group in &mut self.groups {
+            group.nodes.retain(|id| !members.contains(id));
+        }
+        self.groups.retain(|group| !group.nodes.is_empty());
+        let name = explicit_name.unwrap_or_else(|| {
+            (1..=10_000)
+                .map(|n| format!("Grupo de nós {n}"))
+                .find(|candidate| !self.groups.iter().any(|group| &group.name == candidate))
+                .unwrap_or_else(|| format!("Grupo de nós {}", Uuid::new_v4().simple()))
+        });
+        let id = Uuid::new_v4();
+        self.groups.push(NodeGroup {
+            id,
+            name,
+            nodes: members,
+        });
+        self.bump();
+        Ok(id)
+    }
+
+    /// Desfaz o grupo mantendo os nós.
+    pub fn ungroup(&mut self, group: Uuid) -> Result<(), GraphError> {
+        let before = self.groups.len();
+        self.groups.retain(|candidate| candidate.id != group);
+        if self.groups.len() == before {
+            return Err(GraphError::UnknownNode(group));
+        }
+        self.bump();
+        Ok(())
+    }
+
+    /// Renomeia o grupo (nome aparado, não vazio, sem repetir o de outro grupo).
+    pub fn rename_group(&mut self, group: Uuid, name: &str) -> Result<(), GraphError> {
+        let name = self.checked_group_name(name.trim(), Some(group))?;
+        let target = self
+            .groups
+            .iter_mut()
+            .find(|candidate| candidate.id == group)
+            .ok_or(GraphError::UnknownNode(group))?;
+        if target.name == name {
+            return Ok(());
+        }
+        target.name = name;
+        self.bump();
+        Ok(())
+    }
+
+    fn checked_group_name(&self, name: &str, except: Option<Uuid>) -> Result<String, GraphError> {
+        if name.is_empty() || name.chars().count() > MAX_GROUP_NAME_CHARS {
+            return Err(GraphError::InvalidParam {
+                key: "name".into(),
+                reason: format!("must have 1..={MAX_GROUP_NAME_CHARS} characters"),
+            });
+        }
+        if self
+            .groups
+            .iter()
+            .any(|group| group.name == name && Some(group.id) != except)
+        {
+            return Err(GraphError::InvalidParam {
+                key: "name".into(),
+                reason: "another group already uses this name".into(),
+            });
+        }
+        Ok(name.to_string())
+    }
+
+    /// Grupo a que o nó pertence, se houver.
+    pub fn group_of(&self, node: Uuid) -> Option<&NodeGroup> {
+        self.groups.iter().find(|group| group.nodes.contains(&node))
+    }
+
+    /// Move vários nós de uma vez (um único passo de Undo na camada de comandos).
+    pub fn set_positions(&mut self, moves: &[(Uuid, [f32; 2])]) -> Result<(), GraphError> {
+        for (node, position) in moves {
+            if !position.iter().all(|c| c.is_finite()) {
+                return Err(GraphError::InvalidParam {
+                    key: "position".into(),
+                    reason: "non-finite".into(),
+                });
+            }
+            if self.node(*node).is_none() {
+                return Err(GraphError::UnknownNode(*node));
+            }
+        }
+        for (node, position) in moves {
+            if let Some(found) = self.node_mut(*node) {
+                found.position = *position;
+            }
+        }
+        self.bump();
+        Ok(())
     }
 
     // ── Construção ──────────────────────────────────────────────────────────
@@ -845,6 +1022,7 @@ impl OpGraph {
         }
         // Arestas acima do limite nem chegam a ser examinadas.
         fixes += total - processed;
+        fixes += self.prune_groups();
         self.revision = if fixes > 0 {
             revision.wrapping_add(1)
         } else {
@@ -878,6 +1056,29 @@ impl OpGraph {
                 return Err(GraphError::TypeMismatch {
                     from: out.ty.id(),
                     to: input.ty.id(),
+                });
+            }
+        }
+        if self.groups.len() > MAX_GROUPS {
+            return Err(GraphError::TooLarge("groups"));
+        }
+        let mut grouped = HashSet::new();
+        for group in &self.groups {
+            for id in &group.nodes {
+                if !ids.contains(id) {
+                    return Err(GraphError::UnknownNode(*id));
+                }
+                if !grouped.insert(*id) {
+                    return Err(GraphError::InvalidParam {
+                        key: "groups".into(),
+                        reason: "a node belongs to more than one group".into(),
+                    });
+                }
+            }
+            if group.name.trim().is_empty() || group.name.chars().count() > MAX_GROUP_NAME_CHARS {
+                return Err(GraphError::InvalidParam {
+                    key: "groups".into(),
+                    reason: "invalid group name".into(),
                 });
             }
         }

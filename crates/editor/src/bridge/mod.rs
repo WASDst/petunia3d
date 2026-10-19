@@ -12,6 +12,7 @@ mod gizmo;
 mod joins;
 mod loop_cut;
 mod materials;
+mod measure;
 mod menus;
 mod modifiers;
 mod operations;

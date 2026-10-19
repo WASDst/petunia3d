@@ -71,14 +71,24 @@ impl Command for GroupSelectionCmd {
             state.document.project.add_collection(&name);
         }
         let mut grouped = 0usize;
+        let mut left_groups: Vec<String> = Vec::new();
         for asset in &mut state.document.assets {
             if ids.contains(&asset.id) {
-                asset.collection = Some(name.clone());
+                if let Some(previous) = asset.collection.replace(name.clone())
+                    && previous != name
+                    && !left_groups.contains(&previous)
+                {
+                    left_groups.push(previous);
+                }
                 grouped += 1;
             }
         }
         if grouped == 0 {
             return Err(CommandError::EmptySelection);
+        }
+        // Os grupos de onde os objetos saíram, se ficaram vazios, deixam de existir.
+        for previous in &left_groups {
+            state.document.project.prune_collection_if_empty(previous);
         }
         state.set_status(format!("{grouped} objeto(s) agrupados em {name}"));
         Ok(())

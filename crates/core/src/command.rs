@@ -887,6 +887,16 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "measure.clear",
+                "Clear Measurements",
+                "Remove every measurement made with the Measure tool",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::measure_commands::ClearMeasurementsCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "scene.group",
                 "Group",
                 "Gather the selected objects into a new group of the scene structure",

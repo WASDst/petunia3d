@@ -514,3 +514,44 @@ fn ungroup_drops_the_group_color_too() {
     state.dispatch(&UngroupCmd::default()).unwrap();
     assert!(state.project.project.collection_meta.is_empty());
 }
+
+#[test]
+fn grouping_objects_that_were_in_a_group_removes_the_group_they_left() {
+    let (mut state, [a, b, _]) = grouped_scene(); // "Grupo 1" com A e B
+    select(&mut state, &[a, b]);
+    // Agrupar de novo (como um Ctrl+G repetido): o grupo antigo esvazia e some.
+    state.dispatch(&GroupSelectionCmd::default()).unwrap();
+    let groups = &state.project.project.collections;
+    assert_eq!(groups.len(), 1, "sem grupo vazio sobrando: {groups:?}");
+    assert!(
+        state
+            .project
+            .assets
+            .iter()
+            .take(2)
+            .all(|asset| asset.collection.as_deref() == groups.first().map(String::as_str))
+    );
+    assert!(state.undo());
+    assert_eq!(state.project.project.collections, ["Grupo 1".to_string()]);
+}
+
+#[test]
+fn grouping_part_of_a_group_keeps_the_old_group_for_the_rest() {
+    let (mut state, [a, b, _]) = grouped_scene(); // "Grupo 1" com A e B
+    select(&mut state, &[a]);
+    state
+        .dispatch(&GroupSelectionCmd {
+            name: Some("Só A".into()),
+        })
+        .unwrap();
+    assert_eq!(
+        state.project.project.collections,
+        ["Grupo 1".to_string(), "Só A".to_string()],
+        "B ainda está no primeiro"
+    );
+    assert_eq!(state.project.assets[1].id, b);
+    assert_eq!(
+        state.project.assets[1].collection.as_deref(),
+        Some("Grupo 1")
+    );
+}

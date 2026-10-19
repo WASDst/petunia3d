@@ -184,3 +184,16 @@ fn the_cursor_follows_the_selection_and_the_object_pivot() {
     assert!(b.cursor_to_active());
     assert!((Vec3::from(b.state.session.cursor_3d) - origin(&b)).length() < 1.0e-4);
 }
+
+#[test]
+fn a_hidden_object_keeps_its_gizmo_but_a_locked_one_does_not() {
+    let mut b = bridge();
+    b.apply(UiIntent::SetActiveTool("move".into()));
+    b.state.project.active_mut().expect("ativo").visible = false;
+    assert!(
+        b.view_model().gizmo.visible,
+        "oculto continua transformável: o gizmo aparece"
+    );
+    b.state.project.active_mut().expect("ativo").locked = true;
+    assert!(!b.view_model().gizmo.visible, "bloqueado não oferece alças");
+}

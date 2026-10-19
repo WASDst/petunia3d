@@ -923,7 +923,9 @@ bool PetuniaShellWindow::eventFilter(QObject *watched, QEvent *event) {
     // exceto Ctrl+setas, que movem o nó.
     if (qobject_cast<PetuniaNodeCanvas *>(target)) {
         const bool arrow = key->key() >= Qt::Key_Left && key->key() <= Qt::Key_Down;
-        if (!(key->modifiers() & Qt::ControlModifier) || arrow)
+        // Ctrl+G agrupa os NÓS (não os objetos da cena), Ctrl+A seleciona os nós, F2 renomeia
+        // o grupo: o canvas declara essas teclas como suas (PetuniaNodeCanvas::ownsKey).
+        if (!(key->modifiers() & Qt::ControlModifier) || arrow || PetuniaNodeCanvas::ownsKey(key))
             return QMainWindow::eventFilter(watched, event);
     }
 

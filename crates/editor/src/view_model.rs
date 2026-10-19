@@ -335,6 +335,7 @@ pub struct ShellViewModel {
     pub selection_thickness: f32,
     pub gizmo_size: f32,
     pub gizmo_thickness: f32,
+    pub nav_cube_opacity: f32,
     pub selection_color_hex: String,
     pub show_xray: bool,
     pub show_face_orientation: bool,
@@ -379,6 +380,8 @@ pub struct ShellViewModel {
     pub dimension_x: f32,
     pub dimension_y: f32,
     pub measure_visible: bool,
+    /// A ferramenta Medir tem um primeiro ponto marcado e espera o segundo.
+    pub measure_pending: bool,
     pub measure_commands: String,
     pub measure_text: String,
     pub measure_x: f32,
@@ -1412,6 +1415,7 @@ impl ShellViewModel {
             selection_thickness: state.ui.selection_thickness,
             gizmo_size: state.ui.gizmo_size,
             gizmo_thickness: state.ui.gizmo_thickness,
+            nav_cube_opacity: state.ui.nav_cube_opacity,
             selection_color_hex: format!(
                 "#{:02X}{:02X}{:02X}",
                 state.ui.selection_rgb[0], state.ui.selection_rgb[1], state.ui.selection_rgb[2]
@@ -1467,6 +1471,7 @@ impl ShellViewModel {
             measure_angle_deg: 0.0,
             measure_hud_text: String::new(),
             measure_tags: Vec::new(),
+            measure_pending: false,
             micro_inspector_open: false,
             micro_inspector_x: 0.0,
             micro_inspector_y: 0.0,

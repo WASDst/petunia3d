@@ -5590,5 +5590,17 @@
   "Mostrar o wireframe UV sobre a pintura": {
     "pt-BR": "Mostrar o wireframe UV sobre a pintura",
     "en": "Show the UV wireframe over the painting"
+  },
+  "Opacidade do cubo de navegação": {
+    "pt-BR": "Opacidade do cubo de navegação",
+    "en": "Navigation cube opacity"
+  },
+  "Clear measures": {
+    "pt-BR": "Limpar medidas",
+    "en": "Clear measures"
+  },
+  "Nome do grupo de nós": {
+    "pt-BR": "Nome do grupo de nós",
+    "en": "Node group name"
   }
 }

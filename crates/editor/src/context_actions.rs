@@ -68,7 +68,7 @@ pub fn group_of(id: &str) -> &'static str {
         }
         "unwrap" | "pack" | "relax" | "stitch" | "project_view" | "project_reference"
         | "project_planar" | "project_cube" | "equalize_density" | "split" => "uv",
-        "measure" => "utility",
+        "measure" | "clear_measures" => "utility",
         "delete" => "danger",
         _ => "object",
     }
@@ -238,6 +238,16 @@ const SLICE_TOOL: ContextAction = act(
 const MEASURE_TOOL: ContextAction = act(
     "measure", "Measure", "measure", Tool, "measure", None, false,
 );
+/// Remove as medidas gravadas pela ferramenta Medir (desabilitada sem medidas).
+const CLEAR_MEASURES: ContextAction = act(
+    "clear_measures",
+    "Clear measures",
+    "close",
+    Command,
+    "measure.clear",
+    None,
+    false,
+);
 const SHAPE_BUILDER_TOOL: ContextAction = act(
     "shape_builder",
     "Shape builder",
@@ -315,6 +325,7 @@ const OBJECT: &[ContextAction] = &[
     KNIFE,
     SLICE_TOOL,
     MEASURE_TOOL,
+    CLEAR_MEASURES,
     DELETE,
 ];
 const VERTEX: &[ContextAction] = &[
@@ -361,6 +372,7 @@ const VERTEX: &[ContextAction] = &[
     SLICE_TOOL,
     PUSH_PULL_TOOL,
     MEASURE_TOOL,
+    CLEAR_MEASURES,
     DELETE,
 ];
 const EDGE: &[ContextAction] = &[
@@ -398,6 +410,7 @@ const EDGE: &[ContextAction] = &[
     PUSH_PULL_TOOL,
     SLICE_TOOL,
     MEASURE_TOOL,
+    CLEAR_MEASURES,
     DELETE,
 ];
 const FACE: &[ContextAction] = &[
@@ -452,6 +465,7 @@ const FACE: &[ContextAction] = &[
     LOOP_CUT_TOOL,
     SLICE_TOOL,
     MEASURE_TOOL,
+    CLEAR_MEASURES,
     DELETE,
 ];
 const DRAW: &[ContextAction] = &[
@@ -512,6 +526,7 @@ const DRAW: &[ContextAction] = &[
     SHAPE_BUILDER_TOOL,
     PUSH_PULL_TOOL,
     MEASURE_TOOL,
+    CLEAR_MEASURES,
 ];
 const UV: &[ContextAction] = &[
     act(

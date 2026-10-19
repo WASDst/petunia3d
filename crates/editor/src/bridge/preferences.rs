@@ -215,6 +215,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Opacidade do cubo de navegação (0,2..=1).
+    pub fn set_nav_cube_opacity(&mut self, opacity: f32) -> bool {
+        if !opacity.is_finite() {
+            return false;
+        }
+        let opacity = opacity.clamp(0.2, 1.0);
+        if (self.state.ui.nav_cube_opacity - opacity).abs() < f32::EPSILON {
+            return false;
+        }
+        self.state.ui.nav_cube_opacity = opacity;
+        true
+    }
+
     pub fn set_language(&mut self, lang: &str) -> bool {
         // Embedded catalogs and the English legacy tag remain valid even if
         // a host overrides the list of additional locale catalogs.
@@ -304,6 +317,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.preferences.selection_thickness = self.state.ui.selection_thickness;
         self.preferences.gizmo_size = self.state.ui.gizmo_size;
         self.preferences.gizmo_thickness = self.state.ui.gizmo_thickness;
+        self.preferences.nav_cube_opacity = self.state.ui.nav_cube_opacity;
         self.preferences.model_quick_actions = self.state.ui.model_quick_actions.clone();
         self.preferences.active_keymap_id = self.state.ui.active_keymap_id.clone();
         self.preferences.theme_id = self.state.ui.active_theme_id.clone();

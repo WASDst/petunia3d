@@ -17,6 +17,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "assets" / "native-translations.json"
 
 PT_TO_EN = {
+    "Nome do grupo de nós": "Node group name",
+    "Opacidade do cubo de navegação": "Navigation cube opacity",
     "Wireframe UV sobre a pintura": "UV wireframe over the painting",
     "Mostrar o wireframe UV sobre a pintura": "Show the UV wireframe over the painting",
     "Enquadrar tudo": "Frame all",
@@ -646,6 +648,7 @@ PT_TO_EN = {
 }
 
 EN_TO_PT = {
+    "Clear measures": "Limpar medidas",
     "Select a vertex, edge or face first": "Selecione um vértice, aresta ou face primeiro",
     "Select an object first": "Selecione um objeto primeiro",
     "No active object": "Nenhum objeto ativo",

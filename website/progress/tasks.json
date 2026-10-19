@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-18",
+  "updated": "2026-10-19",
   "phases": [
     {
       "id": "integrity",
@@ -941,6 +941,11 @@
       "revision": "árvore de trabalho sobre 743273e1 (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Onda A do roteiro (ADR-C16), executada no fim da implementação. fmt limpo; clippy -D warnings sem avisos (core, editor, render, config, mesh, project, application e ui-cxxqt). Rust (7 crates, --all-features, PETUNIA_REQUIRE_GL=1, --no-fail-fast): 89 binários, 1570 testes, 0 falhas, nenhum SKIPPED (eram 1519; +51 testes novos: grupos e poda, cor por grupo com precedência e arquivo retrocompatível, pivô/origem, sessão de Editar pivô, seleção UV por caixa e multiarrasto, contorno com cor do grupo). Qt offscreen: suítes de contrato, i18n, bridge e editor_parity verdes; harness do shell com os checks novos de nós (pan por roda/trackpad/botão direito/Espaço, zoom no cursor, F/Home/botão), UV (caixa, manter multisseleção, arrastar todas, clique reduz, vazio limpa), Paint (botão de wireframe) e renomear grupo por duplo clique. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, escalas 150%/200%; A8 depende de B1."
+    },
+    "shell-v2-roadmap-a2-2026-10-19": {
+      "revision": "árvore de trabalho sobre ee93e35a (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Segunda leva da Onda A (A9–A15). fmt limpo; clippy -D warnings sem avisos (8 crates). Rust 92 binários, 1602 testes, 0 falhas, GL headless sem SKIPPED (novos: medida, objeto oculto, grupos de nós no OpGraph com dados hostis, cor/poda de grupos, orientação das referências, opacidade do cubo). Qt offscreen 49 testes, 0 falhas; shell_v2 com 258 verificações, 0 reprovadas, em 5 execuções seguidas (scrub de campos, caixa/multiseleção/Ctrl+G/renomear de nós, legenda fixa, medida por cliques reais). Defeitos achados pelos testes: Ctrl+G de Partes deixava grupo vazio; o filtro de teclas do shell desviava Ctrl+G do canvas de nós para agrupar objetos. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%. A8 depende de B1; B5 e C7 registrados nas ondas B e C."
     }
   },
   "tasks": [
@@ -5236,7 +5241,7 @@
       "description": "Grupo vazio some, renomear e cor por grupo, pivô não destrutivo e menus de Pivô/3D Cursor, navegação dos nós, wireframe 2D e mover várias ilhas na UV.",
       "document": "09-ui/shell-v2-roadmap.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-18",
+      "updated": "2026-10-19",
       "baseline": "ADR-C16 aprovado em 2026-10-18; implementação em andamento.",
       "checkpoints": [
         {
@@ -5263,6 +5268,31 @@
           "title": "A6/A7 Wireframe sobre a pintura 2D e mover várias ilhas na UV.",
           "completed": true,
           "evidence": "shell-v2-roadmap-a-2026-10-18"
+        },
+        {
+          "title": "A9 Medida: gesto de dois cliques com prévia, persistência e Undo.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a2-2026-10-19"
+        },
+        {
+          "title": "A10 Arrastar sobre valor ou nome de qualquer campo numérico (PetuniaScrub global).",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a2-2026-10-19"
+        },
+        {
+          "title": "A11 Objeto oculto selecionável e transformável.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a2-2026-10-19"
+        },
+        {
+          "title": "A12 Nós: caixa de seleção, multisseleção, Ctrl+G e renomear grupo de nós.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a2-2026-10-19"
+        },
+        {
+          "title": "A13/A14/A15 Legenda dos nós fixa, orientação das referências e opacidade do cubo de navegação.",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a2-2026-10-19"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual manual) com regressões e limites de ambiente.",
@@ -5303,6 +5333,11 @@
         },
         {
           "title": "B4 Registro de propriedades animáveis.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B5 Todo diálogo movível e redimensionável, com posição e tamanho lembrados.",
           "completed": false,
           "evidence": null
         },
@@ -5355,6 +5390,11 @@
         },
         {
           "title": "C6 Galeria de assets e salvar grupos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "C7 Grupo especial Referência no painel de Partes.",
           "completed": false,
           "evidence": null
         },

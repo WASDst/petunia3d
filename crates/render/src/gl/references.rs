@@ -6,12 +6,12 @@ use glow::HasContext;
 use super::GlRenderer;
 use super::buffers::float_attributes;
 use crate::frame::RenderFrameInput;
-use crate::scene::QUAD_UVS_GL;
+use crate::scene::QUAD_UVS_TOP_LEFT;
 
 /// Dois triângulos (0,1,2 e 0,2,3) com posição+UV por vértice.
 fn quad_vertices(quad: &[[f32; 3]; 4]) -> [f32; 30] {
     let mut corners = [0.0f32; 20];
-    for (index, (position, uv)) in quad.iter().zip(QUAD_UVS_GL).enumerate() {
+    for (index, (position, uv)) in quad.iter().zip(QUAD_UVS_TOP_LEFT).enumerate() {
         corners[index * 5..index * 5 + 3].copy_from_slice(position);
         corners[index * 5 + 3..index * 5 + 5].copy_from_slice(&uv);
     }

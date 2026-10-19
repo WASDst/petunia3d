@@ -283,8 +283,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.measure_dy = measure.dy;
         vm.measure_dz = measure.dz;
         vm.measure_angle_deg = measure.angle_deg;
+        vm.measure_pending = self.state.session.tools.active_measurement.is_some();
+        // Medidas já gravadas: ficam desenhadas junto com a medida em andamento.
+        let (stored_commands, stored_tags) =
+            compute_stored_measures(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        if !stored_commands.is_empty() {
+            vm.measure_visible = true;
+            if !vm.measure_commands.is_empty() {
+                vm.measure_commands.push(' ');
+            }
+            vm.measure_commands.push_str(&stored_commands);
+        }
         vm.measure_hud_text = measure.hud_text;
         vm.measure_tags = measure.tags;
+        vm.measure_tags.extend(stored_tags);
 
         vm.micro_inspector_open = self.micro_inspector_open;
         vm.micro_inspector_x = self.micro_inspector_pos[0];

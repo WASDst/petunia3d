@@ -4,6 +4,8 @@
 
 #include <QAccessible>
 #include <QGraphicsView>
+#include <QSet>
+#include <QVector>
 #include <QHash>
 #include <QJsonObject>
 
@@ -21,6 +23,8 @@ class PetuniaWireItem;
 /// remove/desliga, Ctrl+setas movem o nó, Shift+A adiciona operação ao objeto ativo.
 /// O nome/descrição acessíveis resumem o nó selecionado e suas ligações.
 class QToolButton;
+class QKeyEvent;
+class QLineEdit;
 
 class PetuniaNodeCanvas : public QGraphicsView {
     Q_OBJECT
@@ -61,6 +65,24 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QRectF nodeSceneRect(const QString &id) const;
     QPointF outputPortScenePos(const QString &id) const;
     QPointF inputPortScenePos(const QString &id) const;
+    /// Teclas que o canvas trata antes dos atalhos globais do aplicativo (Ctrl+G agrupa os
+    /// **nós**, não os objetos da cena; Ctrl+A seleciona os nós; F2 renomeia o grupo).
+    static bool ownsKey(const QKeyEvent *event);
+    /// Seleção múltipla (Ctrl/Shift+clique, caixa no vazio, Ctrl+A). O primeiro é o principal.
+    QStringList selectedNodeIds() const;
+    void selectNodes(const QStringList &ids);
+    /// Grupos de nós (só no grafo de operações): Ctrl+G agrupa, Ctrl+Shift+G desfaz,
+    /// F2 ou duplo clique no título renomeia.
+    int groupCount() const { return int(m_groups.size()); }
+    QString groupId(int index) const;
+    QString groupName(int index) const;
+    QStringList groupMembers(int index) const;
+    bool groupSelection();
+    bool ungroupSelection();
+    void beginRenameGroup(const QString &groupId);
+    /// Retângulos na viewport (para testes e tecnologias assistivas).
+    QRect nodeViewportRect(const QString &id) const;
+    QRect groupTitleViewportRect(int index) const;
     /// Enquadra todos os nós (zoom e posição) sem ampliar além de 100 %.
     void fitAll();
     /// Desloca a vista em pixels (a cena é infinita: não há limite de rolagem).
@@ -77,6 +99,9 @@ class PetuniaNodeCanvas : public QGraphicsView {
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+    bool event(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -127,6 +152,34 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QGraphicsPathItem *m_ghost{nullptr};
     PetuniaNodeItem *m_dragNode{nullptr};
     QPointF m_dragOffset;
+    /// Multisseleção: o principal fica em `m_selected`; os demais só aqui.
+    QSet<QString> m_multi;
+    /// Posições iniciais dos nós arrastados em bloco e o ponto da cena do clique.
+    QHash<QString, QPointF> m_dragOrigins;
+    QPointF m_dragStartScene;
+    bool m_dragMoved{false};
+    /// Pressionou num item que já estava na multisseleção: soltar sem arrastar reduz a ele.
+    bool m_pressedInMulti{false};
+    /// Caixa de seleção no espaço vazio (coordenadas da viewport).
+    bool m_boxing{false};
+    bool m_boxExtend{false};
+    bool m_boxSubtract{false};
+    QPoint m_boxStart;
+    QRect m_boxRect;
+    struct GroupRow {
+        QString id;
+        QString name;
+        QStringList nodes;
+    };
+    QVector<GroupRow> m_groups;
+    QLineEdit *m_renameEditor{nullptr};
+    QString m_renamingGroup;
+    void applySelectionVisuals();
+    QRectF groupSceneRect(int index) const;
+    QRectF groupTitleSceneRect(int index) const;
+    int groupAtTitle(const QPointF &scenePos) const;
+    void finishRename(bool commit);
+    void selectGroupMembers(int index);
     bool m_panning{false};
     QPoint m_panLast;
     /// Botão que iniciou o pan (meio, direito ou esquerdo com Espaço).

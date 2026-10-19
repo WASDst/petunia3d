@@ -1,5 +1,6 @@
 #include "petunia_number_field.h"
 #include "petunia_expression.h"
+#include "petunia_scrub.h"
 #include "petunia_theme.h"
 
 #include <QAccessible>
@@ -30,6 +31,7 @@ PetuniaNumberField::PetuniaNumberField(QWidget *parent)
 PetuniaNumberField::PetuniaNumberField(const QString &prefix, QWidget *parent)
     : QWidget(parent), m_prefix(prefix) {
     setObjectName(QStringLiteral("PetuniaNumberField"));
+    PetuniaScrub::install(); // arrastar valor ou nome ajusta o número, em todo o app
     setAttribute(Qt::WA_Hover, true);
     setMouseTracking(true);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -355,15 +357,60 @@ void PetuniaNumberField::cancelScrub() {
 
 // ── Eventos ─────────────────────────────────────────────────────────────────
 
+void PetuniaNumberField::scrubArm(const QPoint &globalPos) {
+    m_scrubArmed = true;
+    m_scrubbing = false;
+    m_scrubStartPos = globalPos;
+    m_scrubStartValue = m_value;
+    m_initialValue = m_value;
+    m_wasMixed = m_isMixed;
+}
+
+void PetuniaNumberField::scrubMove(const QPoint &globalPos, Qt::KeyboardModifiers modifiers) {
+    if (!m_scrubArmed)
+        return;
+    const int dx = globalPos.x() - m_scrubStartPos.x();
+    if (!m_scrubbing) {
+        if (std::abs(dx) < kScrubThresholdPx)
+            return;
+        m_scrubbing = true;
+        grabKeyboard(); // Esc cancela o arrasto
+        emit editStarted(m_propertyId);
+    }
+    double multiplier = m_step;
+    if (modifiers & Qt::ShiftModifier)
+        multiplier *= 10.0;
+    else if (modifiers & (Qt::ControlModifier | Qt::AltModifier))
+        multiplier *= 0.1;
+    const double next = std::clamp(m_scrubStartValue + dx * multiplier, m_min, m_max);
+    if (std::abs(next - m_value) > 1e-9 || m_isMixed) {
+        m_value = next;
+        m_isMixed = false;
+        m_lineEdit->setText(formatValue(m_value));
+        emit previewRequested(m_propertyId, m_value);
+        emit valueChanged(m_value);
+    }
+}
+
+void PetuniaNumberField::scrubEnd() {
+    if (!m_scrubArmed)
+        return;
+    const bool wasScrubbing = m_scrubbing;
+    m_scrubArmed = false;
+    m_scrubbing = false;
+    releaseKeyboard();
+    if (wasScrubbing) {
+        updateDisplay();
+        emit commitRequested(m_propertyId, m_value, QString::number(m_value, 'g', 10));
+    } else {
+        m_lineEdit->setFocus(Qt::MouseFocusReason); // clique simples = editar
+    }
+}
+
 void PetuniaNumberField::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && inChip(event->position().toPoint()) && !m_readOnly &&
         isEnabled()) {
-        m_scrubArmed = true;
-        m_scrubbing = false;
-        m_scrubStartPos = event->globalPosition().toPoint();
-        m_scrubStartValue = m_value;
-        m_initialValue = m_value;
-        m_wasMixed = m_isMixed;
+        scrubArm(event->globalPosition().toPoint());
         event->accept();
         return;
     }
@@ -386,42 +433,13 @@ void PetuniaNumberField::mouseMoveEvent(QMouseEvent *event) {
         QWidget::mouseMoveEvent(event);
         return;
     }
-    const int dx = event->globalPosition().toPoint().x() - m_scrubStartPos.x();
-    if (!m_scrubbing) {
-        if (std::abs(dx) < kScrubThresholdPx)
-            return;
-        m_scrubbing = true;
-        grabKeyboard(); // Esc cancela o arrasto
-        emit editStarted(m_propertyId);
-    }
-    double multiplier = m_step;
-    if (event->modifiers() & Qt::ShiftModifier)
-        multiplier *= 10.0;
-    else if (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier))
-        multiplier *= 0.1;
-    const double next = std::clamp(m_scrubStartValue + dx * multiplier, m_min, m_max);
-    if (std::abs(next - m_value) > 1e-9 || m_isMixed) {
-        m_value = next;
-        m_isMixed = false;
-        m_lineEdit->setText(formatValue(m_value));
-        emit previewRequested(m_propertyId, m_value);
-        emit valueChanged(m_value);
-    }
+    scrubMove(event->globalPosition().toPoint(), event->modifiers());
     event->accept();
 }
 
 void PetuniaNumberField::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && m_scrubArmed) {
-        const bool wasScrubbing = m_scrubbing;
-        m_scrubArmed = false;
-        m_scrubbing = false;
-        releaseKeyboard();
-        if (wasScrubbing) {
-            updateDisplay();
-            emit commitRequested(m_propertyId, m_value, QString::number(m_value, 'g', 10));
-        } else {
-            m_lineEdit->setFocus(Qt::MouseFocusReason); // clique simples no rótulo = editar
-        }
+        scrubEnd();
         event->accept();
         return;
     }

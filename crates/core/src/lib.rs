@@ -21,6 +21,7 @@ pub mod inference;
 pub mod jobs;
 pub mod loop_cut;
 pub mod material_commands;
+pub mod measure_commands;
 pub mod mesh_preview;
 pub mod modal;
 pub mod modal_feedback;
@@ -203,6 +204,7 @@ pub use shape_builder::{
 };
 pub mod scene_commands;
 pub mod solid_commands;
+pub use measure_commands::{AddMeasurementCmd, ClearMeasurementsCmd, MIN_MEASURE_DISTANCE};
 pub use scene_commands::{
     GroupSelectionCmd, MoveAssetsCmd, RenameGroupCmd, SetGroupColorCmd, UngroupCmd,
 };

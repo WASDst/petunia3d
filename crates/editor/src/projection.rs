@@ -1121,6 +1121,79 @@ pub struct QuickMeasureModel {
     pub tags: Vec<MeasureTagModel>,
 }
 
+/// Medidas gravadas no projeto (Ferramenta Medir), em caminhos `M/L` de tela e
+/// etiquetas de distância. Só entram as visíveis e só com as medições visíveis.
+pub(crate) fn compute_stored_measures(
+    state: &AppState,
+    width: f32,
+    height: f32,
+) -> (String, Vec<MeasureTagModel>) {
+    use std::fmt::Write as _;
+    if width <= 1.0 || height <= 1.0 || !state.project.measurements_visible {
+        return (String::new(), Vec::new());
+    }
+    let view_proj = state.session.camera.view_proj();
+    let project_pt = |p: glam::Vec3| -> Option<[f32; 2]> {
+        let clip = view_proj * p.extend(1.0);
+        if clip.w <= 0.05 {
+            return None;
+        }
+        Some([
+            (clip.x / clip.w * 0.5 + 0.5) * width,
+            (1.0 - (clip.y / clip.w * 0.5 + 0.5)) * height,
+        ])
+    };
+    let mut commands = String::new();
+    let mut tags = Vec::new();
+    for item in state
+        .project
+        .measurements
+        .iter()
+        .filter(|item| item.visible)
+    {
+        let (start, end) = (glam::Vec3::from(item.start), glam::Vec3::from(item.end));
+        if !start.is_finite() || !end.is_finite() {
+            continue;
+        }
+        let (Some(a), Some(b)) = (project_pt(start), project_pt(end)) else {
+            continue;
+        };
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let length = dx.hypot(dy);
+        if length < 4.0 {
+            continue;
+        }
+        // Perpendicular unitária, virada para cima/direita, para as marcas de ponta.
+        let (mut nx, mut ny) = (-dy / length, dx / length);
+        if ny > 0.0 || (ny.abs() < 1e-4 && nx < 0.0) {
+            nx = -nx;
+            ny = -ny;
+        }
+        let _ = write!(
+            commands,
+            "M {:.2} {:.2} L {:.2} {:.2} M {:.2} {:.2} L {:.2} {:.2} M {:.2} {:.2} L {:.2} {:.2} ",
+            a[0] - nx * 6.0,
+            a[1] - ny * 6.0,
+            a[0] + nx * 6.0,
+            a[1] + ny * 6.0,
+            b[0] - nx * 6.0,
+            b[1] - ny * 6.0,
+            b[0] + nx * 6.0,
+            b[1] + ny * 6.0,
+            a[0],
+            a[1],
+            b[0],
+            b[1],
+        );
+        tags.push(MeasureTagModel {
+            text: format!("{:.3}m", start.distance(end)),
+            x: (a[0] + b[0]) * 0.5 + nx * 24.0,
+            y: (a[1] + b[1]) * 0.5 + ny * 24.0,
+        });
+    }
+    (commands, tags)
+}
+
 pub(crate) fn compute_quick_measure(
     state: &AppState,
     width: f32,

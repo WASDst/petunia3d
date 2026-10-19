@@ -955,6 +955,64 @@ fn reference_images_draw_behind_and_in_front() {
     }
 }
 
+/// Cor dominante de um pixel RGBA: "red", "green", "blue" ou "yellow".
+fn dominant(px: [u8; 4]) -> &'static str {
+    let [r, g, b, _] = px.map(i32::from);
+    match (r > 150, g > 150, b > 150) {
+        (true, false, false) => "red",
+        (false, true, false) => "green",
+        (false, false, true) => "blue",
+        (true, true, false) => "yellow",
+        _ => "other",
+    }
+}
+
+/// A primeira linha da imagem é o topo: a referência aparece na orientação em que
+/// foi importada (antes o quad usava UVs de origem embaixo e a imagem saía de
+/// cabeça para baixo).
+#[test]
+fn reference_images_keep_the_orientation_they_were_imported_with() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(120, 90) else {
+        return;
+    };
+    let project = cube_project();
+    let camera = h.camera(ViewPreset::Front, 3.0);
+    // 2×2: em cima vermelho e verde; embaixo azul e amarelo (linhas de cima para baixo).
+    let rgba: Vec<u8> = [
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 255, 0, 255],
+    ]
+    .concat();
+    let mut image = petunia_core::ReferenceImage::from_rgba("quadrants".into(), 2, 2, rgba);
+    image.size = 8.0;
+    image.opacity = 1.0;
+    image.visible = true;
+    image.revision = 1;
+    image.xray = true;
+    image.axis = petunia_core::RefAxis::Front;
+    let refs = [image];
+    let frame = h.render(
+        |parts| {
+            parts.refs = &refs;
+            parts.settings.show_wireframe_overlay = false;
+        },
+        &project,
+        &camera,
+    );
+    let corners = [
+        ("topo-esquerda", frame.at(4, 4), "red"),
+        ("topo-direita", frame.at(115, 4), "green"),
+        ("base-esquerda", frame.at(4, 85), "blue"),
+        ("base-direita", frame.at(115, 85), "yellow"),
+    ];
+    for (name, pixel, expected) in corners {
+        assert_eq!(dominant(pixel), expected, "{name}: {pixel:?}");
+    }
+}
+
 #[test]
 fn draw_restores_the_host_gl_state() {
     use glow::HasContext;

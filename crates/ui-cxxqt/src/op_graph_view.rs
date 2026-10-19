@@ -141,6 +141,11 @@ pub(crate) fn snapshot(project: &Project, active: Option<Uuid>) -> Value {
                 "type": from_port.map_or("geometry", |p| p.ty.id()),
             })
         }).collect::<Vec<_>>(),
+        "groups": graph.groups.iter().map(|group| json!({
+            "id": group.id.to_string(),
+            "name": group.name,
+            "nodes": group.nodes.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
         "revision": graph.revision,
         "descriptors": op_graph::BUILTIN_NODES.iter().map(|d| json!({
             "type_id": d.type_id, "label": d.label, "category": d.category,
@@ -243,6 +248,50 @@ pub(crate) fn command_for(
                 request["y"].as_f64().ok_or("Número inválido: y")? as f32,
             ],
         },
+        "graph_move_nodes" => {
+            let moves = request["moves"].as_array().ok_or("Lista de nós inválida")?;
+            if moves.len() > op_graph::MAX_NODES {
+                return Err("Nós demais para mover de uma vez".into());
+            }
+            let mut parsed = Vec::with_capacity(moves.len());
+            for item in moves {
+                let node = item["node"]
+                    .as_str()
+                    .and_then(|text| Uuid::parse_str(text).ok())
+                    .ok_or("Identificador inválido: node")?;
+                let (x, y) = (
+                    item["x"].as_f64().ok_or("Número inválido: x")? as f32,
+                    item["y"].as_f64().ok_or("Número inválido: y")? as f32,
+                );
+                parsed.push((node, [x, y]));
+            }
+            GraphOp::MoveNodes { moves: parsed }
+        }
+        "graph_group" => {
+            let ids = request["nodes"].as_array().ok_or("Lista de nós inválida")?;
+            if ids.len() > op_graph::MAX_NODES {
+                return Err("Nós demais para agrupar".into());
+            }
+            let mut nodes = Vec::with_capacity(ids.len());
+            for id in ids {
+                nodes.push(
+                    id.as_str()
+                        .and_then(|text| Uuid::parse_str(text).ok())
+                        .ok_or("Identificador inválido: nodes")?,
+                );
+            }
+            GraphOp::GroupNodes {
+                nodes,
+                name: request["name"].as_str().map(str::to_string),
+            }
+        }
+        "graph_ungroup" => GraphOp::Ungroup {
+            group: uuid(request, "group")?,
+        },
+        "graph_rename_group" => GraphOp::RenameGroup {
+            group: uuid(request, "group")?,
+            name: request["name"].as_str().ok_or("Nome inválido")?.to_string(),
+        },
         "graph_bake" => GraphOp::Bake {
             target: match request["target"].as_str() {
                 Some(_) => uuid(request, "target")?,
@@ -303,6 +352,76 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn group_requests_become_typed_commands_and_the_snapshot_lists_groups() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let cmd = command_for(
+            "graph_group",
+            &json!({"nodes": [a.to_string(), b.to_string()], "name": "Parede"}),
+            None,
+            &[],
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            cmd.op,
+            GraphOp::GroupNodes {
+                nodes: vec![a, b],
+                name: Some("Parede".into())
+            }
+        );
+        let moves = command_for(
+            "graph_move_nodes",
+            &json!({"moves": [{"node": a.to_string(), "x": 1.5, "y": -2.0}]}),
+            None,
+            &[],
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            moves.op,
+            GraphOp::MoveNodes {
+                moves: vec![(a, [1.5, -2.0])]
+            }
+        );
+        assert!(command_for("graph_group", &json!({"nodes": ["x"]}), None, &[]).is_err());
+        assert!(command_for("graph_group", &json!({}), None, &[]).is_err());
+        assert!(
+            command_for(
+                "graph_move_nodes",
+                &json!({"moves": [{"node": "x"}]}),
+                None,
+                &[]
+            )
+            .is_err()
+        );
+        assert!(command_for("graph_ungroup", &json!({"group": "no"}), None, &[]).is_err());
+        assert!(
+            command_for(
+                "graph_rename_group",
+                &json!({"group": a.to_string()}),
+                None,
+                &[]
+            )
+            .is_err()
+        );
+
+        let mut project = Project::new();
+        project.assets.clear();
+        let node = project
+            .op_graph
+            .add_node(TYPE_BOOLEAN, &[], [0.0; 2])
+            .unwrap();
+        project
+            .op_graph
+            .group_nodes(&[node], Some("Parede"))
+            .unwrap();
+        let snap = snapshot(&project, None);
+        assert_eq!(snap["groups"][0]["name"], "Parede");
+        assert_eq!(snap["groups"][0]["nodes"][0], node.to_string());
     }
 
     #[test]

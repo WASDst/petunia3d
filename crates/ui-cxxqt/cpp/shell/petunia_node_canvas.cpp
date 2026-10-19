@@ -14,6 +14,7 @@
 #include <QGraphicsScene>
 #include <QJsonArray>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
@@ -499,6 +500,10 @@ PetuniaNodeCanvas::PetuniaNodeCanvas(PetuniaShellController *controller, QWidget
     m_scene->setSceneRect(-100000, -100000, 200000, 200000);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // A legenda de tipos é desenhada em primeiro plano, fixa na vista. Com a
+    // atualização mínima, o Qt desloca os pixels ao rolar e só repinta a faixa
+    // exposta: a legenda "andava" com o pan. O grafo é pequeno, repinta tudo.
+    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
     m_fitButton = new QToolButton(viewport());
     m_fitButton->setAutoRaise(true);
@@ -660,6 +665,20 @@ void PetuniaNodeCanvas::sync(const QJsonObject &state) {
     }
     m_nodeRows = nodes;
     m_edgeRows = edges;
+    // Grupos de nós (só no grafo de operações): quadros nomeados em volta dos membros.
+    m_groups.clear();
+    if (m_domain == Domain::Operations) {
+        for (const auto &value : state["op_graph"].toObject()["groups"].toArray()) {
+            const auto row = value.toObject();
+            GroupRow group;
+            group.id = row["id"].toString();
+            group.name = row["name"].toString();
+            for (const auto &member : row["nodes"].toArray())
+                group.nodes << member.toString();
+            if (!group.id.isEmpty() && !group.nodes.isEmpty())
+                m_groups.append(group);
+        }
+    }
     if (signature != m_signature) {
         m_signature = signature;
         rebuild(nodes, edges);
@@ -674,7 +693,8 @@ void PetuniaNodeCanvas::sync(const QJsonObject &state) {
             item->setRow(row);
             // A posição do documento mudou sem gesto deste canvas (Undo/Redo): segue-a.
             const QPointF server = rowPosition(row);
-            if (m_serverPositions.contains(id) && m_serverPositions.value(id) != server && item != m_dragNode)
+            if (m_serverPositions.contains(id) && m_serverPositions.value(id) != server &&
+                !m_dragOrigins.contains(id) && item != m_dragNode)
                 item->setPos(server);
             m_serverPositions.insert(id, server);
         }
@@ -684,6 +704,7 @@ void PetuniaNodeCanvas::sync(const QJsonObject &state) {
                               assetOf(it.key()) == m_activeAsset);
     updateWires();
     refreshAccessibility();
+    viewport()->update(); // quadros dos grupos e seleção
 }
 
 void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges) {
@@ -749,8 +770,10 @@ void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges
         m_scene->addItem(wire);
         m_wires.append(wire);
     }
-    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
-        it.value()->setSelectedNode(it.key() == m_selected);
+    // Seleção que sobreviveu à reconstrução (nós que sumiram saem dela).
+    for (auto it = m_multi.begin(); it != m_multi.end();)
+        it = m_nodes.contains(*it) ? std::next(it) : m_multi.erase(it);
+    applySelectionVisuals();
     m_rebuilding = false;
     releaseStaleAccessibles();
     // A primeira vez que um grafo aparece, enquadra tudo; depois a vista é do usuário.
@@ -778,12 +801,176 @@ void PetuniaNodeCanvas::selectNode(const QString &id) {
     if (!m_nodes.contains(id))
         return;
     m_selected = id;
-    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
-        it.value()->setSelectedNode(it.key() == id);
+    m_multi = {id};
+    applySelectionVisuals();
     if (auto *item = m_nodes.value(id))
         ensureVisible(item, 40, 40);
     refreshAccessibility();
     emit nodeSelected(id);
+}
+
+void PetuniaNodeCanvas::applySelectionVisuals() {
+    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
+        it.value()->setSelectedNode(m_multi.contains(it.key()) || it.key() == m_selected);
+    viewport()->update();
+}
+
+QStringList PetuniaNodeCanvas::selectedNodeIds() const {
+    QStringList ids;
+    if (m_nodes.contains(m_selected))
+        ids << m_selected;
+    for (const auto &id : m_multi)
+        if (m_nodes.contains(id) && !ids.contains(id))
+            ids << id;
+    return ids;
+}
+
+void PetuniaNodeCanvas::selectNodes(const QStringList &ids) {
+    QSet<QString> valid;
+    for (const auto &id : ids)
+        if (m_nodes.contains(id))
+            valid.insert(id);
+    m_multi = valid;
+    m_selected = valid.contains(m_selected) ? m_selected : (ids.isEmpty() ? QString() : (valid.contains(ids.first()) ? ids.first() : *valid.begin()));
+    if (valid.isEmpty())
+        m_selected.clear();
+    applySelectionVisuals();
+    refreshAccessibility();
+    if (!m_selected.isEmpty())
+        emit nodeSelected(m_selected);
+}
+
+QString PetuniaNodeCanvas::groupId(int index) const {
+    return index >= 0 && index < m_groups.size() ? m_groups.at(index).id : QString();
+}
+QString PetuniaNodeCanvas::groupName(int index) const {
+    return index >= 0 && index < m_groups.size() ? m_groups.at(index).name : QString();
+}
+QStringList PetuniaNodeCanvas::groupMembers(int index) const {
+    return index >= 0 && index < m_groups.size() ? m_groups.at(index).nodes : QStringList();
+}
+
+/// Retângulo do quadro: envolve os membros, com folga e uma faixa de título.
+QRectF PetuniaNodeCanvas::groupSceneRect(int index) const {
+    QRectF box;
+    for (const auto &id : m_groups.at(index).nodes)
+        if (auto *item = m_nodes.value(id))
+            box = box.isNull() ? item->sceneBoundingRect() : box.united(item->sceneBoundingRect());
+    return box.isNull() ? QRectF() : box.adjusted(-18, -34, 18, 18);
+}
+QRectF PetuniaNodeCanvas::groupTitleSceneRect(int index) const {
+    const QRectF box = groupSceneRect(index);
+    return box.isNull() ? QRectF() : QRectF(box.left(), box.top(), box.width(), 26);
+}
+int PetuniaNodeCanvas::groupAtTitle(const QPointF &scenePos) const {
+    for (int i = int(m_groups.size()) - 1; i >= 0; --i)
+        if (groupTitleSceneRect(i).contains(scenePos))
+            return i;
+    return -1;
+}
+QRect PetuniaNodeCanvas::nodeViewportRect(const QString &id) const {
+    auto *item = m_nodes.value(id);
+    return item ? mapFromScene(item->sceneBoundingRect()).boundingRect() : QRect();
+}
+QRect PetuniaNodeCanvas::groupTitleViewportRect(int index) const {
+    if (index < 0 || index >= m_groups.size())
+        return QRect();
+    return mapFromScene(groupTitleSceneRect(index)).boundingRect();
+}
+
+void PetuniaNodeCanvas::selectGroupMembers(int index) {
+    if (index < 0 || index >= m_groups.size())
+        return;
+    selectNodes(m_groups.at(index).nodes);
+}
+
+bool PetuniaNodeCanvas::groupSelection() {
+    if (m_domain != Domain::Operations)
+        return false;
+    const QStringList ids = selectedNodeIds();
+    if (ids.isEmpty())
+        return false;
+    QJsonArray nodes;
+    for (const auto &id : ids)
+        nodes.append(id);
+    m_controller->request(QStringLiteral("graph_group"), {{"nodes", nodes}});
+    return true;
+}
+
+bool PetuniaNodeCanvas::ungroupSelection() {
+    if (m_domain != Domain::Operations)
+        return false;
+    for (const auto &id : selectedNodeIds())
+        for (const auto &group : std::as_const(m_groups))
+            if (group.nodes.contains(id)) {
+                m_controller->request(QStringLiteral("graph_ungroup"), {{"group", group.id}});
+                return true;
+            }
+    return false;
+}
+
+/// Editor de texto sobre o título do grupo: Enter confirma, Esc cancela.
+void PetuniaNodeCanvas::beginRenameGroup(const QString &groupId) {
+    int index = -1;
+    for (int i = 0; i < m_groups.size(); ++i)
+        if (m_groups.at(i).id == groupId)
+            index = i;
+    if (index < 0 || m_domain != Domain::Operations)
+        return;
+    finishRename(false);
+    const QRect title = groupTitleViewportRect(index);
+    m_renamingGroup = groupId;
+    m_renameEditor = new QLineEdit(viewport());
+    m_renameEditor->setAccessibleName(tr("Nome do grupo de nós"));
+    m_renameEditor->setText(m_groups.at(index).name);
+    m_renameEditor->setGeometry(title.adjusted(6, 2, -6, -2));
+    m_renameEditor->show();
+    m_renameEditor->selectAll();
+    m_renameEditor->setFocus(Qt::OtherFocusReason);
+    connect(m_renameEditor, &QLineEdit::returnPressed, this, [this] { finishRename(true); });
+    m_renameEditor->installEventFilter(this);
+}
+
+void PetuniaNodeCanvas::finishRename(bool commit) {
+    if (!m_renameEditor)
+        return;
+    QLineEdit *editor = m_renameEditor;
+    const QString group = m_renamingGroup;
+    const QString text = editor->text().trimmed();
+    m_renameEditor = nullptr;
+    m_renamingGroup.clear();
+    editor->removeEventFilter(this);
+    editor->hide();
+    editor->deleteLater();
+    if (commit && !text.isEmpty())
+        m_controller->request(QStringLiteral("graph_rename_group"), {{"group", group}, {"name", text}});
+    setFocus(Qt::OtherFocusReason);
+}
+
+bool PetuniaNodeCanvas::eventFilter(QObject *watched, QEvent *event) {
+    if (m_renameEditor && watched == m_renameEditor) {
+        if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Escape) {
+            finishRename(false);
+            return true;
+        }
+        if (event->type() == QEvent::FocusOut) {
+            finishRename(true); // sair do campo confirma o nome (vazio é descartado)
+            return false;
+        }
+    }
+    return QGraphicsView::eventFilter(watched, event);
+}
+
+void PetuniaNodeCanvas::mouseDoubleClickEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton && m_domain == Domain::Operations) {
+        const int index = groupAtTitle(mapToScene(event->pos()));
+        if (index >= 0) {
+            beginRenameGroup(m_groups.at(index).id);
+            event->accept();
+            return;
+        }
+    }
+    QGraphicsView::mouseDoubleClickEvent(event);
 }
 
 QString PetuniaNodeCanvas::describeNode(const QString &id) const {
@@ -963,14 +1150,18 @@ void PetuniaNodeCanvas::nudgeSelected(int dx, int dy) {
 }
 
 void PetuniaNodeCanvas::deleteSelected() {
+    QStringList targets = selectedNodeIds();
+    if (targets.isEmpty())
+        return;
     if (m_domain == Domain::Material) {
-        if (m_nodes.contains(m_selected))
-            m_controller->request(QStringLiteral("material_recipe_remove"), {{"node", m_selected}});
+        for (const auto &id : targets)
+            if (m_nodes.contains(id))
+                m_controller->request(QStringLiteral("material_recipe_remove"), {{"node", id}});
         return;
     }
-    if (!isOperation(m_selected))
-        return;
-    m_controller->request(QStringLiteral("graph_remove"), {{"node", m_selected}});
+    for (const auto &id : targets)
+        if (isOperation(id))
+            m_controller->request(QStringLiteral("graph_remove"), {{"node", id}});
 }
 
 void PetuniaNodeCanvas::keyPressEvent(QKeyEvent *event) {
@@ -1011,12 +1202,35 @@ void PetuniaNodeCanvas::keyPressEvent(QKeyEvent *event) {
         event->accept();
         return;
     case Qt::Key_A:
+        if (ctrl && !event->modifiers().testFlag(Qt::ShiftModifier)) {
+            selectNodes(m_nodes.keys()); // Ctrl+A: todos os nós
+            event->accept();
+            return;
+        }
         if (event->modifiers().testFlag(Qt::ShiftModifier)) {
             showAddMenu(mapToGlobal(QPoint(24, 24)));
             event->accept();
             return;
         }
         break;
+    case Qt::Key_G:
+        if (ctrl) {
+            if (event->modifiers().testFlag(Qt::ShiftModifier))
+                ungroupSelection();
+            else
+                groupSelection();
+            event->accept();
+            return;
+        }
+        break;
+    case Qt::Key_F2:
+        for (const auto &group : std::as_const(m_groups))
+            if (group.nodes.contains(m_selected)) {
+                beginRenameGroup(group.id);
+                break;
+            }
+        event->accept();
+        return;
     case Qt::Key_Home:
         fitAll();
         event->accept();
@@ -1049,6 +1263,31 @@ void PetuniaNodeCanvas::keyPressEvent(QKeyEvent *event) {
         break;
     }
     QGraphicsView::keyPressEvent(event);
+}
+
+bool PetuniaNodeCanvas::ownsKey(const QKeyEvent *event) {
+    const Qt::KeyboardModifiers mods = event->modifiers() & ~Qt::KeypadModifier;
+    switch (event->key()) {
+    case Qt::Key_G:
+        return mods == Qt::ControlModifier || mods == (Qt::ControlModifier | Qt::ShiftModifier);
+    case Qt::Key_A:
+        return mods == Qt::ControlModifier || mods == Qt::ShiftModifier;
+    case Qt::Key_F2:
+        return mods == Qt::NoModifier;
+    default:
+        return false;
+    }
+}
+
+bool PetuniaNodeCanvas::event(QEvent *event) {
+    // O Qt tenta os atalhos registrados antes de entregar a tecla ao widget com foco.
+    // Reivindicar a tecla aqui impede que, por exemplo, Ctrl+G agrupe objetos da cena
+    // enquanto o usuário está agrupando nós.
+    if (event->type() == QEvent::ShortcutOverride && ownsKey(static_cast<QKeyEvent *>(event))) {
+        event->accept();
+        return true;
+    }
+    return QGraphicsView::event(event);
 }
 
 void PetuniaNodeCanvas::keyReleaseEvent(QKeyEvent *event) {
@@ -1245,11 +1484,35 @@ void PetuniaNodeCanvas::mousePressEvent(QMouseEvent *event) {
         QGraphicsView::mousePressEvent(event);
         return;
     }
+    const bool toggle = event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier);
     if (auto *node = nodeAt(scenePos)) {
-        selectNode(node->id());
+        const bool inMulti = m_multi.contains(node->id()) && m_multi.size() > 1;
         // Arrasto de fio: só saídas de operação conectam (operação → objeto).
         const int output = node->outputAt(scenePos);
-        if (output >= 0 && (m_domain == Domain::Material || !node->isObject())) {
+        const bool onWire = output >= 0 && (m_domain == Domain::Material || !node->isObject());
+        if (toggle && !onWire) {
+            // Ctrl/Shift+clique soma ou tira o nó da seleção; não inicia arrasto.
+            if (m_multi.contains(node->id()) && m_multi.size() > 1) {
+                m_multi.remove(node->id());
+                if (m_selected == node->id())
+                    m_selected = *m_multi.begin();
+            } else {
+                m_multi.insert(node->id());
+                m_selected = node->id();
+            }
+            applySelectionVisuals();
+            refreshAccessibility();
+            event->accept();
+            return;
+        }
+        m_pressedInMulti = inMulti && !onWire;
+        if (m_pressedInMulti) {
+            m_selected = node->id(); // principal, sem desfazer a multisseleção
+            applySelectionVisuals();
+        } else {
+            selectNode(node->id());
+        }
+        if (onWire) {
             m_wireFrom = node->id();
             m_wireFromSocket = output;
             m_ghost = m_scene->addPath(QPainterPath(), QPen(PetuniaTheme::instance().accentSelectionActive(), 2.4, Qt::DotLine));
@@ -1258,9 +1521,39 @@ void PetuniaNodeCanvas::mousePressEvent(QMouseEvent *event) {
         }
         m_dragNode = node;
         m_dragOffset = scenePos - node->pos();
+        m_dragStartScene = scenePos;
+        m_dragMoved = false;
+        m_dragOrigins.clear();
+        for (const auto &id : std::as_const(m_multi))
+            if (auto *item = m_nodes.value(id))
+                m_dragOrigins.insert(id, item->pos());
+        m_dragOrigins.insert(node->id(), node->pos());
         event->accept();
         return;
     }
+    // Título de um grupo: seleciona os membros e arrasta o grupo inteiro.
+    if (const int group = groupAtTitle(scenePos); group >= 0) {
+        selectGroupMembers(group);
+        m_pressedInMulti = false;
+        if (auto *anchor = m_nodes.value(m_groups.at(group).nodes.first())) {
+            m_dragNode = anchor;
+            m_dragOffset = scenePos - anchor->pos();
+            m_dragStartScene = scenePos;
+            m_dragMoved = false;
+            m_dragOrigins.clear();
+            for (const auto &id : std::as_const(m_multi))
+                if (auto *item = m_nodes.value(id))
+                    m_dragOrigins.insert(id, item->pos());
+        }
+        event->accept();
+        return;
+    }
+    // Espaço vazio: começa uma caixa de seleção (Shift soma, Ctrl subtrai).
+    m_boxing = true;
+    m_boxStart = event->pos();
+    m_boxRect = QRect();
+    m_boxExtend = event->modifiers() & Qt::ShiftModifier;
+    m_boxSubtract = event->modifiers() & Qt::ControlModifier;
     event->accept();
 }
 
@@ -1292,9 +1585,22 @@ void PetuniaNodeCanvas::mouseMoveEvent(QMouseEvent *event) {
         m_ghost->setPath(path);
         return;
     }
+    if (m_boxing) {
+        m_boxRect = QRect(m_boxStart, event->pos()).normalized();
+        viewport()->update();
+        event->accept();
+        return;
+    }
     if (m_dragNode) {
-        m_dragNode->setPos(scenePos - m_dragOffset);
+        const QPointF delta = scenePos - m_dragStartScene;
+        if (!m_dragMoved && delta.manhattanLength() > 3)
+            m_dragMoved = true;
+        // Em bloco: todos os nós da seleção andam o mesmo deslocamento.
+        for (auto it = m_dragOrigins.cbegin(); it != m_dragOrigins.cend(); ++it)
+            if (auto *item = m_nodes.value(it.key()))
+                item->setPos(it.value() + delta);
         updateWires();
+        viewport()->update();
         return;
     }
     QGraphicsView::mouseMoveEvent(event);
@@ -1345,12 +1651,69 @@ void PetuniaNodeCanvas::mouseReleaseEvent(QMouseEvent *event) {
         event->accept();
         return;
     }
+    if (m_boxing) {
+        m_boxing = false;
+        const QRect box = m_boxRect;
+        m_boxRect = QRect();
+        if (box.width() + box.height() <= 6) {
+            // Clique no vazio: uma multisseleção volta ao nó principal.
+            if (!m_boxExtend && !m_boxSubtract && m_multi.size() > 1 && m_nodes.contains(m_selected))
+                selectNode(m_selected);
+        } else {
+            const QRectF area = mapToScene(box).boundingRect();
+            QSet<QString> hit;
+            for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it)
+                if (it.value()->sceneBoundingRect().intersects(area))
+                    hit.insert(it.key());
+            QSet<QString> next = (m_boxExtend || m_boxSubtract) ? m_multi : QSet<QString>();
+            if (m_boxSubtract)
+                next.subtract(hit);
+            else
+                next.unite(hit);
+            QStringList ordered;
+            for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it)
+                if (next.contains(it.key()))
+                    ordered << it.key();
+            selectNodes(ordered);
+        }
+        viewport()->update();
+        event->accept();
+        return;
+    }
     if (m_dragNode) {
         auto *node = m_dragNode;
         m_dragNode = nullptr;
-        m_controller->request(m_domain == Domain::Material ? QStringLiteral("material_recipe_move")
-                                                           : QStringLiteral("graph_move_node"),
-                              {{"node", node->id()}, {"x", node->pos().x()}, {"y", node->pos().y()}});
+        const bool moved = m_dragMoved;
+        const auto origins = m_dragOrigins;
+        m_dragOrigins.clear();
+        m_dragMoved = false;
+        if (!moved && m_pressedInMulti) {
+            // Clique sem arrasto num item da multisseleção: fica só ele.
+            m_pressedInMulti = false;
+            selectNode(node->id());
+            event->accept();
+            return;
+        }
+        m_pressedInMulti = false;
+        const bool material = m_domain == Domain::Material;
+        if (origins.size() > 1 && moved) {
+            if (material) {
+                // A receita não tem comando em bloco: um passo de Undo por nó.
+                for (auto it = origins.cbegin(); it != origins.cend(); ++it)
+                    if (auto *item = m_nodes.value(it.key()))
+                        m_controller->request(QStringLiteral("material_recipe_move"),
+                                              {{"node", it.key()}, {"x", item->pos().x()}, {"y", item->pos().y()}});
+            } else {
+                QJsonArray moves;
+                for (auto it = origins.cbegin(); it != origins.cend(); ++it)
+                    if (auto *item = m_nodes.value(it.key()))
+                        moves.append(QJsonObject{{"node", it.key()}, {"x", item->pos().x()}, {"y", item->pos().y()}});
+                m_controller->request(QStringLiteral("graph_move_nodes"), {{"moves", moves}});
+            }
+        } else if (moved || origins.size() <= 1) {
+            m_controller->request(material ? QStringLiteral("material_recipe_move") : QStringLiteral("graph_move_node"),
+                                  {{"node", node->id()}, {"x", node->pos().x()}, {"y", node->pos().y()}});
+        }
         event->accept();
         return;
     }
@@ -1396,6 +1759,18 @@ void PetuniaNodeCanvas::focusOutEvent(QFocusEvent *event) {
 /// fixa no canto da vista: ajuda a ler o que cada ligação transporta.
 void PetuniaNodeCanvas::drawForeground(QPainter *painter, const QRectF &rect) {
     QGraphicsView::drawForeground(painter, rect);
+    if (m_boxing && !m_boxRect.isNull()) {
+        // Caixa de seleção: em coordenadas da viewport, por cima de tudo.
+        painter->save();
+        painter->resetTransform();
+        QColor edge = PetuniaTheme::instance().accentSelectionActive();
+        QColor fill = edge;
+        fill.setAlpha(40);
+        painter->setPen(QPen(edge, 1, Qt::DashLine));
+        painter->setBrush(fill);
+        painter->drawRect(m_boxRect);
+        painter->restore();
+    }
     QStringList types;
     for (const auto &value : m_nodeRows) {
         const auto row = value.toObject();
@@ -1467,4 +1842,27 @@ void PetuniaNodeCanvas::drawBackground(QPainter *painter, const QRectF &rect) {
         for (int y = top; y < rect.bottom(); y += step)
             dots.append(QPointF(x, y));
     painter->drawPoints(dots.constData(), int(dots.size()));
+
+    // Quadros dos grupos de nós: faixa de título com o nome e borda tracejada.
+    for (int i = 0; i < m_groups.size(); ++i) {
+        const QRectF frame = groupSceneRect(i);
+        if (frame.isNull() || !frame.intersects(rect))
+            continue;
+        bool allSelected = true;
+        for (const auto &id : m_groups.at(i).nodes)
+            allSelected = allSelected && m_multi.contains(id);
+        QColor accent = t.accentPrimary();
+        QColor fill = accent;
+        fill.setAlpha(allSelected ? 46 : 26);
+        painter->setPen(QPen(allSelected ? t.accentSelectionActive() : accent, allSelected ? 1.8 : 1.2, Qt::DashLine));
+        painter->setBrush(fill);
+        painter->drawRoundedRect(frame, 10, 10);
+        painter->setPen(t.textPrimary());
+        QFont font = painter->font();
+        font.setPixelSize(t.fontPx(PetuniaTheme::TextRole::Caption));
+        font.setBold(true);
+        painter->setFont(font);
+        painter->drawText(groupTitleSceneRect(i).adjusted(10, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                          painter->fontMetrics().elidedText(m_groups.at(i).name, Qt::ElideRight, int(frame.width()) - 24));
+    }
 }

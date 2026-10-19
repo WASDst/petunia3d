@@ -44,6 +44,10 @@
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QSpinBox>
+#include <QLabel>
+#include <QFormLayout>
+#include <QDoubleSpinBox>
 #include <QWheelEvent>
 #include <QSettings>
 #include <QSplitter>
@@ -151,7 +155,98 @@ void selectIds(PetuniaShellController *c, const QStringList &ids) {
 /// Refinamento de uso (ADR-C15): rail enxuto, cabeçalho só com ícones, grupos,
 /// arrastar e soltar e isolamento na Estrutura, alinhar e distribuir, pivô, gizmos
 /// configuráveis e cubo de navegação.
+
+/// Arrastar sobre o valor ou o nome ajusta qualquer campo numérico (PetuniaScrub).
+void checkScrub(Harness &h) {
+    QWidget host;
+    auto *form = new QFormLayout(&host);
+    auto *number = new PetuniaNumberField(&host);
+    number->setRange(-100, 100);
+    number->setSingleStep(0.5);
+    number->setValue(10);
+    auto *real = new QDoubleSpinBox(&host);
+    real->setRange(-100, 100);
+    real->setSingleStep(0.25);
+    real->setValue(1.0);
+    auto *whole = new QSpinBox(&host);
+    whole->setRange(0, 1000);
+    whole->setSingleStep(2);
+    whole->setValue(10);
+    form->addRow(QStringLiteral("Largura"), number);
+    form->addRow(QStringLiteral("Altura"), real);
+    form->addRow(QStringLiteral("Lados"), whole);
+    host.resize(320, 160);
+    host.show();
+    host.activateWindow();
+    settle(6);
+    // O primeiro campo de um formulário abre com foco (em edição). Os testes do valor
+    // partem de campos sem foco; o do nome cobre justamente o campo focado.
+    const bool startedFocused = number->isEditing();
+    int commits = 0;
+    QObject::connect(number, &PetuniaNumberField::commitRequested, &host, [&] { ++commits; });
+
+    const auto mouse = [&](QWidget *w, QEvent::Type type, const QPoint &at, Qt::MouseButton button, Qt::MouseButtons held,
+                           Qt::KeyboardModifiers mods = Qt::NoModifier) {
+        QMouseEvent event(type, QPointF(at), QPointF(w->mapToGlobal(at)), button, held, mods);
+        QCoreApplication::sendEvent(w, &event);
+    };
+    const auto drag = [&](QWidget *w, int dx, Qt::KeyboardModifiers mods = Qt::NoModifier) {
+        const QPoint from(qMax(4, w->width() / 3), w->height() / 2);
+        mouse(w, QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton, mods);
+        for (int step = 1; step <= 8; ++step)
+            mouse(w, QEvent::MouseMove, from + QPoint(dx * step / 8, 0), Qt::NoButton, Qt::LeftButton, mods);
+        mouse(w, QEvent::MouseButtonRelease, from + QPoint(dx, 0), Qt::LeftButton, Qt::NoButton, mods);
+        settle(1);
+    };
+    auto *numberLabel = form->labelForField(number);
+    auto *realLabel = form->labelForField(real);
+    auto *wholeLabel = form->labelForField(whole);
+
+    // Nome do campo: arrastar para a direita aumenta pelo passo do campo (20 px × 0,5), mesmo
+    // com o campo focado (em edição): o arrasto encerra a edição.
+    drag(numberLabel, 20);
+    h.add("scrub:label-drag-adjusts-a-number-field", std::abs(number->value() - 20.0) < 0.01 && commits == 1 && !number->isEditing(),
+          QStringLiteral("valor %1, confirmações %2, focado no início %3").arg(number->value()).arg(commits).arg(startedFocused));
+    number->valueEditor()->clearFocus();
+    settle(2);
+    // Valor: arrastar para a esquerda diminui; Shift multiplica por 10.
+    drag(number->valueEditor(), -10);
+    const double afterValue = number->value();
+    h.add("scrub:value-drag-adjusts-a-number-field", std::abs(afterValue - 15.0) < 0.01, QString::number(afterValue));
+    drag(numberLabel, 4, Qt::ShiftModifier); // passa do limiar de 3 px
+    h.add("scrub:shift-multiplies-the-step", std::abs(number->value() - (afterValue + 4 * 0.5 * 10)) < 0.01,
+          QString::number(number->value()));
+
+    // Clique sem arrasto no valor leva ao editor (digitar continua sendo o caminho principal).
+    const QPoint inside(number->valueEditor()->width() / 2, number->valueEditor()->height() / 2);
+    const double beforeClick = number->value();
+    mouse(number->valueEditor(), QEvent::MouseButtonPress, inside, Qt::LeftButton, Qt::LeftButton);
+    mouse(number->valueEditor(), QEvent::MouseButtonRelease, inside, Qt::LeftButton, Qt::NoButton);
+    settle(2);
+    h.add("scrub:click-without-drag-edits-the-field", number->isEditing() && std::abs(number->value() - beforeClick) < 1e-9);
+    // Em edição, arrastar sobre o **valor** não ajusta: o texto é do usuário (seleção de texto).
+    const double whileEditing = number->value();
+    drag(number->valueEditor(), 30);
+    h.add("scrub:editing-field-is-not-scrubbed", number->isEditing() && std::abs(number->value() - whileEditing) < 1e-9);
+    number->valueEditor()->clearFocus();
+    settle(2);
+
+    // Spin boxes: nome e valor (as setas do próprio spin box ficam como antes).
+    drag(realLabel, 8);
+    const bool realByLabel = std::abs(real->value() - 3.0) < 0.01;
+    drag(real->findChild<QLineEdit *>(), -4);
+    const bool realByValue = std::abs(real->value() - 2.0) < 0.01;
+    drag(wholeLabel, 10);
+    h.add("scrub:spin-boxes-scrub-by-label-and-value", realByLabel && realByValue && whole->value() == 30,
+          QStringLiteral("double %1, inteiro %2").arg(real->value()).arg(whole->value()));
+}
+
 void checkRefinement(Harness &h, PetuniaShellWindow &window) {
+    checkScrub(h);
+    // O formulário temporário do teste ativou outra janela: devolve a ativação ao shell.
+    window.activateWindow();
+    window.raise();
+    settle(6);
     auto *c = window.controller();
     c->request("workspace", {{"id", "POLY"}});
     settle(8);
@@ -311,6 +406,21 @@ void checkRefinement(Harness &h, PetuniaShellWindow &window) {
     c->request("set_gizmo_size", {{"size", 72}});
     c->request("set_gizmo_thickness", {{"thickness", 2}});
 
+    // Opacidade global do cubo de navegação: vem das preferências e nunca zera.
+    {
+        c->request("set_nav_cube_opacity", {{"opacity", 0.4}});
+        window.syncNow();
+        const double chosen = c->state()["nav_cube_opacity"].toDouble();
+        c->request("set_nav_cube_opacity", {{"opacity", 0.0}});
+        window.syncNow();
+        const double floor = c->state()["nav_cube_opacity"].toDouble();
+        c->request("set_nav_cube_opacity", {{"opacity", 1.0}});
+        window.syncNow();
+        h.add("navcube:opacity-preference", std::abs(chosen - 0.4) < 0.01 && std::abs(floor - 0.2) < 0.01 &&
+                                                 std::abs(c->state()["nav_cube_opacity"].toDouble() - 1.0) < 0.01,
+              QStringLiteral("%1 / %2").arg(chosen).arg(floor));
+    }
+
     // Cubo de navegação: acertos por face, aresta, canto, bússola, início e menu.
     {
         PetuniaNavCube cube;
@@ -458,6 +568,34 @@ void checkRefinement(Harness &h, PetuniaShellWindow &window) {
                 settle(3);
                 window.syncNow();
             }
+        }
+
+        // Ferramenta Medir com cliques reais: o primeiro marca, o segundo grava; limpar remove.
+        {
+            c->request("tool", {{"id", "measure"}});
+            settle(2);
+            window.syncNow();
+            const QPoint first(int(view->width() * 0.3), int(view->height() * 0.6));
+            const QPoint second(int(view->width() * 0.7), int(view->height() * 0.6));
+            mouse(QEvent::MouseButtonPress, first, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            mouse(QEvent::MouseButtonRelease, first, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            window.syncNow();
+            const bool pendingAfterFirst = c->state()["measure_pending"].toBool();
+            mouse(QEvent::MouseMove, (first + second) / 2, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            const bool previewing = view->paintedOverlayState()["measure_visible"].toBool();
+            mouse(QEvent::MouseButtonPress, second, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            mouse(QEvent::MouseButtonRelease, second, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            window.syncNow();
+            const int tags = c->state()["measure_tags"].toArray().size();
+            h.add("measure:first-click-marks-and-preview-follows", pendingAfterFirst && previewing,
+                  QStringLiteral("pendente %1, prévia %2").arg(pendingAfterFirst).arg(previewing));
+            h.add("measure:second-click-stores-the-measurement",
+                  !c->state()["measure_pending"].toBool() && tags >= 1, QStringLiteral("%1 etiqueta(s)").arg(tags));
+            c->request("command", {{"id", "measure.clear"}});
+            window.syncNow();
+            h.add("measure:clear-removes-the-stored-measurements", c->state()["measure_tags"].toArray().isEmpty());
+            c->request("tool", {{"id", "move"}});
+            settle(2);
         }
 
         // Gizmo universal: o Selecionar e o Transformar mostram setas, anéis e cubos de escala;
@@ -720,6 +858,24 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
             QCoreApplication::sendEvent(canvas, &spaceUp);
             h.add("nodes:space-drag-pans", QLineF(beforeSpace, sceneAt(mid)).length() > 20);
 
+            // A legenda de tipos é fixa na vista: depois de um pan, a faixa dela é a mesma.
+            {
+                settle(2);
+                const QImage first = canvas->grab().toImage();
+                canvas->panBy(QPointF(137, 59));
+                settle(2);
+                const QImage second = canvas->grab().toImage();
+                const QRect legend(10, 10, 150, 26);
+                int same = 0, total = 0;
+                for (int y = legend.top(); y < legend.bottom() && y < first.height(); ++y)
+                    for (int x = legend.left(); x < legend.right() && x < first.width(); ++x, ++total)
+                        same += first.pixel(x, y) == second.pixel(x, y) ? 1 : 0;
+                h.add("nodes:legend-stays-fixed-while-panning",
+                      canvas->viewportUpdateMode() == QGraphicsView::FullViewportUpdate && total > 0 &&
+                          same * 100 >= total * 95,
+                      QStringLiteral("%1 de %2 pixels iguais").arg(same).arg(total));
+            }
+
             // Longe dos nós a vista continua livre (cena infinita) e "enquadrar" volta.
             canvas->panBy(QPointF(20000, 20000));
             h.add("nodes:view-can-leave-the-graph", !nodesVisible());
@@ -734,6 +890,144 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
             canvas->panBy(QPointF(-9000, -3000));
             sendKey(canvas, Qt::Key_Home);
             h.add("nodes:home-frames-everything", nodesVisible());
+        }
+
+        // Multisseleção e grupos de nós: caixa no vazio, Ctrl+clique, arrastar em bloco,
+        // Ctrl+G agrupa, renomear (teclado e duplo clique) e Ctrl+Shift+G desfaz.
+        {
+            auto *surface = canvas->viewport();
+            const auto press = [&](QEvent::Type type, const QPoint &at, Qt::MouseButton button, Qt::MouseButtons held,
+                                   Qt::KeyboardModifiers mods = Qt::NoModifier) {
+                QMouseEvent event(type, QPointF(at), QPointF(surface->mapToGlobal(at)), button, held, mods);
+                QCoreApplication::sendEvent(surface, &event);
+                settle(1);
+            };
+            canvas->fitAll();
+            settle(2);
+            const QStringList all = canvas->nodeIds();
+            QRect bounds;
+            for (const auto &id : all)
+                bounds = bounds.united(canvas->nodeViewportRect(id));
+            const QPoint from = bounds.topLeft() - QPoint(10, 10);
+            const QPoint to = bounds.bottomRight() + QPoint(10, 10);
+            bool emptyStart = surface->rect().contains(from);
+            for (const auto &id : all)
+                emptyStart = emptyStart && !canvas->nodeViewportRect(id).contains(from);
+            h.add("nodes:box-start-is-empty-space", emptyStart);
+
+            press(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+            press(QEvent::MouseMove, (from + to) / 2, Qt::NoButton, Qt::LeftButton);
+            press(QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton);
+            press(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+            h.add("nodes:box-selects-every-node", canvas->selectedNodeIds().size() == all.size() && all.size() >= 2,
+                  QStringLiteral("%1 de %2").arg(canvas->selectedNodeIds().size()).arg(all.size()));
+            // Clique no vazio reduz a multisseleção ao nó principal.
+            press(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+            press(QEvent::MouseButtonRelease, from, Qt::LeftButton, Qt::NoButton);
+            h.add("nodes:click-on-empty-space-narrows-the-selection", canvas->selectedNodeIds().size() == 1,
+                  QString::number(canvas->selectedNodeIds().size()));
+
+            if (all.size() >= 2) {
+                const QString a = all[0], b = all[1];
+                const auto center = [&](const QString &id) { return canvas->nodeViewportRect(id).center(); };
+                press(QEvent::MouseButtonPress, center(a), Qt::LeftButton, Qt::LeftButton);
+                press(QEvent::MouseButtonRelease, center(a), Qt::LeftButton, Qt::NoButton);
+                press(QEvent::MouseButtonPress, center(b), Qt::LeftButton, Qt::LeftButton, Qt::ControlModifier);
+                press(QEvent::MouseButtonRelease, center(b), Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+                h.add("nodes:ctrl-click-adds-to-the-selection", canvas->selectedNodeIds().size() == 2,
+                      QString::number(canvas->selectedNodeIds().size()));
+
+                // Arrastar um nó da multisseleção move os dois, o mesmo deslocamento.
+                const QPointF a0 = canvas->nodeScenePosition(a), b0 = canvas->nodeScenePosition(b);
+                const QPoint start = center(a);
+                press(QEvent::MouseButtonPress, start, Qt::LeftButton, Qt::LeftButton);
+                for (int step = 1; step <= 6; ++step)
+                    press(QEvent::MouseMove, start + QPoint(step * 8, step * 4), Qt::NoButton, Qt::LeftButton);
+                press(QEvent::MouseButtonRelease, start + QPoint(48, 24), Qt::LeftButton, Qt::NoButton);
+                window.syncNow();
+                const QPointF da = canvas->nodeScenePosition(a) - a0, db = canvas->nodeScenePosition(b) - b0;
+                h.add("nodes:dragging-moves-the-whole-selection",
+                      da.manhattanLength() > 10 && QLineF(da, db).length() < 0.5 && canvas->selectedNodeIds().size() == 2,
+                      QStringLiteral("A %1,%2  B %3,%4").arg(da.x()).arg(da.y()).arg(db.x()).arg(db.y()));
+
+                // Ctrl+A seleciona todos os nós (o atalho global de selecionar tudo não o engole).
+                canvas->selectNodes({a});
+                sendKey(canvas, Qt::Key_A, Qt::ControlModifier);
+                h.add("nodes:ctrl-a-selects-every-node", canvas->selectedNodeIds().size() == all.size(),
+                      QStringLiteral("%1 de %2").arg(canvas->selectedNodeIds().size()).arg(all.size()));
+                canvas->selectNodes({a, b});
+
+                // Ctrl+G agrupa a seleção: um quadro com os dois nós.
+                sendKey(canvas, Qt::Key_G, Qt::ControlModifier);
+                window.syncNow();
+                QStringList members = canvas->groupCount() == 1 ? canvas->groupMembers(0) : QStringList();
+                members.sort();
+                QStringList expected{a, b};
+                expected.sort();
+                const bool grouped = canvas->groupCount() == 1 && members == expected;
+                // Diagnóstico: o que a tecla deixou, ANTES de qualquer pedido de apoio.
+                const QString afterKey = QStringLiteral("grupos %1 (estado %2), membros [%3], esperado [%4], selecionados %5")
+                                             .arg(canvas->groupCount())
+                                             .arg(c->state()["op_graph"].toObject()["groups"].toArray().size())
+                                             .arg(members.join(','), expected.join(','))
+                                             .arg(canvas->selectedNodeIds().size());
+                if (!grouped) {
+                    // Apoio para os testes seguintes seguirem com um grupo existente.
+                    c->request("graph_group", {{"nodes", QJsonArray{a, b}}});
+                    window.syncNow();
+                }
+                h.add("nodes:ctrl-g-groups-the-selected-nodes", grouped, afterKey);
+
+                // Renomear pelo teclado: o editor abre sobre o título; Enter confirma.
+                bool opened = false;
+                if (canvas->groupCount() >= 1) {
+                    canvas->beginRenameGroup(canvas->groupId(0));
+                    auto *editor = surface->findChild<QLineEdit *>();
+                    opened = editor && editor->isVisible();
+                    if (editor) {
+                        editor->setText(QStringLiteral("Parede"));
+                        sendKey(editor, Qt::Key_Return);
+                    }
+                    window.syncNow();
+                }
+                h.add("nodes:rename-group-by-keyboard",
+                      opened && canvas->groupCount() >= 1 && canvas->groupName(0) == QStringLiteral("Parede"),
+                      canvas->groupName(0));
+
+                // Duplo clique no título abre o editor; Esc cancela sem mudar o nome.
+                bool opensOnDoubleClick = false;
+                if (canvas->groupCount() >= 1) {
+                    const QPoint title = canvas->groupTitleViewportRect(0).center();
+                    QMouseEvent doubleClick(QEvent::MouseButtonDblClick, QPointF(title), QPointF(surface->mapToGlobal(title)),
+                                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                    QCoreApplication::sendEvent(surface, &doubleClick);
+                    settle(2);
+                    auto *second = surface->findChild<QLineEdit *>();
+                    opensOnDoubleClick = second && second->isVisible() && second->text() == QStringLiteral("Parede");
+                    if (second) {
+                        second->setText(QStringLiteral("Descartado"));
+                        sendKey(second, Qt::Key_Escape);
+                    }
+                    window.syncNow();
+                }
+                h.add("nodes:double-click-renames-and-escape-cancels",
+                      opensOnDoubleClick && canvas->groupCount() >= 1 && canvas->groupName(0) == QStringLiteral("Parede"),
+                      canvas->groupName(0));
+
+                // Ctrl+Shift+G desfaz o grupo e mantém os nós.
+                const int nodesBefore = canvas->nodeCount();
+                const QStringList selectedBefore = canvas->selectedNodeIds();
+                sendKey(canvas, Qt::Key_G, Qt::ControlModifier | Qt::ShiftModifier);
+                window.syncNow();
+                h.add("nodes:ctrl-shift-g-ungroups-keeping-the-nodes",
+                      canvas->groupCount() == 0 && canvas->nodeCount() == nodesBefore && grouped,
+                      QStringLiteral("grupos %1, nós %2/%3, selecionados antes [%4], tecla agrupou antes: %5")
+                          .arg(canvas->groupCount())
+                          .arg(canvas->nodeCount())
+                          .arg(nodesBefore)
+                          .arg(selectedBefore.join(','))
+                          .arg(grouped));
+            }
         }
         QString opId;
         QString wallNode;

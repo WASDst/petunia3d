@@ -815,6 +815,7 @@ impl QtEditor {
                 p.selection_thickness = state.ui.selection_thickness;
                 p.gizmo_size = state.ui.gizmo_size;
                 p.gizmo_thickness = state.ui.gizmo_thickness;
+                p.nav_cube_opacity = state.ui.nav_cube_opacity;
                 p.model_quick_actions = state.ui.model_quick_actions.clone();
                 p.active_keymap_id = state.ui.active_keymap_id.clone();
                 p.theme_id = state.ui.active_theme_id.clone();
@@ -1719,7 +1720,10 @@ fn dispatch_controller(
         "set_selection_color_hex" => b.set_selection_color_hex(string(v, "value")?),
         "set_selection_thickness" => b.set_selection_thickness(number(v, "thickness")?),
         "set_gizmo_size" => b.set_gizmo_size(number(v, "size")?),
+        "measure_click" => b.measure_click(number(v, "norm_x")?, number(v, "norm_y")?),
+        "measure_hover" => b.measure_hover(number(v, "norm_x")?, number(v, "norm_y")?),
         "set_gizmo_thickness" => b.set_gizmo_thickness(number(v, "thickness")?),
+        "set_nav_cube_opacity" => b.set_nav_cube_opacity(number(v, "opacity")?),
         "set_shading_mode" => b.set_shading_mode(string(v, "id")?),
         "set_show_home_on_start" => b.set_show_home_on_start(boolean(v, "enabled")?),
         "set_show_tool_labels" => b.set_show_tool_labels(boolean(v, "enabled")?),

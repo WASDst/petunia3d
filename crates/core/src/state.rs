@@ -1691,6 +1691,8 @@ pub struct UiState {
     pub gizmo_size: f32,
     /// Espessura do traço dos gizmos (px lógicos, 1..=6).
     pub gizmo_thickness: f32,
+    /// Opacidade do cubo de navegação (0,2..=1).
+    pub nav_cube_opacity: f32,
     pub inspector_detached: bool,
     /// Opções do diálogo de exportação (não pertencem ao documento).
     pub export_selected: Vec<Uuid>,
@@ -1806,6 +1808,7 @@ impl UiState {
             selection_thickness: 2.0,
             gizmo_size: 72.0,
             gizmo_thickness: 2.0,
+            nav_cube_opacity: 1.0,
             inspector_detached: false,
             export_selected: Vec::new(),
             export_gltf: true,
@@ -3295,12 +3298,11 @@ impl CommandContext<'_> {
         if self.modal.is_some() || self.mesh_preview.is_some() || self.paint_stroke.is_some() {
             return;
         }
-        let Some(index) = index.filter(|&i| {
-            self.document
-                .assets
-                .get(i)
-                .is_some_and(|a| a.visible && !a.locked)
-        }) else {
+        // Oculto não é bloqueado: o objeto continua selecionável (Partes, nós) e
+        // transformável. Só `locked` recusa; selecionar tudo e clicar na vista
+        // continuam ignorando o que está oculto (não há o que apontar).
+        let Some(index) = index.filter(|&i| self.document.assets.get(i).is_some_and(|a| !a.locked))
+        else {
             if !extend {
                 self.document.active = usize::MAX;
                 self.editor.selection = Selection::default();
