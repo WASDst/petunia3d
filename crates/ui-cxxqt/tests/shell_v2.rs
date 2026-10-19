@@ -45,6 +45,7 @@ fn shell_v2_regions_layout_focus_and_theme() {
     // As verificações da GUI completa (F7, V03, U07) precisam ter rodado de fato.
     let names: Vec<&str> = checks.iter().filter_map(|c| c["name"].as_str()).collect();
     let missing: Vec<&str> = [
+        "file:menu-offers-the-model-import",
         "paint:native-property-sections",
         "paint:panels-have-no-missing-bindings",
         "paint:layer-mask-added-by-the-panel",

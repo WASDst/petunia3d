@@ -111,6 +111,10 @@ class PetuniaShellWindow : public QMainWindow {
 
     void newProject();
     void openProject();
+    /// Abre o diálogo de importação de modelo. `kind` filtra ("obj", "gltf")
+    /// ou vazio para todos os formatos suportados.
+    void importModel(const QString &kind);
+    void importPalette();
     bool saveProject();
     bool saveProjectAs();
     void exportTo(const QString &kind);
@@ -124,6 +128,9 @@ class PetuniaShellWindow : public QMainWindow {
     QString m_workspace;
     bool m_applyingLayout{false};
     bool m_hostDialogPending{false};
+    /// Último pedido de importação atendido (contador do documento): a
+    /// interface abre o diálogo quando o número muda.
+    quint64 m_importRequest{0};
     QTimer m_layoutTimer;
 
     PetuniaAppBar *m_appBar{nullptr};

@@ -309,6 +309,17 @@ void PetuniaShellWindow::onState(const QJsonObject &state) {
     }
     m_language = language;
 
+    // Pedido de importação vindo da paleta de comandos: o comando não abre
+    // janela (regra de chamada programática); quem atende é a interface, que
+    // abre o diálogo de arquivos.
+    const auto request = state["import_request"].toVariant().toULongLong();
+    if (request != m_importRequest) {
+        m_importRequest = request;
+        const QString kind = state["import_request_filter"].toString();
+        if (!kind.isEmpty())
+            importModel(kind);
+    }
+
     const QString workspace = m_controller.workspaceId();
     if (workspace != m_workspace)
         onWorkspaceChanged(workspace);
@@ -619,6 +630,10 @@ void PetuniaShellWindow::triggerLocalAction(const QString &id) {
             m_controller.request(QStringLiteral("project.new_empty"));
     } else if (id == QLatin1String("file.open"))
         openProject();
+    else if (id == QLatin1String("file.import_model"))
+        importModel(QString());
+    else if (id == QLatin1String("file.import_palette"))
+        importPalette();
     else if (id == QLatin1String("file.save"))
         saveProject();
     else if (id == QLatin1String("file.save_as"))
@@ -683,6 +698,28 @@ void PetuniaShellWindow::openProject() {
         this, tr("Abrir projeto Petunia3D"), QString(), tr("Projetos Petunia (*.petunia *.json);;Todos os arquivos (*)"));
     if (!path.isEmpty())
         m_controller.request(QStringLiteral("project.open"), {{"path", path}});
+}
+
+void PetuniaShellWindow::importModel(const QString &kind) {
+    QString filter = tr("Modelos 3D (*.obj *.gltf *.glb *.pkg);;Wavefront OBJ (*.obj);;glTF (*.gltf *.glb);;Pacote Petunia (*.pkg);;Todos os arquivos (*)");
+    if (kind == QLatin1String("obj"))
+        filter = tr("Wavefront OBJ (*.obj);;Todos os arquivos (*)");
+    else if (kind == QLatin1String("gltf"))
+        filter = tr("glTF (*.gltf *.glb);;Todos os arquivos (*)");
+    const QString path =
+        QFileDialog::getOpenFileName(this, tr("Importar modelo"), QString(), filter);
+    if (path.isEmpty())
+        return;
+    m_controller.request(QStringLiteral("import_model"), {{"path", path}});
+}
+
+void PetuniaShellWindow::importPalette() {
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Importar paleta"), QString(),
+        tr("Paletas (*.gpl *.hex);;GPL (*.gpl);;HEX (*.hex);;Todos os arquivos (*)"));
+    if (path.isEmpty())
+        return;
+    m_controller.request(QStringLiteral("import_palette"), {{"path", path}});
 }
 
 bool PetuniaShellWindow::saveProject() {

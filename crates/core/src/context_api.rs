@@ -974,6 +974,12 @@ impl AppState {
         self.in_context(|ctx| ctx.toggle_paint_isolate_ghost())
     }
 
+    /// Pedido de importação para o host abrir o diálogo de arquivos.
+    #[inline]
+    pub fn request_import(&mut self, filter: &str) {
+        self.in_context(|ctx| ctx.request_import(filter))
+    }
+
     #[inline]
     pub fn refresh_isolation(&mut self) {
         self.in_context(|ctx| ctx.refresh_isolation())

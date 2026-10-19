@@ -961,6 +961,11 @@
       "revision": "árvore de trabalho sobre c7015320 (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Onda C, parte 1 (C1–C3) + correção do wireframe. C1: efeitos como sub-camadas (opacidade e máscara próprias) aplicados ao conteúdo antes da mescla, máscara em camada e em efeito, alvo do pincel (conteúdo/máscara) e opções da camada ativa no painel. C2: ferramenta única Projeção (descriptor Decal sai do catálogo), pintar só a seleção já existente, isolar para pintura em fantasma preservando o Raio-X do usuário, prateleira de pincéis com miniaturas procedurais. C3: gradiente como camada de preenchimento editável (linear/refletido/radial/diamante/angular no painel, paradas com posição e cor, geometria por eixo). Wireframe: cada aresta carrega as normais das duas faces vizinhas; sem Raio-X (e no Wireframe, que é Raio-X por definição) as arestas de trás são descartadas; arestas abertas ou não-manifold sempre aparecem — corrige o 'estouro' nas bordas relatado pelo usuário. Arquivo hostil: PaintLayerStack::repair normaliza índice ativo, parâmetros não finitos, limite de sub-efeitos, tamanho de máscaras, alvo órfão, grupo inexistente e ciclo de grupos, e é chamado de Project::validate. Gates: fmt limpo; clippy -D warnings (core, project, module-paint, render, editor; --all-targets) 0 avisos; testes de biblioteca 293 (project) + 125 (module-paint) + 210 (core) + 40 (render) + 148 (editor, animation-workspace), 0 falhas, incluindo os novos (máscara/inversão, ordem de sub-efeitos, gradiente hostil, tiling == full com gradiente+efeito+máscara, repair idempotente, mescla recusando ajuste embaixo, alvo do pincel, ops de gradiente/efeito/máscara, ghost isolation, normais de aresta e faixas). Qt: cargo check -p petunia_ui_cxxqt (C++ compila), editor_parity offscreen 24/24 e shell_v2 323 verificações, 0 reprovadas, com 8 novas dos painéis novos (toda chave ligada existe no snapshot, máscara pela interface, sub-efeito adicionar/remover, camada de gradiente e parada, isolar para pintura liga/restaura). Defeito achado pelo próprio harness e corrigido: o controle 'Isolar para pintura' compilava mas não fazia nada (enviava {\"id\": booleano} em vez da ação); virou a ação de request toggle_paint_isolate, a mesma do keybind. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%, capturas visuais."
+    },
+    "i03-import-model-no-shell-2026-10-19": {
+      "revision": "árvore de trabalho sobre de656ab4 (commit desta entrega)",
+      "document": "12-interchange/import-export-game-ready.md",
+      "summary": "Importação de modelos corrigida (relato do usuário: não funcionava para nenhum formato e, principalmente, com textura). Quatro defeitos: (1) OBJ ignorava o .mtl (sem material e sem textura) — agora import_obj::import_obj_file lê .mtl, Kd, Ns→rugosidade, map_Kd e map_Bump, com o material por face e a textura espelhada no asset; (2) OBJ com vários objetos trazia só o primeiro — agora todos entram, com o nome do objeto do arquivo (como no Blender) ou o nome do arquivo; (3) .gltf com skin/animation e buffers externos falhava inteiro porque o rig era importado antes da tolerância — rig ilegível virou aviso; (4) não havia porta de entrada — o menu Arquivo ganhou Importar (modelo 3D, paleta) e os comandos file.import_obj/file.import_gltf passaram a pedir a importação (import_request no snapshot), com a interface abrindo o diálogo. Segurança: .mtl e texturas resolvidos só dentro da pasta do modelo (mesmo confinamento do glTF), com teste de path traversal. Feedback: arquivo sem malha vira recusa com status próprio; o import é desfazível por Undo. Matriz de capacidades separada por direção (import/export) com a união no formato. Gates: fmt limpo; clippy -D warnings (project, core, editor, config, ui-cxxqt; --all-targets) 0 avisos; project 297 lib + 19 pipeline (3 novos) + demais suítes, core 210, editor 148 (animation-workspace), config 27; ui-cxxqt offscreen: import_model 8 testes (novos), editor_parity 24, shell_v2 324 verificações (1 nova: file:menu-offers-the-model-import), ui_i18n_catalog 3. Defeito herdado corrigido no caminho: 53 textos do shell (painéis de camada/efeitos/gradiente/projeção da Onda C) estavam fora do catálogo nativo e faziam o gate de i18n falhar. Não executado: janela real com GPU, arrasto de arquivo, Windows, leitor de tela."
     }
   },
   "tasks": [
@@ -2861,6 +2866,52 @@
       "documents": [
         "12-interchange/import-export-game-ready.md",
         "03-geometry/validation-repair-cleanup.md"
+      ]
+    },
+    {
+      "id": "I03",
+      "phase": "adapters",
+      "title": "Importação de modelo no shell",
+      "description": "OBJ com .mtl e textura, glTF/GLB com material e textura, entrada no menu Arquivo e pedido da paleta de comandos atendido pela interface.",
+      "document": "12-interchange/import-export-game-ready.md",
+      "status": "DONE",
+      "updated": "2026-10-19",
+      "baseline": "Relato do usuário em 2026-10-19: a importação não funcionava para nenhum formato e, principalmente, com textura. Auditoria achou quatro defeitos: OBJ sem .mtl, OBJ de um objeto só, .gltf com rig externo derrubando o import e ausência de porta de entrada no menu.",
+      "checkpoints": [
+        {
+          "title": "OBJ lê .mtl: material por objeto, Kd, Ns→rugosidade, map_Kd e map_Bump, com a textura no asset.",
+          "completed": true,
+          "evidence": "i03-import-model-no-shell-2026-10-19"
+        },
+        {
+          "title": "Todos os objetos do OBJ entram, com nome do objeto (ou do arquivo) e material próprio.",
+          "completed": true,
+          "evidence": "i03-import-model-no-shell-2026-10-19"
+        },
+        {
+          "title": "Rig ilegível vira aviso; a geometria entra de qualquer forma (.gltf com buffers externos).",
+          "completed": true,
+          "evidence": "i03-import-model-no-shell-2026-10-19"
+        },
+        {
+          "title": "Menu Arquivo > Importar (modelo 3D, paleta) e pedido da paleta de comandos atendido pela interface.",
+          "completed": true,
+          "evidence": "i03-import-model-no-shell-2026-10-19"
+        },
+        {
+          "title": "Confinamento dos arquivos externos do modelo (path traversal recusado, aviso em vez de erro fatal).",
+          "completed": true,
+          "evidence": "i03-import-model-no-shell-2026-10-19"
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": true,
+          "evidence": "i03-import-model-no-shell-2026-10-19"
+        }
+      ],
+      "documents": [
+        "12-interchange/import-export-game-ready.md",
+        "00-philosophy/decision-register.md"
       ]
     },
     {

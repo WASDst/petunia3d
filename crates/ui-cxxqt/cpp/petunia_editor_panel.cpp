@@ -546,7 +546,7 @@ void PetuniaEditorPanel::setupAssets() {
                     send("delete_prefab", {{"id", id}});
             });
     fileButton(form, tr("Importar modelo"), "import_model",
-               tr("Modelos (*.obj *.glb *.gltf)"));
+               tr("Modelos 3D (*.obj *.gltf *.glb *.pkg);;Wavefront OBJ (*.obj);;glTF (*.gltf *.glb);;Pacote Petunia (*.pkg);;Todos os arquivos (*)"));
     fileButton(form, tr("Exportar OBJ"), "export_obj", tr("OBJ (*.obj)"), true);
     fileButton(form, tr("Exportar GLB"), "export_glb", tr("GLB (*.glb)"), true);
 }

@@ -78,7 +78,6 @@ const MAX_VERTICES: usize = 1_000_000;
 const MAX_FACES: usize = 1_000_000;
 const MAX_BUFFER_BYTES: usize = 256 * 1024 * 1024;
 const MAX_IMAGES: usize = 64;
-const MAX_CANVAS_DIM: u32 = crate::Canvas::MAX_SIDE;
 
 /// Imports a GLB (or glTF with embedded buffers) into meshes.
 ///
@@ -535,56 +534,10 @@ fn resolve_buffer_uri(
 ///
 /// Rejeita path traversal (`..`), caminhos absolutos (`/`, `C:\`, `\\`) e esquemas de rede.
 fn resolve_safe_path(base_dir: &Path, uri: &str) -> Result<std::path::PathBuf, GltfImportError> {
-    if uri.starts_with("http://")
-        || uri.starts_with("https://")
-        || uri.starts_with("file://")
-        || uri.contains("://")
-    {
-        return Err(GltfImportError::Validation(
-            "URI remota ou esquema não suportado (sem rede no import)".to_string(),
-        ));
-    }
+    // Mesma regra do OBJ: caminho relativo, sem `..` e dentro do diretório base.
     let rel_str = percent_decode(uri);
-    let rel_path = Path::new(&rel_str);
-
-    // Rejeitar caminhos absolutos no estilo POSIX ou Windows
-    if rel_path.is_absolute()
-        || rel_str.starts_with('/')
-        || rel_str.starts_with('\\')
-        || (rel_str.len() >= 2 && rel_str.as_bytes()[1] == b':')
-    {
-        return Err(GltfImportError::Validation(format!(
-            "caminho absoluto não permitido em URI externa: '{uri}'"
-        )));
-    }
-
-    // Rejeitar path traversal
-    for comp in rel_path.components() {
-        match comp {
-            std::path::Component::ParentDir => {
-                return Err(GltfImportError::Validation(format!(
-                    "path traversal ('..') detectado em URI externa: '{uri}'"
-                )));
-            }
-            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
-                return Err(GltfImportError::Validation(format!(
-                    "caminho com raiz/prefixo detectado em URI externa: '{uri}'"
-                )));
-            }
-            _ => {}
-        }
-    }
-
-    let resolved = base_dir.join(rel_path);
-    if let (Ok(canon_base), Ok(canon_target)) = (base_dir.canonicalize(), resolved.canonicalize())
-        && !canon_target.starts_with(&canon_base)
-    {
-        return Err(GltfImportError::Validation(format!(
-            "caminho escapa do diretório base: '{uri}'"
-        )));
-    }
-
-    Ok(resolved)
+    crate::external_path::resolve_external_path(base_dir, &rel_str)
+        .map_err(GltfImportError::Validation)
 }
 
 fn import_materials_list(
@@ -689,27 +642,7 @@ fn decode_texture_image(
     base_dir: Option<&Path>,
 ) -> Result<crate::Canvas, String> {
     let bytes = image_bytes(image, buffers, base_dir)?;
-    if bytes.len() > 64 * 1024 * 1024 {
-        return Err("imagem excede 64 MiB".to_string());
-    }
-    let dyn_img = image::load_from_memory(&bytes).map_err(|e| format!("decode: {e}"))?;
-    let mut rgba = dyn_img.to_rgba8();
-    let (w, h) = (rgba.width(), rgba.height());
-    if w == 0 || h == 0 {
-        return Err("imagem vazia".to_string());
-    }
-    if w > MAX_CANVAS_DIM || h > MAX_CANVAS_DIM {
-        let s = (MAX_CANVAS_DIM as f32 / w.max(h) as f32).min(1.0);
-        let nw = ((w as f32 * s) as u32).max(1);
-        let nh = ((h as f32 * s) as u32).max(1);
-        rgba = image::imageops::resize(&rgba, nw, nh, image::imageops::FilterType::Triangle);
-    }
-    let (w, h) = (rgba.width(), rgba.height());
-    Ok(crate::Canvas {
-        w,
-        h,
-        pixels: rgba.into_raw().into(),
-    })
+    crate::image_decode::decode_image_bytes(&bytes)
 }
 
 fn image_bytes(

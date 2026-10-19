@@ -472,6 +472,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &path,
                     &petunia_project::pipeline::ImportOptions::default(),
                 ) {
+                    Ok(names) if names.is_empty() => {
+                        // Arquivo lido, mas sem malha: não é sucesso.
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_NO_MESH_IMPORTED),
+                            &[("0", format!("{}", path.display()))],
+                        ));
+                    }
                     Ok(names) => self.state.set_status(crate::tr::fill(
                         &self
                             .state

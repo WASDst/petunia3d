@@ -474,6 +474,11 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         json!(&vm.paint_mask_selection),
     );
     obj.insert("paint_isolate_ghost".into(), json!(&vm.paint_isolate_ghost));
+    obj.insert("import_request".into(), json!(&vm.import_request));
+    obj.insert(
+        "import_request_filter".into(),
+        json!(&vm.import_request_filter),
+    );
     obj.insert("isolate_active".into(), json!(&vm.isolate_active));
     obj.insert("status_message".into(), json!(&vm.status_message));
     obj.insert("status_severity".into(), json!(&vm.status_severity));

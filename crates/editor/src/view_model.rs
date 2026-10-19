@@ -292,6 +292,11 @@ pub struct ShellViewModel {
     pub paint_mask_selection: bool,
     /// Isolamento de pintura em raio-X (C2).
     pub paint_isolate_ghost: bool,
+    /// Pedido de importação pendente: o contador muda a cada pedido e o host
+    /// (interface) abre o diálogo de arquivos.
+    pub import_request: u64,
+    /// Filtro sugerido para o pedido ("model", "obj", "gltf").
+    pub import_request_filter: String,
     /// Isolamento do objeto ativo ligado (esconde os demais).
     pub isolate_active: bool,
     pub status_message: String,
@@ -1362,6 +1367,8 @@ impl ShellViewModel {
             paint_target_vertex: false,
             paint_mask_selection: state.session.tools.paint_isolate_selection,
             paint_isolate_ghost: state.session.paint_isolate_ghost,
+            import_request: state.session.import_request,
+            import_request_filter: state.session.import_request_filter.clone(),
             isolate_active: state.session.isolate_active,
             status_message,
             status_severity,

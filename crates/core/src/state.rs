@@ -1313,6 +1313,11 @@ pub struct EditorSession {
     pub paint_isolate_ghost: bool,
     /// Raio-X anterior ao isolamento de pintura (restaurado ao desligar).
     pub paint_isolate_prev_xray: Option<bool>,
+    /// Pedido de importação pendente (contador): o comando pede, o host
+    /// (interface) abre o diálogo. Comando programático nunca abre janela.
+    pub import_request: u64,
+    /// Filtro sugerido para o pedido de importação ("model", "obj", "gltf").
+    pub import_request_filter: String,
     pub snap_enabled: bool,
     pub snap_settings: crate::snap::SnapSettings,
     pub proportional_editing: bool,
@@ -1389,6 +1394,14 @@ impl EditorSession {
             .selects_through(self.show_xray, self.shading)
     }
 
+    /// Pedido de importação para o host: o contador muda a cada pedido para
+    /// que a interface perceba "pedido novo" e abra o diálogo de arquivos.
+    /// O comando não abre janela — quem atende é a interface.
+    pub fn request_import(&mut self, filter: &str) {
+        self.import_request = self.import_request.wrapping_add(1);
+        self.import_request_filter = filter.to_string();
+    }
+
     pub fn new() -> Self {
         Self {
             viewport_rect: None,
@@ -1409,6 +1422,8 @@ impl EditorSession {
             isolate_prev_visibilities: None,
             paint_isolate_ghost: false,
             paint_isolate_prev_xray: None,
+            import_request: 0,
+            import_request_filter: String::new(),
             // Snapping contextual por padrão (capítulo 01, "Smart Snap").
             snap_enabled: true,
             snap_settings: crate::snap::SnapSettings::default(),

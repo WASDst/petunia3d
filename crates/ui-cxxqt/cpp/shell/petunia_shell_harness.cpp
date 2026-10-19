@@ -1084,6 +1084,33 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
                                      window.structure() && window.properties() && window.drawer() &&
                                      window.statusRegion() && window.hud() && window.contextActions());
 
+    // Arquivo > Importar: a importação de modelo precisa estar no menu (a
+    // porta que faltava para o usuário alcançar o importador). A busca é pelo
+    // id da ação, não pelo rótulo (o idioma muda o texto).
+    {
+        QStringList ids;
+        bool hasModel = false;
+        if (auto *bar = window.appBar()) {
+            for (auto *menu : bar->menuBar()->actions()) {
+                auto *fileMenu = menu->menu();
+                if (!fileMenu)
+                    continue;
+                for (auto *action : fileMenu->actions()) {
+                    auto *sub = action->menu();
+                    if (!sub)
+                        continue;
+                    for (auto *entry : sub->actions()) {
+                        const QString id = entry->data().toString();
+                        ids << id;
+                        if (id == QLatin1String("file.import_model"))
+                            hasModel = true;
+                    }
+                }
+            }
+        }
+        h.add("file:menu-offers-the-model-import", hasModel, ids.join(","));
+    }
+
     // Seleciona o primeiro objeto da cena para exercitar propriedades e ações.
     const auto items = c->state()["scene_items"].toArray();
     if (!items.isEmpty())

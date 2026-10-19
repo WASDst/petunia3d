@@ -5902,5 +5902,221 @@
   "Selecionar mostra escalar": {
     "pt-BR": "Selecionar mostra escalar",
     "en": "Select shows scale"
+  },
+  "Importar": {
+    "pt-BR": "Importar",
+    "en": "Import"
+  },
+  "Modelo 3D (OBJ, glTF, GLB)…": {
+    "pt-BR": "Modelo 3D (OBJ, glTF, GLB)…",
+    "en": "3D model (OBJ, glTF, GLB)…"
+  },
+  "Paleta de cores (.gpl, .hex)…": {
+    "pt-BR": "Paleta de cores (.gpl, .hex)…",
+    "en": "Color palette (.gpl, .hex)…"
+  },
+  "Modelos 3D (*.obj *.gltf *.glb *.pkg);;Wavefront OBJ (*.obj);;glTF (*.gltf *.glb);;Pacote Petunia (*.pkg);;Todos os arquivos (*)": {
+    "pt-BR": "Modelos 3D (*.obj *.gltf *.glb *.pkg);;Wavefront OBJ (*.obj);;glTF (*.gltf *.glb);;Pacote Petunia (*.pkg);;Todos os arquivos (*)",
+    "en": "3D models (*.obj *.gltf *.glb *.pkg);;Wavefront OBJ (*.obj);;glTF (*.gltf *.glb);;Petunia package (*.pkg);;All files (*)"
+  },
+  "glTF (*.gltf *.glb);;Todos os arquivos (*)": {
+    "pt-BR": "glTF (*.gltf *.glb);;Todos os arquivos (*)",
+    "en": "glTF (*.gltf *.glb);;All files (*)"
+  },
+  "Paletas (*.gpl *.hex);;GPL (*.gpl);;HEX (*.hex);;Todos os arquivos (*)": {
+    "pt-BR": "Paletas (*.gpl *.hex);;GPL (*.gpl);;HEX (*.hex);;Todos os arquivos (*)",
+    "en": "Palettes (*.gpl *.hex);;GPL (*.gpl);;HEX (*.hex);;All files (*)"
+  },
+  "%1 · %2 · %3 px": {
+    "pt-BR": "%1 · %2 · %3 px",
+    "en": "%1 · %2 · %3 px"
+  },
+  "Alvo do pincel": {
+    "pt-BR": "Alvo do pincel",
+    "en": "Brush target"
+  },
+  "Conteúdo da camada": {
+    "pt-BR": "Conteúdo da camada",
+    "en": "Layer content"
+  },
+  "Máscara da camada": {
+    "pt-BR": "Máscara da camada",
+    "en": "Layer mask"
+  },
+  "conteúdo da camada": {
+    "pt-BR": "conteúdo da camada",
+    "en": "layer content"
+  },
+  "máscara da camada": {
+    "pt-BR": "máscara da camada",
+    "en": "layer mask"
+  },
+  "máscara do efeito": {
+    "pt-BR": "máscara do efeito",
+    "en": "effect mask"
+  },
+  "Máscara ativa": {
+    "pt-BR": "Máscara ativa",
+    "en": "Mask enabled"
+  },
+  "Inverter máscara": {
+    "pt-BR": "Inverter máscara",
+    "en": "Invert mask"
+  },
+  "Adicionar máscara à camada": {
+    "pt-BR": "Adicionar máscara à camada",
+    "en": "Add layer mask"
+  },
+  "Remover máscara da camada": {
+    "pt-BR": "Remover máscara da camada",
+    "en": "Remove layer mask"
+  },
+  "Pintar direto no conteúdo da camada ativa": {
+    "pt-BR": "Pintar direto no conteúdo da camada ativa",
+    "en": "Paint straight on the active layer content"
+  },
+  "Pintar a máscara que limita a camada": {
+    "pt-BR": "Pintar a máscara que limita a camada",
+    "en": "Paint the mask that limits the layer"
+  },
+  "Camada: %1 · %2 — o pincel pinta o %3": {
+    "pt-BR": "Camada: %1 · %2 — o pincel pinta o %3",
+    "en": "Layer: %1 · %2 — the brush paints the %3"
+  },
+  "Opacidade de %1": {
+    "pt-BR": "Opacidade de %1",
+    "en": "%1 opacity"
+  },
+  "Ligar %1": {
+    "pt-BR": "Ligar %1",
+    "en": "Enable %1"
+  },
+  "Adicionar máscara a %1": {
+    "pt-BR": "Adicionar máscara a %1",
+    "en": "Add mask to %1"
+  },
+  "Remover máscara de %1": {
+    "pt-BR": "Remover máscara de %1",
+    "en": "Remove %1 mask"
+  },
+  "Inverter máscara de %1": {
+    "pt-BR": "Inverter máscara de %1",
+    "en": "Invert %1 mask"
+  },
+  "Máscara de %1 ativa": {
+    "pt-BR": "Máscara de %1 ativa",
+    "en": "%1 mask enabled"
+  },
+  "Pintar na máscara de %1": {
+    "pt-BR": "Pintar na máscara de %1",
+    "en": "Paint on the mask of %1"
+  },
+  "Pintar a máscara deste efeito": {
+    "pt-BR": "Pintar a máscara deste efeito",
+    "en": "Paint this effect's mask"
+  },
+  "Remover efeito %1": {
+    "pt-BR": "Remover efeito %1",
+    "en": "Remove %1 effect"
+  },
+  "Nenhum efeito na camada ativa. Adicione um abaixo.": {
+    "pt-BR": "Nenhum efeito na camada ativa. Adicione um abaixo.",
+    "en": "No effect on the active layer. Add one below."
+  },
+  "Adicionar à camada ativa": {
+    "pt-BR": "Adicionar à camada ativa",
+    "en": "Add to the active layer"
+  },
+  "Nova camada de gradiente (linear)": {
+    "pt-BR": "Nova camada de gradiente (linear)",
+    "en": "New gradient layer (linear)"
+  },
+  "Nova camada de decalque (projeção editável)": {
+    "pt-BR": "Nova camada de decalque (projeção editável)",
+    "en": "New decal layer (editable projection)"
+  },
+  "Nova camada de gradiente": {
+    "pt-BR": "Nova camada de gradiente",
+    "en": "New gradient layer"
+  },
+  "Gradiente (preenchimento editável)": {
+    "pt-BR": "Gradiente (preenchimento editável)",
+    "en": "Gradient (editable fill)"
+  },
+  "Tipo": {
+    "pt-BR": "Tipo",
+    "en": "Type"
+  },
+  "Angular": {
+    "pt-BR": "Angular",
+    "en": "Angular"
+  },
+  "Refletido": {
+    "pt-BR": "Refletido",
+    "en": "Reflected"
+  },
+  "Diamante": {
+    "pt-BR": "Diamante",
+    "en": "Diamond"
+  },
+  "Repetir além das pontas": {
+    "pt-BR": "Repetir além das pontas",
+    "en": "Repeat beyond the ends"
+  },
+  "Início X": {
+    "pt-BR": "Início X",
+    "en": "Start X"
+  },
+  "Início Y": {
+    "pt-BR": "Início Y",
+    "en": "Start Y"
+  },
+  "Fim X": {
+    "pt-BR": "Fim X",
+    "en": "End X"
+  },
+  "Fim Y": {
+    "pt-BR": "Fim Y",
+    "en": "End Y"
+  },
+  "Posição da parada %1": {
+    "pt-BR": "Posição da parada %1",
+    "en": "Stop %1 position"
+  },
+  "Cor da parada %1": {
+    "pt-BR": "Cor da parada %1",
+    "en": "Stop %1 color"
+  },
+  "Remover parada %1": {
+    "pt-BR": "Remover parada %1",
+    "en": "Remove stop %1"
+  },
+  "Adicionar parada no meio": {
+    "pt-BR": "Adicionar parada no meio",
+    "en": "Add stop in the middle"
+  },
+  "Manter editável ou aplicar": {
+    "pt-BR": "Manter editável ou aplicar",
+    "en": "Keep editable or apply"
+  },
+  "Isolar para pintura (fantasma/Raio-X)": {
+    "pt-BR": "Isolar para pintura (fantasma/Raio-X)",
+    "en": "Isolate for painting (ghost/X-Ray)"
+  },
+  "Prateleira de pincéis": {
+    "pt-BR": "Prateleira de pincéis",
+    "en": "Brush shelf"
+  },
+  "Pincel %1": {
+    "pt-BR": "Pincel %1",
+    "en": "Brush %1"
+  },
+  "Nenhum preset ainda. Salve o pincel atual para vê-lo aqui.": {
+    "pt-BR": "Nenhum preset ainda. Salve o pincel atual para vê-lo aqui.",
+    "en": "No preset yet. Save the current brush to see it here."
+  },
+  "máscara": {
+    "pt-BR": "máscara",
+    "en": "mask"
   }
 }

@@ -1337,6 +1337,7 @@ impl MenuKind {
                 ("file.save_as", T::FILE_SAVE_AS, "Ctrl+Shift+S"),
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("file.import_obj", T::FILE_IMPORT_OBJ, ""),
+                ("file.import_gltf", T::FILE_IMPORT_GLTF, ""),
             ],
             Self::Edit => &[
                 ("edit.undo", T::EDIT_UNDO, "Ctrl+Z"),

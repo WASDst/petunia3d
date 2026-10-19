@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **2031**.
+Total de chaves de localização cadastradas: **2032**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -1561,6 +1561,7 @@ Total de chaves de localização cadastradas: **2031**.
 | `status.loop_cut_topology_refused_at_commit` | Loop Cut: topology refused at commit | Loop Cut: topologia recusada na confirmação |
 | `status.no_active_mesh_to_paint` | No active mesh to paint | Nenhuma malha ativa para pintar |
 | `status.no_face_under_the_cursor` | No face under the cursor | Nenhuma face sob o cursor |
+| `status.no_mesh_imported` | no mesh found in {0} | nenhuma malha encontrada em {0} |
 | `status.nothing_under_the_cursor` | Nothing under the cursor | Nada sob o cursor |
 | `status.nudge` | Nudge [{dx}, {dy}, {dz}] | Deslocar [{dx}, {dy}, {dz}] |
 | `status.object_duplicated` | Object duplicated. | Objeto duplicado. |

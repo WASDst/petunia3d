@@ -92,6 +92,9 @@ PetuniaAppBar::PetuniaAppBar(PetuniaShellController *controller, QWidget *parent
 
 QAction *PetuniaAppBar::addLocal(QMenu *menu, const QString &text, const QString &id, const QString &keymap) {
     auto *action = menu->addAction(text);
+    // O id viaja com a ação: a automação (e os testes) acham a entrada sem
+    // depender do idioma do rótulo.
+    action->setData(id);
     connect(action, &QAction::triggered, this, [this, id] { emit localAction(id); });
     m_tracked.append({action, text, keymap});
     return action;
@@ -123,6 +126,10 @@ void PetuniaAppBar::buildMenus() {
     addLocal(file, tr("Novo projeto"), QStringLiteral("file.new"), QStringLiteral("global.new_project"));
     addLocal(file, tr("Nova cena vazia"), QStringLiteral("file.new_empty"));
     addLocal(file, tr("Abrir…"), QStringLiteral("file.open"), QStringLiteral("global.open_project"));
+    file->addSeparator();
+    auto *importMenu = file->addMenu(tr("Importar"));
+    addLocal(importMenu, tr("Modelo 3D (OBJ, glTF, GLB)…"), QStringLiteral("file.import_model"));
+    addLocal(importMenu, tr("Paleta de cores (.gpl, .hex)…"), QStringLiteral("file.import_palette"));
     file->addSeparator();
     addLocal(file, tr("Salvar"), QStringLiteral("file.save"), QStringLiteral("global.save_project"));
     addLocal(file, tr("Salvar como…"), QStringLiteral("file.save_as"));

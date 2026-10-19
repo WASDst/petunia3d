@@ -698,6 +698,8 @@ pub mod text_id {
     pub const STATUS_FAILED_TO_OPEN: TextId = TextId::new("status.failed_to_open");
     pub const STATUS_IMPORTED_ASSET_S: TextId = TextId::new("status.imported_asset_s");
     pub const STATUS_IMPORT_FAILED: TextId = TextId::new("status.import_failed");
+    /// Arquivo lido, mas sem malha nenhuma dentro.
+    pub const STATUS_NO_MESH_IMPORTED: TextId = TextId::new("status.no_mesh_imported");
     pub const STATUS_EXPORTED: TextId = TextId::new("status.exported");
     pub const STATUS_EXPORT_FAILED: TextId = TextId::new("status.export_failed");
     pub const STATUS_IMPORTED_PALETTE_COLORS: TextId =
@@ -1310,6 +1312,7 @@ pub mod text_id {
         FILE_SAVE,
         FILE_SAVE_AS,
         FILE_IMPORT_OBJ,
+        FILE_IMPORT_GLTF,
         EDIT_UNDO,
         EDIT_REDO,
         VIEW_FRAME,
@@ -1493,6 +1496,7 @@ pub mod text_id {
         STATUS_FAILED_TO_OPEN,
         STATUS_IMPORTED_ASSET_S,
         STATUS_IMPORT_FAILED,
+        STATUS_NO_MESH_IMPORTED,
         STATUS_EXPORTED,
         STATUS_EXPORT_FAILED,
         STATUS_IMPORTED_PALETTE_COLORS,

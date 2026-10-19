@@ -4276,7 +4276,9 @@ impl Command for ImportObjCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        state.set_status("Import OBJ requested");
+        // O comando pede a importação; quem abre o diálogo é a interface
+        // (comando programático nunca abre janela).
+        state.request_import("obj");
         Ok(())
     }
 }
@@ -4295,7 +4297,8 @@ impl Command for ImportGltfCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        state.set_status("Import glTF/GLB requested");
+        // O comando pede a importação; quem abre o diálogo é a interface.
+        state.request_import("gltf");
         Ok(())
     }
 }

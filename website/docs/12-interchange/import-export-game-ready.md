@@ -56,7 +56,7 @@ Padrão: file picker ou fonte autorizada → IO bounds/decoding → DTO de stagi
 - Limits: tamanho de arquivo, count de vértices, texture dimensions, depth de nodes e decompression bomb.
 - Path traversal e referências externas resolvidas via um resolver com containment e consentimento.
 - glTF: malhas, nodes, UV, colors, materials/textures, skins/animation somente quando efetivamente suportados.
-- OBJ: positions, faces, groups, UV, normals e MTL quando disponíveis.
+- OBJ: positions, faces, groups, UV, normals e MTL quando disponíveis. O `.mtl` é lido de verdade (materiais por objeto, `Kd`, `Ns`→rugosidade, `map_Kd` e `map_Bump` como texturas) e o material do objeto entra no asset, com a textura espelhada no asset para a viewport. `.mtl` e texturas são resolvidos **dentro da pasta do modelo** (mesmo confinamento do glTF): `..`, caminho absoluto e URI remota são recusados e viram aviso, não erro fatal — a geometria entra mesmo sem material.
 - Regras de winding, transforms, units e tangent-space são explicitadas por importer e testadas.
 - Dados malformados nunca criam um Document parcialmente publicado.
 - Topologia irreparável gera erro estruturado. Reparos seguros no legado são classificados; **não fazer remesh, weld, close hole ou repack UV silenciosos**.
@@ -109,6 +109,7 @@ GLB/glTF principal; OBJ secundário; FBX não baseline; Import/Export são adapt
 | I02    | Khronos glTF 2.0 / GLB conformance com PBR e TANGENT        | [x] DONE  | `crates/project/src/export_model.rs`, `test_gate3_khronos_glb_conformance_and_materials`|
 | I02    | Política estrita de sobrescrita (AlreadyExists) e atômica   | [x] DONE  | `crates/project/src/pipeline.rs`, `test_gate5_atomic_integrity_and_overwrite_policy` |
 | I02    | Round-trip OBJ e GLB preservando topologia e UVs            | [x] DONE  | `crates/project/tests/interchange_i01_i02_gates_tests.rs::test_gate6_roundtrip_obj_and_glb_preserves_topology_and_uvs`|
+| I03    | Importação de modelo no shell: OBJ com `.mtl` e textura, glTF/GLB com material e textura, entrada no menu Arquivo | [x] DONE | `crates/project/tests/pipeline_tests.rs` (`test_import_obj_reads_the_mtl_material_and_its_texture`, `test_import_obj_refuses_a_texture_outside_the_model_folder`), `crates/ui-cxxqt/tests/import_model.rs` (8 testes), `shell_v2` (`file:menu-offers-the-model-import`)|
 
 ### Status da bateria e evidências de Import/Export (I01, 2026-10-17)
 
@@ -126,4 +127,17 @@ Todos os gates de `I02` foram formalizados e validados:
 - **Conformidade Khronos glTF 2.0 / GLB**: Header binário de 12 bytes, chunks JSON e BIN alinhados a 4 bytes, accessors tipados (`POSITION`, `NORMAL`, `TEXCOORD_0`, `TANGENT`, `JOINTS_0`, `WEIGHTS_0`), canais PBR e metadados (`test_gate3_khronos_glb_conformance_and_materials`).
 - **Política Estrita de Sobrescrita e Integridade Atômica**: Rejeição determinística com `PipelineError::AlreadyExists` quando `overwrite == false`, sem truncar arquivos pré-existentes (`test_gate5_atomic_integrity_and_overwrite_policy`).
 - **Round-trip Fiel**: Leitura e escrita de OBJ com coordenadas de textura (`face.uv`) e GLB com materiais PBR validados em round-trip (`test_gate6_roundtrip_obj_and_glb_preserves_topology_and_uvs`).
+
+### Status da importação de modelo no shell (I03, 2026-10-19)
+
+Relato do usuário: "a importação de modelos não está funcionando para nenhum formato e, principalmente, se tiver textura". A auditoria achou quatro defeitos independentes, todos corrigidos:
+
+| Defeito | Causa | Correção |
+|---|---|---|
+| OBJ vinha sem material e sem textura | o importador ignorava o `.mtl` (material loader vazio) | `import_obj::import_obj_file` lê o `.mtl`, converte `Kd`/`Ns`/`map_Kd`/`map_Bump` e liga o material por face; a textura espelha no asset |
+| Um OBJ com vários objetos trazia só o primeiro | o importador ficava com o primeiro modelo do `tobj` | todos os objetos entram, cada um com seu material; o nome vem do `o` do arquivo (como no Blender) e, sem `o`, do nome do arquivo |
+| `.gltf` com skin/animation e buffers externos falhava inteiro | o rig era importado antes da tolerância a falha | rig que não pode ser lido vira **aviso**; o modelo entra de qualquer forma |
+| Não había porta de entrada para importar | o menu Arquivo não tinha Importar e os comandos da paleta eram stubs | `Arquivo > Importar` (modelo 3D, paleta) e os comandos `file.import_obj`/`file.import_gltf` passam a **pedir** a importação (`import_request` no snapshot); a interface abre o diálogo (comando programático nunca abre janela) |
+
+Feedback: arquivo sem malha é recusado com status próprio ("nenhuma malha encontrada"), e o import continua desfazível por Undo.
 

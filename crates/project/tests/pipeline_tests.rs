@@ -219,6 +219,15 @@ fn test_batch_export_partial_failure_tolerance() {
 // P3D-071: MODULAR IMPORT COM VALIDATION
 // -----------------------------------------------------------------------------
 
+/// PNG 1×1 vermelho (válido) para exercitar a leitura de textura.
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
 #[test]
 fn test_import_obj_roundtrip() {
     let dir = tempdir().expect("tempdir");
@@ -236,9 +245,94 @@ fn test_import_obj_roundtrip() {
 
     assert_eq!(payload.meshes.len(), 1);
     let (name, mesh) = &payload.meshes[0];
-    assert_eq!(name, "roundtrip");
+    // O nome vem do objeto do arquivo (`o`), como no Blender; sem `o`, entra o
+    // nome do arquivo.
+    assert_eq!(name, "Cube Asset");
     assert!(mesh.vert_count() >= 8);
     assert!(mesh.face_count() >= 6);
+}
+
+#[test]
+fn test_import_obj_without_object_name_uses_the_file_name() {
+    let dir = tempdir().expect("tempdir");
+    let pipeline = DeliveryPipeline::new();
+
+    let file_path = dir.path().join("sem_nome.obj");
+    std::fs::write(&file_path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n").expect("escrever obj");
+
+    let payload = pipeline
+        .import_file(&file_path, &ImportOptions::default())
+        .expect("import");
+
+    assert_eq!(payload.meshes.len(), 1);
+    assert_eq!(payload.meshes[0].0, "sem_nome");
+}
+
+#[test]
+fn test_import_obj_reads_the_mtl_material_and_its_texture() {
+    let dir = tempdir().expect("tempdir");
+    let pipeline = DeliveryPipeline::new();
+
+    std::fs::write(dir.path().join("textura.png"), PNG_1X1).expect("escrever textura");
+    std::fs::write(
+        dir.path().join("material.mtl"),
+        "newmtl Vermelho\nKd 1.000 0.000 0.000\nmap_Kd textura.png\n",
+    )
+    .expect("escrever mtl");
+    let file_path = dir.path().join("com_material.obj");
+    std::fs::write(
+        &file_path,
+        "mtllib material.mtl\no Quadrado\nusemtl Vermelho\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+    )
+    .expect("escrever obj");
+
+    let payload = pipeline
+        .import_file(&file_path, &ImportOptions::default())
+        .expect("import");
+
+    assert_eq!(payload.meshes.len(), 1);
+    assert_eq!(payload.materials.len(), 1, "o .mtl deve virar material");
+    let material = &payload.materials[0];
+    assert_eq!(material.name, "Vermelho");
+    assert!(
+        material.albedo_texture.is_some(),
+        "map_Kd deve virar textura"
+    );
+    let (_, mesh) = &payload.meshes[0];
+    assert_eq!(mesh.faces[0].material_slot, Some(0));
+    assert_eq!(payload.mesh_materials[0], Some(0));
+}
+
+#[test]
+fn test_import_obj_refuses_a_texture_outside_the_model_folder() {
+    let dir = tempdir().expect("tempdir");
+    let pipeline = DeliveryPipeline::new();
+    std::fs::write(
+        dir.path().join("material.mtl"),
+        "newmtl Vazado\nKd 1.000 1.000 1.000\nmap_Kd ../segredo.png\n",
+    )
+    .expect("escrever mtl");
+    let file_path = dir.path().join("vazado.obj");
+    std::fs::write(
+        &file_path,
+        "mtllib material.mtl\no Quadrado\nusemtl Vazado\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+    )
+    .expect("escrever obj");
+
+    let payload = pipeline
+        .import_file(&file_path, &ImportOptions::default())
+        .expect("import");
+
+    assert_eq!(payload.materials.len(), 1);
+    assert!(
+        payload.materials[0].albedo_texture.is_none(),
+        "textura fora da pasta do modelo não pode ser lida"
+    );
+    assert!(
+        payload.warnings.iter().any(|w| w.contains("map_Kd")),
+        "a recusa precisa virar aviso: {:?}",
+        payload.warnings
+    );
 }
 
 #[test]
@@ -301,9 +395,21 @@ fn test_format_capabilities_matrix() {
     let pipeline = DeliveryPipeline::new();
 
     let obj_caps = pipeline.capabilities(FileFormat::Obj).expect("obj caps");
-    assert!(!obj_caps.supports_materials);
-    assert!(!obj_caps.supports_textures);
+    // O OBJ lê `.mtl` e texturas desde a correção da importação.
+    assert!(obj_caps.supports_materials);
+    assert!(obj_caps.supports_textures);
     assert!(!obj_caps.supports_binary);
+    // A exportação de OBJ ainda não escreve `.mtl`: a matriz por direção é
+    // honesta sobre isso.
+    let obj_export = pipeline
+        .export_capabilities(FileFormat::Obj)
+        .expect("obj export caps");
+    assert!(!obj_export.supports_materials);
+    let obj_import = pipeline
+        .import_capabilities(FileFormat::Obj)
+        .expect("obj import caps");
+    assert!(obj_import.supports_materials);
+    assert!(obj_import.supports_multi_mesh);
 
     let glb_caps = pipeline.capabilities(FileFormat::Glb).expect("glb caps");
     assert!(glb_caps.supports_materials);
