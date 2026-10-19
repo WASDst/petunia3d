@@ -5362,7 +5362,7 @@
           "evidence": "shell-v2-roadmap-b-2026-10-19"
         },
         {
-          "title": "B8 Linguagem visual: guia de estilo proposto (09-ui/visual-language.md); aprovação do usuário e passada de polimento pendentes.",
+          "title": "B8 Linguagem visual: guia proposto (09-ui/visual-language.md); aprovação, aproveitamento de espaço e alinhamento visual de todo o shell pendentes.",
           "completed": false,
           "evidence": null
         },
@@ -5387,7 +5387,27 @@
           "evidence": null
         },
         {
-          "title": "Executar e registrar os gates de B10/B11.",
+          "title": "B12 Seleção e overlays suaves na vista (contorno fino, pontos e arestas finas, tinta leve na face, sem diagonais).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B13 Painel direito denso: coluna de rótulos alinhada, linhas baixas, ícones em coluna fixa, seções recolhidas.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B14 Paint compacto: trilhos próprios 2D/3D, seletor de cor compacto, prateleira de pincéis e menu de botão direito denso.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "B15 Orientação de transformação no cabeçalho (Global, Local, Normal, Vista, Cursor).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates de B10–B15.",
           "completed": false,
           "evidence": null
         }
