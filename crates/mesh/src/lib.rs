@@ -399,6 +399,7 @@ pub mod inset;
 pub mod knife;
 pub mod loop_cut;
 mod loops;
+pub mod morph;
 pub mod obj;
 pub mod ops;
 pub mod path_frames;
@@ -425,6 +426,7 @@ pub use half_edge::{
     EdgeId, FaceId, HalfEdge, HalfEdgeId, HalfEdgeMesh, TopologyDefect, TopologyReport, VertexId,
 };
 pub use inset::{InsetMode, InsetReport};
+pub use morph::{MorphBlend, MorphError, MorphTarget};
 pub use ops::ExtrudeMode;
 pub use path_frames::{PathFrame, PathFrameError, compute_parallel_transport_frames};
 pub use primitives::{CircleFill, PrimitiveAudit, PrimitiveDescriptor, primitive_audit};
