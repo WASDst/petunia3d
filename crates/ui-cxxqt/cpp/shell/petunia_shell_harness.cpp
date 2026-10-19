@@ -411,6 +411,72 @@ void checkRefinement(Harness &h, PetuniaShellWindow &window) {
               QStringLiteral("o gizmo desenhado difere do snapshot novo durante o pan"));
         h.add("viewport:pan-moved-the-gizmo", pan.second != afterOrbit,
               QStringLiteral("o pan não alterou o gizmo (o teste não discrimina)"));
+
+        // Arrastar uma seta do gizmo (Mover): NO MEIO do gesto o gizmo desenhado tem de
+        // estar onde o objeto está, não onde estava quando o botão foi apertado.
+        {
+            const auto originOf = [](const QJsonObject &state) {
+                const auto gizmo = state["gizmo"].toObject();
+                return QPointF(gizmo["origin_x"].toDouble(), gizmo["origin_y"].toDouble());
+            };
+            const auto startState = petuniaRequest("snapshot");
+            const QStringList rod = startState["gizmo"].toObject()["x_commands"].toString().split(' ', Qt::SkipEmptyParts);
+            bool placed = false;
+            QPointF begin, direction;
+            if (rod.size() >= 6) {
+                begin = QPointF(rod[1].toDouble(), rod[2].toDouble());
+                const QPointF tip(rod[4].toDouble(), rod[5].toDouble());
+                const QPointF delta = tip - begin;
+                const double length = std::hypot(delta.x(), delta.y());
+                if (length > 8 && view->rect().contains((begin + delta * 0.6).toPoint())) {
+                    direction = delta / length;
+                    placed = true;
+                    begin = begin + delta * 0.6;
+                }
+            }
+            h.add("viewport:gizmo-arrow-is-reachable-for-the-drag-test", placed);
+            if (placed) {
+                const QPointF before = originOf(startState);
+                mouse(QEvent::MouseMove, begin.toPoint(), Qt::NoButton, Qt::NoButton, Qt::NoModifier); // hover
+                mouse(QEvent::MouseButtonPress, begin.toPoint(), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                const QString afterPress = petuniaRequest("snapshot")["status_message"].toString();
+                for (int step = 1; step <= 8; ++step)
+                    mouse(QEvent::MouseMove, (begin + direction * (step * 12.0)).toPoint(), Qt::NoButton,
+                          Qt::LeftButton, Qt::NoModifier);
+                const QPointF drawn = originOf(view->paintedOverlayState());
+                const QPointF truth = originOf(petuniaRequest("snapshot"));
+                mouse(QEvent::MouseButtonRelease, (begin + direction * 96.0).toPoint(), Qt::LeftButton, Qt::NoButton,
+                      Qt::NoModifier);
+                settle(2);
+                h.add("viewport:object-moved-by-the-gizmo-drag", QLineF(before, truth).length() > 5.0,
+                      QStringLiteral("%1 px; status após o clique: \"%2\"; ferramenta: %3")
+                          .arg(QLineF(before, truth).length())
+                          .arg(afterPress, startState["active_tool"].toString()));
+                h.add("viewport:gizmo-follows-the-object-while-dragging", QLineF(drawn, truth).length() < 0.5,
+                      QStringLiteral("desenhado %1,%2 / objeto %3,%4").arg(drawn.x()).arg(drawn.y()).arg(truth.x()).arg(truth.y()));
+                c->request("undo");
+                settle(3);
+                window.syncNow();
+            }
+        }
+
+        // Gizmo universal: o Selecionar e o Transformar mostram setas, anéis e cubos de escala;
+        // Mover só setas e planos, Girar só anéis, Escalar só cubos (mesma regra da detecção de cliques).
+        {
+            using F = PetuniaGlWidget;
+            const auto select = F::gizmoFamiliesFor("select");
+            const auto transform = F::gizmoFamiliesFor("transform");
+            const auto move = F::gizmoFamiliesFor("move");
+            const auto rotate = F::gizmoFamiliesFor("rotate");
+            const auto scale = F::gizmoFamiliesFor("scale");
+            h.add("gizmo:select-shows-move-rotate-and-scale-handles",
+                  select.arrows && select.rings && select.scaleBoxes && select.universal);
+            h.add("gizmo:transform-shows-move-rotate-and-scale-handles",
+                  transform.arrows && transform.rings && transform.scaleBoxes && transform.universal);
+            h.add("gizmo:move-rotate-and-scale-keep-their-own-handles",
+                  move.arrows && !move.rings && !move.scaleBoxes && !move.universal && rotate.rings &&
+                      !rotate.arrows && !rotate.scaleBoxes && scale.scaleBoxes && !scale.arrows && !scale.rings);
+        }
     }
 }
 } // namespace

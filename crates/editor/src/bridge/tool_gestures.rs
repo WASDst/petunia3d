@@ -953,6 +953,64 @@ mod contextual_selection_tests {
         assert_eq!(b.state.project.undo.depth(), depth);
     }
 
+    fn origin_of(g: &GizmoModel) -> [f32; 2] {
+        [g.origin_x, g.origin_y]
+    }
+
+    fn apart(a: [f32; 2], b: [f32; 2]) -> f32 {
+        (a[0] - b[0]).hypot(a[1] - b[1])
+    }
+
+    #[test]
+    fn the_gizmo_and_pivot_marker_follow_the_object_during_a_move_gesture() {
+        let mut b = bridge();
+        let start = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(start.visible);
+        b.state
+            .begin_modal(petunia_core::ModalKind::Move)
+            .expect("movimento");
+        let delta = glam::Vec3::new(1.0, 0.0, 0.0);
+        b.state.update_modal(delta, delta.length()).expect("prévia");
+        let during = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(
+            apart(origin_of(&start), origin_of(&during)) > 5.0,
+            "o gizmo ficou parado: {:?} -> {:?}",
+            origin_of(&start),
+            origin_of(&during)
+        );
+        // O gizmo está sobre o objeto movido: o pivô exibido é o pivô + o deslocamento.
+        let expected = b
+            .state
+            .session
+            .camera
+            .project_ndc(b.state.session.tools.modal.as_ref().expect("gesto").pivot + delta);
+        let x = (expected.x + 1.0) * 0.5 * 800.0;
+        let y = (1.0 - (expected.y + 1.0) * 0.5) * 600.0;
+        assert!(apart(origin_of(&during), [x, y]) < 1.0);
+        // Cancelar devolve o gizmo ao lugar de partida.
+        assert!(b.state.cancel_modal());
+        let after = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(apart(origin_of(&start), origin_of(&after)) < 0.5);
+    }
+
+    #[test]
+    fn the_gizmo_stays_on_the_pivot_during_a_rotation() {
+        let mut b = bridge();
+        let start = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        b.state
+            .begin_modal(petunia_core::ModalKind::Rotate)
+            .expect("rotação");
+        b.state
+            .update_modal_components(glam::Vec3::new(0.0, 45.0, 0.0))
+            .expect("prévia");
+        let during = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(
+            apart(origin_of(&start), origin_of(&during)) < 0.5,
+            "o centro da rotação não anda"
+        );
+        assert!(b.state.cancel_modal());
+    }
+
     fn reach(g: &GizmoModel) -> f32 {
         ((g.x_end[0] - g.origin_x).powi(2) + (g.x_end[1] - g.origin_y).powi(2)).sqrt()
     }

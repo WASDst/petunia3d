@@ -275,6 +275,22 @@ fn front_arc_commands(points: &[[f32; 2]], depths: &[f32]) -> String {
     out
 }
 
+/// Ponto onde o gizmo e o marcador de pivô são desenhados. Durante um gesto de
+/// **mover** eles acompanham o objeto (pivô + deslocamento atual); em girar e
+/// escalar o centro da transformação continua onde o gesto começou. Sem gesto,
+/// vale a política de pivô escolhida.
+fn displayed_pivot(state: &AppState) -> glam::Vec3 {
+    match state.session.tools.modal.as_ref() {
+        Some(modal)
+            if modal.kind == petunia_core::ModalKind::Move && modal.components.is_finite() =>
+        {
+            modal.pivot + modal.components
+        }
+        Some(modal) => modal.pivot,
+        None => state.calculate_pivot(state.session.pivot_point),
+    }
+}
+
 pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoModel {
     let rod_length = gizmo_rod_length(state);
     let thickness = if state.ui.gizmo_thickness.is_finite() {
@@ -385,10 +401,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         && let Some(asset) = state.project.active()
         && !asset.mesh.verts.is_empty()
     {
-        let pivot_world = state.session.tools.modal.as_ref().map_or_else(
-            || state.calculate_pivot(state.session.pivot_point),
-            |modal| modal.pivot,
-        );
+        let pivot_world = displayed_pivot(state);
         if let Some(point) = project(pivot_world) {
             model.pivot_visible = true;
             model.pivot_screen = point;
@@ -425,10 +438,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         if asset.mesh.verts.is_empty() {
             return model;
         };
-        let p = state.session.tools.modal.as_ref().map_or_else(
-            || state.calculate_pivot(state.session.pivot_point),
-            |modal| modal.pivot,
-        );
+        let p = displayed_pivot(state);
         let f = state.session.tools.modal.as_ref().map_or_else(
             || state.calculate_transform_frame(state.session.transform_orientation),
             |modal| modal.frame,

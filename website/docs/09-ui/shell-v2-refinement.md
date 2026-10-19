@@ -61,6 +61,15 @@ Limites: `ICON_TOKENS.md` gerado saiu vazio, porque o gerador ainda procura o ca
 
 Relato do usuário depois do commit `bbf2d941`: ao orbitar ou dar pan/zoom, o gizmo ficava na tela em vez de seguir o objeto. Mesma família do "fantasma": gizmo, pivô e 3D Cursor são projetados em pixels por Rust (`compute_gizmo`) e o shell v2 reaproveita o snapshot que a janela empurra só quando o editor muda (`m_externalState`). Gestos de câmera do próprio `PetuniaGlWidget` (órbita, pan, zoom, roda, ações do cubo) não geravam snapshot novo. Agora esses gestos marcam `m_cameraDirty` e `refreshOverlayState()` refaz o snapshot no próximo quadro. Teste de regressão no harness (`viewport:gizmo-follows-the-orbit-mid-drag` e `...-pan-mid-drag`): arrasto real do botão do meio (e Shift para pan), conferido **no meio do gesto**, comparando o overlay desenhado com um snapshot novo. Soltar o botão já refazia o estado, então checar só depois escondia o defeito (primeira versão do teste passava sem a correção; foi reescrita). Provado: sem a correção as duas verificações falham; com ela passam. O pivô e o 3D Cursor usam o mesmo snapshot e foram corrigidos junto. Limite: uma trava isolada do `cargo test` sob carga concorrente, sem causa identificada (7 execuções diretas do binário passaram).
 
+### Correção posterior 2: gizmo durante o arrasto e gizmo universal no Selecionar (2026-10-18)
+
+Relato depois do commit `743273e1`: o gizmo só "se transportava" para a posição final ao mover o objeto, e o Selecionar não mostrava que também gira e escala. Duas causas independentes:
+
+1. **Snapshot velho + pivô congelado.** (a) No shell v2 a resposta de um arrasto era sobrescrita pelo estado externo no quadro seguinte (`adoptSnapshot` agora adota qualquer snapshot devolvido por pedido do widget). (b) Durante um gesto, `compute_gizmo` usava `modal.pivot`, o pivô do início; agora, em **Mover**, o gizmo e o marcador de pivô usam pivô + deslocamento atual (`displayed_pivot`); em Girar e Escalar o centro continua fixo. Isso cobre também o Cursor 3D e o hover.
+2. **Desenho e detecção de cliques discordavam.** A detecção tratava o Selecionar como gizmo universal (setas, anéis, cubos), mas o desenho só mostrava as três famílias no `transform`. Uma regra única, `gizmoFamiliesFor`, serve aos dois.
+
+Testes: `the_gizmo_and_pivot_marker_follow_the_object_during_a_move_gesture` e `the_gizmo_stays_on_the_pivot_during_a_rotation` (Rust) e, no harness, `viewport:gizmo-follows-the-object-while-dragging` (falha sem a correção) e `gizmo:select-shows-move-rotate-and-scale-handles`.
+
 ## Risks
 
 - Grupos são `collections` de um nível: hierarquia aninhada com transformação herdada continua em G09.

@@ -46,6 +46,14 @@ class PetuniaGlWidget : public QWidget {
     void setZoomSensitivity(float s) { m_zoomSensitivity = qBound(0.1f, s, 5.0f); }
     float zoomSensitivity() const { return m_zoomSensitivity; }
 
+    /// Quais famílias de alça o gizmo desenha para a ferramenta ativa. Uma só regra,
+    /// igual à da detecção de cliques (`gizmo_target_at`): Selecionar e Transformar
+    /// são o gizmo universal (setas, anéis de giro e cubos de escala juntos).
+    struct GizmoFamilies {
+        bool arrows{false}, planes{false}, rings{false}, scaleBoxes{false}, universal{false};
+    };
+    static GizmoFamilies gizmoFamiliesFor(const QString &activeTool);
+
   signals:
     void cameraOrbitRequested(float deltaX, float deltaY);
     void cameraPanRequested(float deltaX, float deltaY);
@@ -105,6 +113,7 @@ class PetuniaGlWidget : public QWidget {
     void cleanupGl();
     QJsonObject pointer(int phase, const QPointF &, Qt::KeyboardModifiers);
     void refreshOverlayState();
+    void adoptSnapshot(const QJsonObject &snapshot);
     uint64_t m_surfaceId{1};
     QJsonObject m_overlayState;
     QJsonObject m_externalState;

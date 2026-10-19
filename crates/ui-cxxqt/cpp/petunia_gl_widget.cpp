@@ -208,6 +208,18 @@ void PetuniaGlWidget::paintEvent(QPaintEvent *) {
     refreshOverlayState();
     drawOverlays(painter);
 }
+/// Adota um snapshot devolvido por um pedido do próprio widget. No shell v2 o
+/// quadro lê o estado externo (empurrado só quando o editor muda); sem isto a
+/// resposta de um arrasto de gizmo ou de ferramenta era sobrescrita pelo estado
+/// velho e o gizmo ficava para trás da cena.
+void PetuniaGlWidget::adoptSnapshot(const QJsonObject &snapshot) {
+    m_overlayState = snapshot;
+    if (m_shellChrome && m_hasExternalState && snapshot.contains("active_tool")) {
+        m_externalState = snapshot;
+        m_cameraDirty = false;
+    }
+}
+
 void PetuniaGlWidget::refreshOverlayState() {
     if (m_shellChrome && m_hasExternalState) {
         // O snapshot do shell só é refeito quando o editor muda. Gizmo, pivô e
@@ -535,7 +547,7 @@ void PetuniaGlWidget::mousePressEvent(QMouseEvent *event) {
                                            {"y", event->position().y()}});
         if (begin["changed"].toBool()) {
             m_isTransformGizmoDragging = true;
-            m_overlayState = begin;
+            adoptSnapshot(begin);
             event->accept();
             update();
             return;
@@ -545,7 +557,7 @@ void PetuniaGlWidget::mousePressEvent(QMouseEvent *event) {
         if (tool == "cursor" || tool == "cursor_3d") {
             const float norm_x = static_cast<float>(event->position().x()) / qMax(1.0f, static_cast<float>(width()));
             const float norm_y = static_cast<float>(event->position().y()) / qMax(1.0f, static_cast<float>(height()));
-            m_overlayState = petuniaRequest("place_cursor_3d", {{"x", norm_x}, {"y", norm_y}});
+            adoptSnapshot(petuniaRequest("place_cursor_3d", {{"x", norm_x}, {"y", norm_y}}));
             m_toolPressed = true;
             emit selectionChanged();
             update();
@@ -590,20 +602,20 @@ void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
     if (m_toolPressed && (activeTool == "cursor" || activeTool == "cursor_3d")) {
         const float norm_x = static_cast<float>(event->position().x()) / qMax(1.0f, static_cast<float>(width()));
         const float norm_y = static_cast<float>(event->position().y()) / qMax(1.0f, static_cast<float>(height()));
-        m_overlayState = petuniaRequest("place_cursor_3d", {{"x", norm_x}, {"y", norm_y}});
+        adoptSnapshot(petuniaRequest("place_cursor_3d", {{"x", norm_x}, {"y", norm_y}}));
         update();
         event->accept();
         return;
     }
     if (m_isTransformGizmoDragging) {
-        m_overlayState = petuniaRequest(
+        adoptSnapshot(petuniaRequest(
             "update_viewport_transform_modified",
             {{"x", event->position().x()},
              {"y", event->position().y()},
              {"fine", pointerBinding(m_overlayState, "pointer_precision_mask",
                                      event->modifiers())},
              {"snap", pointerBinding(m_overlayState, "pointer_snap_mask",
-                                     event->modifiers())}});
+                                     event->modifiers())}}));
         update();
         event->accept();
         return;
@@ -650,9 +662,9 @@ void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
     else {
         petuniaRequest("hover_gizmo", {{"x", event->position().x()},
                                        {"y", event->position().y()}});
-        m_overlayState = petuniaRequest(
+        adoptSnapshot(petuniaRequest(
             "hover", {{"x", event->position().x() / qMax(1, width())},
-                      {"y", event->position().y() / qMax(1, height())}});
+                      {"y", event->position().y() / qMax(1, height())}}));
         pointer(1, event->position(), event->modifiers());
     }
     update();
@@ -808,7 +820,7 @@ void PetuniaGlWidget::mouseReleaseEvent(QMouseEvent *event) {
     }
     if (m_isTransformGizmoDragging) {
         PetuniaViewScope scope(m_surfaceId);
-        m_overlayState = petuniaRequest("end_gizmo_drag");
+        adoptSnapshot(petuniaRequest("end_gizmo_drag"));
         m_isTransformGizmoDragging = false;
         emit selectionChanged();
         update();
@@ -825,7 +837,7 @@ void PetuniaGlWidget::mouseReleaseEvent(QMouseEvent *event) {
                     m_overlayState["drag_threshold_px"].toDouble(4);
                 if (distance < threshold ||
                     m_overlayState["workspace"] == "Animate") {
-                    m_overlayState = petuniaRequest(
+                    adoptSnapshot(petuniaRequest(
                         "viewport_select",
                         {{"x", m_pressPoint.x() / qMax(1, width())},
                          {"y", m_pressPoint.y() / qMax(1, height())},
@@ -834,7 +846,7 @@ void PetuniaGlWidget::mouseReleaseEvent(QMouseEvent *event) {
                                          event->modifiers())},
                          {"loop",
                           pointerBinding(m_overlayState, "pointer_loop_mask",
-                                         event->modifiers())}});
+                                         event->modifiers())}}));
                 } else {
                     QJsonObject args{
                         {"x0", m_pressPoint.x() / qMax(1, width())},
@@ -855,7 +867,7 @@ void PetuniaGlWidget::mouseReleaseEvent(QMouseEvent *event) {
                                 .arg(m_regionPoints[i].x() / qMax(1, width()))
                                 .arg(m_regionPoints[i].y() / qMax(1, height()));
                     args.insert("path", path);
-                    m_overlayState = petuniaRequest("region_select", args);
+                    adoptSnapshot(petuniaRequest("region_select", args));
                 }
             } else
                 pointer(2, event->position(), event->modifiers());
@@ -878,8 +890,8 @@ void PetuniaGlWidget::wheelEvent(QWheelEvent *event) {
         m_overlayState =
             petuniaRequest("scroll_loop_cut_count", {{"delta_y", rawDelta / 120.f}});
     else if (m_overlayState["loop_cut_armed"].toBool())
-        m_overlayState = petuniaRequest("adjust_loop_cut_hover_count",
-                                        {{"delta", int(rawDelta / 120.f)}});
+        adoptSnapshot(petuniaRequest("adjust_loop_cut_hover_count",
+                                        {{"delta", int(rawDelta / 120.f)}}));
     else {
         petunia_qt_camera_zoom(rawDelta * m_zoomSensitivity);
         m_cameraDirty = true;
@@ -912,7 +924,7 @@ void PetuniaGlWidget::finishInterruptedGesture(bool commitPaint) {
     if (active) {
         PetuniaViewScope scope(m_surfaceId);
         if (m_isTransformGizmoDragging) {
-            m_overlayState = petuniaRequest("cancel_transform");
+            adoptSnapshot(petuniaRequest("cancel_transform"));
         } else {
             const bool painting = m_overlayState["workspace"].toString() == QLatin1String("Paint");
             // Fase 2 confirma (um Undo); fase 3 cancela sem efeito.
@@ -950,7 +962,7 @@ void PetuniaGlWidget::keyPressEvent(QKeyEvent *event) {
                      {"ctrl", bool(event->modifiers() & Qt::ControlModifier)},
                      {"shift", bool(event->modifiers() & Qt::ShiftModifier)},
                      {"alt", bool(event->modifiers() & Qt::AltModifier)}});
-    m_overlayState = state;
+    adoptSnapshot(state);
     if (state["changed"].toBool()) {
         emit selectionChanged();
         update();
@@ -1030,6 +1042,19 @@ void PetuniaGlWidget::drawPivotMarker(QPainter &painter) {
 /// planos translúcidos, anéis de rotação com o lado da câmera em destaque e
 /// uma alça central. Espessura e tamanho vêm das preferências. O eixo sob o
 /// ponteiro (ou em arrasto) cresce e os outros recuam.
+PetuniaGlWidget::GizmoFamilies PetuniaGlWidget::gizmoFamiliesFor(const QString &activeTool) {
+    GizmoFamilies f;
+    // Selecionar e Transformar: gizmo universal. O Selecionar já mover/girar/escala
+    // por clique nas alças; mostrá-las é o que avisa que isso é possível.
+    f.universal = activeTool == QStringLiteral("transform") || activeTool == QStringLiteral("select");
+    const bool move = activeTool == QStringLiteral("move") || activeTool.isEmpty();
+    f.arrows = move || f.universal;
+    f.planes = move || f.universal;
+    f.rings = activeTool == QStringLiteral("rotate") || f.universal;
+    f.scaleBoxes = activeTool == QStringLiteral("scale") || f.universal;
+    return f;
+}
+
 void PetuniaGlWidget::drawTransformGizmo(QPainter &painter) {
     const auto gizmo = m_overlayState["gizmo"].toObject();
     if (!gizmo["visible"].toBool())
@@ -1039,13 +1064,13 @@ void PetuniaGlWidget::drawTransformGizmo(QPainter &painter) {
     const QString activeTool = m_overlayState["active_tool"].toString();
     const bool isRotate = (activeTool == QStringLiteral("rotate"));
     const bool isScale = (activeTool == QStringLiteral("scale"));
-    const bool isTransform = (activeTool == QStringLiteral("transform"));
-    const bool isMove = (activeTool == QStringLiteral("move") || activeTool == QStringLiteral("select") || activeTool.isEmpty());
+    const auto families = gizmoFamiliesFor(activeTool);
+    const bool isTransform = families.universal;
 
-    const bool showArrows = isMove || isTransform;
-    const bool showPlanes = isMove || isTransform;
-    const bool showRings = isRotate || isTransform;
-    const bool showScaleBoxes = isScale || isTransform;
+    const bool showArrows = families.arrows;
+    const bool showPlanes = families.planes;
+    const bool showRings = families.rings;
+    const bool showScaleBoxes = families.scaleBoxes;
 
     const double thickness = qBound(1.0, gizmo["thickness"].toDouble(2.0), 6.0);
     const int hoverAxis = m_overlayState["gizmo_hover_axis"].toInt(-1);
@@ -1419,6 +1444,6 @@ QJsonObject PetuniaGlWidget::pointer(int phase, const QPointF &point,
                                    {"shift", bool(mods & Qt::ShiftModifier)},
                                    {"ctrl", bool(mods & Qt::ControlModifier)},
                                    {"alt", bool(mods & Qt::AltModifier)}});
-    m_overlayState = state;
+    adoptSnapshot(state);
     return state;
 }
