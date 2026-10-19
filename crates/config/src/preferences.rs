@@ -187,6 +187,10 @@ fn default_gizmo_thickness() -> f32 {
     2.0
 }
 
+const fn default_select_gizmo_handles() -> [bool; 3] {
+    [true; 3]
+}
+
 fn default_nav_cube_opacity() -> f32 {
     1.0
 }
@@ -216,6 +220,9 @@ pub struct UserPreferences {
     pub gizmo_size: f32,
     /// Espessura do traço dos gizmos de transformação, px lógicos (1..=6).
     pub gizmo_thickness: f32,
+    /// Alças do gizmo do Selecionar: mover, girar, escalar (qualquer combinação).
+    #[serde(default = "default_select_gizmo_handles")]
+    pub select_gizmo_handles: [bool; 3],
     /// Opacidade do cubo de navegação da vista 3D (0,2..=1). Em uso (mouse sobre
     /// ele ou arrastando) o cubo volta à opacidade total.
     pub nav_cube_opacity: f32,
@@ -307,6 +314,7 @@ impl Default for UserPreferences {
             selection_thickness: 2.0,
             gizmo_size: default_gizmo_size(),
             gizmo_thickness: default_gizmo_thickness(),
+            select_gizmo_handles: default_select_gizmo_handles(),
             nav_cube_opacity: default_nav_cube_opacity(),
             ui_scale: 1.0,
             language: None,
@@ -510,6 +518,7 @@ mod tests {
             selection_thickness: 3.5,
             gizmo_size: 96.0,
             gizmo_thickness: 3.0,
+            select_gizmo_handles: [true, false, true],
             nav_cube_opacity: 0.5,
             ui_scale: 1.25,
             model_quick_actions: vec!["model.join".to_string()],

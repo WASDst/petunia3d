@@ -147,6 +147,10 @@ class PetuniaColorPanel : public QWidget {
     bool deleteCurrentPalette();
     void setMode(int index);
     int mode() const;
+    /// Modo compacto (B14): roda menor e canais recolhidos atrás de "Canais".
+    void setCompact(bool compact);
+    bool isCompact() const { return m_compact; }
+    QToolButton *channelsToggle() const { return m_channelsToggle; }
 
   signals:
     /// Mudança feita pelo usuário (arrasto, campo, hex, amostra).
@@ -160,6 +164,9 @@ class PetuniaColorPanel : public QWidget {
     enum class Model { Rgb, Hsl, Hsv };
     class QBoxLayout *m_root{nullptr};
     bool m_stacked{false};
+    bool m_compact{false};
+    QToolButton *m_channelsToggle{nullptr};
+    void applyCompactLayout();
     void applyColor(const QColor &color, bool emitChange);
     void refreshChannels();
     void channelEdited();

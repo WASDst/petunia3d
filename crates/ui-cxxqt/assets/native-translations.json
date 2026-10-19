@@ -5826,5 +5826,81 @@
   "Arraste ou digite um valor · Enter confirma · Esc cancela": {
     "pt-BR": "Arraste ou digite um valor · Enter confirma · Esc cancela",
     "en": "Drag or type a value · Enter confirms · Esc cancels"
+  },
+  "O que a seleção alcança": {
+    "pt-BR": "O que a seleção alcança",
+    "en": "What selection reaches"
+  },
+  "Orientação de transformação": {
+    "pt-BR": "Orientação de transformação",
+    "en": "Transform orientation"
+  },
+  "Orientação de transformação: %1": {
+    "pt-BR": "Orientação de transformação: %1",
+    "en": "Transform orientation: %1"
+  },
+  "através da malha": {
+    "pt-BR": "através da malha",
+    "en": "through the mesh"
+  },
+  "só o visível": {
+    "pt-BR": "só o visível",
+    "en": "visible only"
+  },
+  "Seleção: %1 (agora: %2)": {
+    "pt-BR": "Seleção: %1 (agora: %2)",
+    "en": "Selection: %1 (now: %2)"
+  },
+  "Automática": {
+    "pt-BR": "Automática",
+    "en": "Automatic"
+  },
+  "Só o visível": {
+    "pt-BR": "Só o visível",
+    "en": "Visible only"
+  },
+  "Através da malha": {
+    "pt-BR": "Através da malha",
+    "en": "Through the mesh"
+  },
+  "Automática: segue o que se vê (Raio-X e Wireframe selecionam através)": {
+    "pt-BR": "Automática: segue o que se vê (Raio-X e Wireframe selecionam através)",
+    "en": "Automatic: follows what you see (X-Ray and Wireframe select through)"
+  },
+  "Global (eixos do mundo)": {
+    "pt-BR": "Global (eixos do mundo)",
+    "en": "Global (world axes)"
+  },
+  "Local (eixos do objeto)": {
+    "pt-BR": "Local (eixos do objeto)",
+    "en": "Local (object axes)"
+  },
+  "Normal (da seleção)": {
+    "pt-BR": "Normal (da seleção)",
+    "en": "Normal (of the selection)"
+  },
+  "Vista (eixos da câmera)": {
+    "pt-BR": "Vista (eixos da câmera)",
+    "en": "View (camera axes)"
+  },
+  "Canais": {
+    "pt-BR": "Canais",
+    "en": "Channels"
+  },
+  "Mostrar os canais numéricos": {
+    "pt-BR": "Mostrar os canais numéricos",
+    "en": "Show the numeric channels"
+  },
+  "Selecionar mostra mover": {
+    "pt-BR": "Selecionar mostra mover",
+    "en": "Select shows move"
+  },
+  "Selecionar mostra girar": {
+    "pt-BR": "Selecionar mostra girar",
+    "en": "Select shows rotate"
+  },
+  "Selecionar mostra escalar": {
+    "pt-BR": "Selecionar mostra escalar",
+    "en": "Select shows scale"
   }
 }

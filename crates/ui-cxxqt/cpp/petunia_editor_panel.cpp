@@ -366,6 +366,10 @@ void PetuniaEditorPanel::setupSettings() {
            "set_gizmo_size", "size", 48, 160, 4);
     number(gizmos, tr("Espessura dos gizmos"), "gizmo_thickness",
            "set_gizmo_thickness", "thickness", 1, 6, 0.25);
+    // Gizmo da ferramenta Selecionar: quais alças aparecem (B11).
+    check(gizmos, tr("Selecionar mostra mover"), "select_gizmo_move", "set_select_gizmo_move", "enabled");
+    check(gizmos, tr("Selecionar mostra girar"), "select_gizmo_rotate", "set_select_gizmo_rotate", "enabled");
+    check(gizmos, tr("Selecionar mostra escalar"), "select_gizmo_scale", "set_select_gizmo_scale", "enabled");
     number(gizmos, tr("Opacidade do cubo de navegação"), "nav_cube_opacity",
            "set_nav_cube_opacity", "opacity", 0.2, 1, 0.05);
     auto *keymap = page(tr("Atalhos"));

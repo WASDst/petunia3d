@@ -1149,13 +1149,29 @@ impl AppState {
     #[inline]
     pub fn set_show_xray(&mut self, enabled: bool) {
         self.session.show_xray = enabled;
-        // Invariante VSP-004: X-Ray visual nunca altera select_through!
+        // Invariante VSP-004: X-Ray visual nunca altera a política de seleção!
     }
 
     #[inline]
     pub fn set_select_through(&mut self, enabled: bool) {
-        self.session.select_through = enabled;
-        // Invariante VSP-004: select_through nunca altera show_xray!
+        self.session.select_policy = if enabled {
+            crate::SelectPolicy::Through
+        } else {
+            crate::SelectPolicy::VisibleOnly
+        };
+        // Invariante VSP-004: a política de seleção nunca altera show_xray!
+    }
+
+    /// Orientação dos eixos do gizmo e das restrições de G/R/S (B15).
+    #[inline]
+    pub fn set_transform_orientation(&mut self, orientation: crate::TransformOrientation) {
+        self.session.transform_orientation = orientation;
+    }
+
+    /// Escolhe a política de seleção (B10): Automática, Só visível ou Através.
+    #[inline]
+    pub fn set_select_policy(&mut self, policy: crate::SelectPolicy) {
+        self.session.select_policy = policy;
     }
 
     #[inline]
@@ -1514,13 +1530,17 @@ impl CommandContext<'_> {
     #[inline]
     pub fn set_show_xray(&mut self, enabled: bool) {
         self.editor.show_xray = enabled;
-        // Invariante VSP-004: X-Ray visual nunca altera select_through!
+        // Invariante VSP-004: X-Ray visual nunca altera a política de seleção!
     }
 
     #[inline]
     pub fn set_select_through(&mut self, enabled: bool) {
-        self.editor.select_through = enabled;
-        // Invariante VSP-004: select_through nunca altera show_xray!
+        self.editor.select_policy = if enabled {
+            crate::SelectPolicy::Through
+        } else {
+            crate::SelectPolicy::VisibleOnly
+        };
+        // Invariante VSP-004: a política de seleção nunca altera show_xray!
     }
 
     #[inline]

@@ -1,6 +1,6 @@
-# Linguagem visual da vista e da GUI — proposta (B8, 2026-10-19)
+# Linguagem visual da vista e da GUI (B8, aprovada em 2026-10-19)
 
-> Status: **proposta, aguardando aprovação do usuário** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario), item B8). A passada de polimento no shell inteiro só começa depois da aprovação. Referências de outros programas servem só de ergonomia: nenhum ícone, cor, código ou captura deles entra no repositório.
+> Status: **aprovada pelo usuário em 2026-10-19** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario), itens B8 e 15). Referências de outros programas servem só de ergonomia: nenhum ícone, cor, código ou captura deles entra no repositório.
 
 ## Intent
 
@@ -24,10 +24,11 @@ Relato do usuário de 2026-10-19 ("o visual e o feedback da viewport e da GUI es
 | Camada                 | Traço                         | Cor (token)                    | Exemplo                                   | Status      |
 |------------------------|-------------------------------|--------------------------------|-------------------------------------------|-------------|
 | Seleção ativa          | 2 px sólido + halo            | `accentSelectionActive`        | contorno do objeto ativo                  | [x] existe  |
+| Componentes de edição  | vértice 2 px (sel. 3 px), aresta 1 px | escuro; seleção na cor de seleção; face 22% + contorno | domínios vértice/aresta/face (GL) | [x] B12     |
 | Ferramenta em curso    | 2 px sólido + halo, seta      | `accentPrimary`                | quadro de prévia (B3)                     | [x] B3      |
 | Eco e prévia           | 1,5 px tracejado + halo       | branco 80% / preto 60%         | eco do pincel 3D↔2D (B2), knife           | [x] B2/B3   |
-| Hover                  | 1,5 px sólido                 | `accentPrimary` 70%            | pré-seleção de face/aresta                | [ ] revisar |
-| Guias                  | 1 px pontilhado               | `borderSubtle`                 | snap, eixo de restrição                   | [ ] revisar |
+| Hover                  | ponto 3,5 px / traço 1,5–2,5 px | ciano 90%, face 12%          | pré-seleção de vértice/aresta/face        | [x] B12     |
+| Guias                  | 1,5 px sólido + halo          | `accentPrimary`                | snap, eixo de restrição, prévias          | [x] B8      |
 | Eixos do mundo         | 1 px, 62% da cor do eixo      | cores de eixo, com depth test  | X/Z no chão, Y oculto (B6)                | [x] B6      |
 | Grade                  | 1 px, maior a cada 10         | cinza × opacidade da grade     | grade configurável (B6)                   | [x] B6      |
 
@@ -39,20 +40,19 @@ Relato do usuário de 2026-10-19 ("o visual e o feedback da viewport e da GUI es
 | Diálogos               | moldura própria (barra de título, borda 1 px `mid`), arrastar, redimensionar e teclado    | [x] B5      |
 | Menus em torta         | disco central com o título, anel guia pontilhado e fatia em destaque (forma e cor)        | [x] B9      |
 | Cor                    | um seletor só (`PetuniaColorPanel`) em todo o app                                          | [x] B1      |
-| Ícones                 | traço 1,75 px num grid de 24, cantos e pontas arredondados (conjunto `petunia-outline`)   | [ ] revisar |
-| Espaçamento            | múltiplos de `space(1)`; formulário denso com rótulo acima quando estreito                | [ ] revisar |
-| Tipografia             | Body para valores, Caption para dicas; negrito só em títulos                              | [ ] revisar |
+| Ícones                 | traço 1,75 px num grid de 24, cantos e pontas arredondados (conjunto `petunia-outline`)   | [x] auditado: 287/287 conformes; `select_edge` usa 3,2 px de propósito (aresta em destaque) |
+| Espaçamento            | múltiplos de `space(1)`; rótulo acima (decisão do usuário), margens e espaços de `space(1)`, campos em `fieldHeight()` (28 px) | [x] B13     |
+| Tipografia             | Body para valores, Caption secundária para rótulos do painel; negrito só em títulos       | [x] B13     |
 
 ## Gap
 
-- Hover, guias e rótulos de snap ainda usam a cor de destaque da paleta do sistema (`QPalette::Highlight`) e não os tokens.
-- As cores do cursor do pincel são literais (herdadas). Elas precisam virar tokens de overlay para o alto contraste.
-- Ícones antigos ainda têm traço e cantos diferentes entre si.
-- Ainda não há capturas de antes e depois. Elas são o primeiro passo depois da aprovação.
+- ~~Hover, guias e rótulos de snap usavam `QPalette::Highlight`.~~ Agora usam tokens do tema com halo (B8).
+- As cores do cursor do pincel continuam literais (herdadas) e ainda precisam virar tokens de overlay para o alto contraste.
+- ~~Ícones com traço e cantos diferentes~~: hipótese desfeita pela auditoria de 2026-10-19 (287 SVGs, todos com 1,75 px, `round` e grid 24).
 
 ## Verification
 
-Nenhuma, por enquanto: esta página é a proposta. Depois da aprovação, cada linha "revisar" ganha uma captura de antes e depois (offscreen) e um check no harness `shell_v2`.
+Capturas GL reais (EGL headless) do modo de edição antes e depois em `target/render-captures/` (teste `edit_mode_overlays_capture_for_visual_review`). Capturas do shell em `target/shell-captures/` (`shell_POLY_dense`, `shell_PAINT_compact`) e checks `panel:*`, `color:brush-panel-is-compact`. Resultados no [roteiro](shell-v2-roadmap.md#verification).
 
 ## Risks
 
@@ -60,4 +60,4 @@ Nenhuma, por enquanto: esta página é a proposta. Depois da aprovação, cada l
 
 ## Next
 
-Aprovação do usuário. Depois disso: capturas de antes e depois e a troca de `QPalette::Highlight` e dos literais de overlay por tokens de overlay em `PetuniaTheme`.
+Tokens de overlay para o cursor do pincel; a Onda C nasce com estas métricas.

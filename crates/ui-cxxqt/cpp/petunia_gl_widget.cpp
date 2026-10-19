@@ -1346,9 +1346,21 @@ void PetuniaGlWidget::drawToolPreview(QPainter &painter) {
 }
 
 void PetuniaGlWidget::drawSnapIndicator(QPainter &painter) {
+    // B8 (guia aprovado): guias na cor de destaque do tema, sobre halo escuro,
+    // em vez da cor de seleção do sistema (alto contraste segue o tema).
+    const auto &theme = PetuniaTheme::instance();
     painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(palette().color(QPalette::Highlight), 1.5));
+    {
+        QPen halo(QColor(0, 0, 0, 140), 3.5);
+        halo.setCapStyle(Qt::RoundCap);
+        painter.setPen(halo);
+        for (const auto &key : QStringList{"operation_preview_commands", "loop_cut_preview_commands",
+                                           "slice_preview_commands", "axis_guide_commands", "measure_commands"})
+            painter.drawPath(petuniaPath(m_overlayState[key].toString()));
+    }
+    painter.setPen(QPen(theme.accentPrimary(), 1.5));
     for (const auto &key :
          QStringList{"protractor_commands", "protractor_ticks_commands",
                      "operation_preview_commands", "loop_cut_preview_commands",
@@ -1382,14 +1394,14 @@ void PetuniaGlWidget::drawSnapIndicator(QPainter &painter) {
             painter.setPen(
                 rgb.size() == 3
                     ? QColor(rgb[0].toInt(), rgb[1].toInt(), rgb[2].toInt())
-                    : palette().color(QPalette::Text));
+                    : theme.textPrimary());
             painter.drawText(
                 QPointF(label["x"].toDouble(), label["y"].toDouble()),
                 label["text"].toString());
         }
     if (m_regionSelecting) {
         painter.setPen(
-            QPen(palette().color(QPalette::Highlight), 1, Qt::DashLine));
+            QPen(theme.accentPrimary(), 1, Qt::DashLine));
         if (m_lasso)
             painter.drawPolyline(m_regionPoints);
         else

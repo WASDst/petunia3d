@@ -970,6 +970,85 @@ void checkWaveB(Harness &h, PetuniaShellWindow &window, PetuniaShellController *
     }
 }
 
+
+/// Fechamento da Onda B: política de seleção, orientação, alças do Selecionar,
+/// cor compacta e campos densos no painel.
+void checkWaveBClosing(Harness &h, PetuniaShellWindow &window, PetuniaShellController *c) {
+    c->request("workspace", {{"id", "POLY"}});
+    settle(6);
+    window.syncNow();
+    settle(2);
+    auto *header = window.viewportHeader();
+    auto policy = [&] { return c->request("snapshot")["select_policy"].toObject(); };
+    h.add("select-policy:defaults-to-automatic", policy()["id"].toString() == QLatin1String("auto"));
+    QList<QAction *> policyActions =
+        header->selectPolicyButton() && header->selectPolicyButton()->menu() ? header->selectPolicyButton()->menu()->actions()
+                                                                             : QList<QAction *>();
+    h.add("select-policy:header-offers-three-policies", policyActions.size() == 3,
+          QString::number(policyActions.size()));
+    c->command(QStringLiteral("view.toggle_xray"));
+    settle(2);
+    h.add("select-policy:automatic-selects-through-in-xray", policy()["through_now"].toBool());
+    if (policyActions.size() == 3) {
+        policyActions[1]->trigger();
+        settle(2);
+        h.add("select-policy:visible-only-wins-over-xray",
+              policy()["id"].toString() == QLatin1String("visible") && !policy()["through_now"].toBool());
+        policyActions[0]->trigger();
+        settle(2);
+    }
+    c->command(QStringLiteral("view.toggle_xray"));
+    settle(2);
+    window.syncNow();
+    h.add("select-policy:state-is-announced", !header->selectPolicyButton()->accessibleDescription().isEmpty(),
+          header->selectPolicyButton()->accessibleDescription());
+
+    QList<QAction *> orientationActions;
+    if (header->orientationButton() && header->orientationButton()->menu())
+        for (auto *action : header->orientationButton()->menu()->actions())
+            if (action->isCheckable())
+                orientationActions << action;
+    h.add("orientation:header-offers-global-local-normal-view", orientationActions.size() == 4,
+          QString::number(orientationActions.size()));
+    if (orientationActions.size() == 4) {
+        orientationActions[1]->trigger();
+        settle(2);
+        h.add("orientation:local-reaches-the-session",
+              c->request("snapshot")["transform_orientation"].toString() == QLatin1String("local"));
+        orientationActions[0]->trigger();
+        settle(2);
+    }
+
+    c->request("set_select_gizmo_rotate", {{"enabled", false}});
+    const bool rotateOff = !c->request("snapshot")["select_gizmo_rotate"].toBool(true);
+    c->request("set_select_gizmo_rotate", {{"enabled", true}});
+    h.add("select-gizmo:rotate-handles-can-be-hidden",
+          rotateOff && c->request("snapshot")["select_gizmo_rotate"].toBool());
+
+    bool dense = true;
+    QString tall;
+    for (auto *field : window.properties()->findChildren<PetuniaNumberField *>()) {
+        if (field->isVisible() && field->height() > PetuniaTheme::instance().fieldHeight()) {
+            dense = false;
+            tall = QStringLiteral("%1=%2").arg(field->accessibleName()).arg(field->height());
+        }
+    }
+    h.add("panel:number-fields-use-the-dense-height", dense, tall);
+
+    c->request("workspace", {{"id", "PAINT"}});
+    settle(8);
+    window.syncNow();
+    settle(4);
+    auto *colorPanel = window.properties()->findChild<PetuniaColorPanel *>();
+    h.add("color:brush-panel-is-compact", colorPanel && colorPanel->isCompact() &&
+                                              colorPanel->channelsToggle()->isVisible());
+    h.shot(&window, "shell_PAINT_compact");
+    c->request("workspace", {{"id", "POLY"}});
+    settle(6);
+    window.syncNow();
+    h.shot(&window, "shell_POLY_dense");
+}
+
 } // namespace
 
 extern "C" const char *petunia_shell_harness(const char *directory) {
@@ -2227,6 +2306,7 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
     settle(6);
 
     checkWaveB(h, window, c);
+    checkWaveBClosing(h, window, c);
 
     // Layout do usuário persiste e restaura.
     auto *store = window.layoutStore();

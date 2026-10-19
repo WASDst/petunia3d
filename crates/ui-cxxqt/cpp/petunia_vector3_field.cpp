@@ -139,7 +139,7 @@ QSize PetuniaVector3Field::minimumSizeHint() const {
     // Mínimo = um campo; abaixo da largura necessária para os três lado a lado,
     // os eixos empilham (nunca cortamos X/Y/Z nem forçamos rolagem horizontal).
     const auto &t = PetuniaTheme::instance();
-    const QSize one = m_fields[0] ? m_fields[0]->minimumSizeHint() : QSize(0, t.controlHeight());
+    const QSize one = m_fields[0] ? m_fields[0]->minimumSizeHint() : QSize(0, t.fieldHeight());
     const int height = m_stacked ? 3 * one.height() + 2 * m_layout->spacing() : one.height();
     return {one.width(), height};
 }

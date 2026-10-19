@@ -21,9 +21,10 @@ namespace {
 QFormLayout *workspaceForm(QWidget *owner) {
     auto *form = new QFormLayout(owner);
     const auto &theme = PetuniaTheme::instance();
-    form->setContentsMargins(theme.space(3), theme.space(2), theme.space(3), theme.space(3));
+    // B13: mesma compactação dos módulos do Poly.
+    form->setContentsMargins(theme.space(3), theme.space(1), theme.space(3), theme.space(2));
     form->setHorizontalSpacing(theme.space(2));
-    form->setVerticalSpacing(theme.space(2));
+    form->setVerticalSpacing(theme.space(1));
     form->setRowWrapPolicy(QFormLayout::WrapAllRows);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     return form;
@@ -94,6 +95,7 @@ PetuniaBrushForm::PetuniaBrushForm(QWidget *parent) : PetuniaBoundForm(parent) {
     // vivo. O alfa da cor É a opacidade do pincel (a linha "Opacidade" saiu: A8).
     m_color = new PetuniaColorPanel(this);
     m_color->setAccessibleName(tr("Cor do pincel"));
+    m_color->setCompact(true); // B14: roda menor e canais recolhidos no painel
     form->addRow(m_color);
     connect(m_color, &PetuniaColorPanel::colorChanged, this, [this](const QColor &c) {
         if (m_syncingColor)

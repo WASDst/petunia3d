@@ -438,6 +438,20 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         if asset.mesh.verts.is_empty() {
             return model;
         };
+        // B10: em vértice/aresta/face sem nada selecionado não há o que
+        // transformar; o gizmo do objeto ficava por cima das faces e engolia
+        // o clique que deveria selecioná-las.
+        let domain = state.selection_domain();
+        let mesh = &asset.mesh;
+        let has_components = match domain {
+            petunia_core::SelectionDomain::Vertex => mesh.verts.iter().any(|v| v.selected),
+            petunia_core::SelectionDomain::Edge => !mesh.selected_edges.is_empty(),
+            petunia_core::SelectionDomain::Face => mesh.faces.iter().any(|f| f.selected),
+            petunia_core::SelectionDomain::Object => true,
+        };
+        if !has_components && state.session.tools.modal.is_none() && !state.session.edit_pivot {
+            return model;
+        }
         let p = displayed_pivot(state);
         let f = state.session.tools.modal.as_ref().map_or_else(
             || state.calculate_transform_frame(state.session.transform_orientation),
@@ -704,6 +718,52 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             ));
         }
         model.view_roll_commands = roll;
+    }
+
+    // B11: no Selecionar, só as famílias escolhidas nas Preferências. O teste de
+    // acerto lê os mesmos traços, então alça escondida também não recebe clique.
+    if state.session.tools.active_tool == "select" && !is_animate_bone {
+        let [show_move, show_rotate, show_scale] = state.ui.select_gizmo_handles;
+        if !show_move {
+            for commands in [
+                &mut model.x_commands,
+                &mut model.y_commands,
+                &mut model.z_commands,
+                &mut model.x_arrow_commands,
+                &mut model.y_arrow_commands,
+                &mut model.z_arrow_commands,
+                &mut model.plane_yz_commands,
+                &mut model.plane_xz_commands,
+                &mut model.plane_xy_commands,
+            ] {
+                commands.clear();
+            }
+        }
+        if !show_rotate {
+            for commands in [
+                &mut model.x_rotate_commands,
+                &mut model.y_rotate_commands,
+                &mut model.z_rotate_commands,
+                &mut model.x_ring_front,
+                &mut model.y_ring_front,
+                &mut model.z_ring_front,
+                &mut model.view_roll_commands,
+            ] {
+                commands.clear();
+            }
+        }
+        if !show_scale {
+            for commands in [
+                &mut model.x_scale_commands,
+                &mut model.y_scale_commands,
+                &mut model.z_scale_commands,
+            ] {
+                commands.clear();
+            }
+        }
+        if !(show_move || show_rotate || show_scale) {
+            model.visible = false;
+        }
     }
 
     model
@@ -1763,30 +1823,13 @@ pub(crate) fn ray_triangle_cull(
     p2: glam::Vec3,
     cull_backfaces: bool,
 ) -> Option<f32> {
-    let edge1 = p1 - p0;
-    let edge2 = p2 - p0;
-    let pvec = direction.cross(edge2);
-    let det = edge1.dot(pvec);
-    if cull_backfaces {
-        if det < 1e-7 {
-            return None;
-        }
-    } else if det.abs() < 1e-7 {
+    // Uma só interseção raio-triângulo (com folga nas arestas, B10); aqui só se
+    // acrescenta o descarte das faces de costas.
+    if cull_backfaces && (p1 - p0).dot(direction.cross(p2 - p0)) < 1e-7 {
         return None;
     }
-    let inv = 1.0 / det;
-    let tvec = origin - p0;
-    let u = tvec.dot(pvec) * inv;
-    if !(0.0..=1.0).contains(&u) {
-        return None;
-    }
-    let qvec = tvec.cross(edge1);
-    let v = direction.dot(qvec) * inv;
-    if v < 0.0 || u + v > 1.0 {
-        return None;
-    }
-    let distance = edge2.dot(qvec) * inv;
-    (distance > 1e-4).then_some(distance)
+    petunia_mesh::triangulate::ray_tri(origin, direction, p0, p1, p2)
+        .filter(|distance| *distance > 1e-4)
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

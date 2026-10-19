@@ -69,11 +69,40 @@ fn xray_wireframe_and_select_through_have_independent_state() {
     let mut b = bridge();
     b.state.session.show_xray = true;
     b.state.session.shading = petunia_core::Shading::Wireframe;
-    assert!(!b.state.session.select_through);
+    assert!(b.state.session.select_policy != petunia_core::SelectPolicy::Through);
     b.apply(UiIntent::SetSelectThrough(true));
     b.state.session.show_xray = false;
-    assert!(b.state.session.select_through);
-    assert!(b.state.session.viewport_session().select_through);
+    assert!(b.state.session.select_policy == petunia_core::SelectPolicy::Through);
+    assert!(
+        b.state.session.viewport_session().select_policy == petunia_core::SelectPolicy::Through
+    );
+}
+
+/// B10: a política Automática segue o que se vê — Sólido respeita a oclusão,
+/// Raio-X e Wireframe selecionam através — sem que o Raio-X mude a política.
+#[test]
+fn auto_selection_policy_follows_what_is_visible() {
+    let mut b = bridge();
+    assert_eq!(
+        b.state.session.select_policy,
+        petunia_core::SelectPolicy::Auto
+    );
+    assert!(!b.state.session.selects_through(), "Sólido: só o visível");
+    b.state.session.show_xray = true;
+    assert!(b.state.session.selects_through(), "Raio-X: através");
+    assert_eq!(
+        b.state.session.select_policy,
+        petunia_core::SelectPolicy::Auto
+    );
+    b.state.session.show_xray = false;
+    b.state.session.shading = petunia_core::Shading::Wireframe;
+    assert!(b.state.session.selects_through(), "Wireframe: através");
+    b.state
+        .set_select_policy(petunia_core::SelectPolicy::VisibleOnly);
+    assert!(
+        !b.state.session.selects_through(),
+        "Só visível vence o Wireframe"
+    );
 }
 
 #[test]
@@ -1029,11 +1058,11 @@ fn spatial_dimensions_and_companion_view_invariants_h29() {
     // VSP-004: X-Ray vs Select Through
     b.state.set_show_xray(true);
     assert!(b.state.show_xray);
-    assert!(!b.state.select_through);
+    assert!(b.state.select_policy != petunia_core::SelectPolicy::Through);
     b.state.set_select_through(true);
     b.state.set_show_xray(false);
     assert!(!b.state.show_xray);
-    assert!(b.state.select_through);
+    assert!(b.state.select_policy == petunia_core::SelectPolicy::Through);
 
     // Pureza: consultas não poluem pilha de undo
     let undo_depth_before = b.state.project.undo.depth().0;

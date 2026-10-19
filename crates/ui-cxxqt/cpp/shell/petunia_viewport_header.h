@@ -32,6 +32,10 @@ class PetuniaViewportHeader : public QWidget {
     bool compact() const { return m_compact; }
     /// Botão da grade: clique liga/desliga; a seta abre tamanho, ladrilho, opacidade e eixos (B6).
     QToolButton *gridButton() const { return m_grid; }
+    /// Política de seleção (B10): Automática, Só visível, Através.
+    QToolButton *selectPolicyButton() const { return m_selectPolicy; }
+    /// Orientação de transformação (B15): Global, Local, Normal, Vista.
+    QToolButton *orientationButton() const { return m_orientation; }
     QWidget *gridOptions() const { return m_gridOptions; }
 
   protected:
@@ -44,6 +48,8 @@ class PetuniaViewportHeader : public QWidget {
     void buildOverlaysMenu();
     void buildCameraMenu();
     void buildGridMenu();
+    void buildSelectPolicyMenu();
+    void buildOrientationMenu();
     void syncGrid(const QJsonObject &grid);
     void commitGrid();
     void applyMetrics();
@@ -62,6 +68,10 @@ class PetuniaViewportHeader : public QWidget {
     QToolButton *m_camera{nullptr};
     QToolButton *m_split{nullptr};
     QToolButton *m_grid{nullptr};
+    QToolButton *m_selectPolicy{nullptr};
+    QToolButton *m_orientation{nullptr};
+    QHash<QString, QAction *> m_orientationActions;
+    QHash<QString, QAction *> m_policyActions;
     QWidget *m_gridOptions{nullptr};
     class PetuniaNumberField *m_gridSize{nullptr};
     class PetuniaNumberField *m_gridSpacing{nullptr};

@@ -1118,31 +1118,8 @@ fn point_in_polygon_2d(pt: (f32, f32), poly: &[(f32, f32)]) -> bool {
 
 /// Interseção raio-triângulo de Möller–Trumbore.
 fn ray_triangle_intersection(orig: Vec3, dir: Vec3, v0: Vec3, v1: Vec3, v2: Vec3) -> Option<f32> {
-    let eps = 1e-7;
-    let edge1 = v1 - v0;
-    let edge2 = v2 - v0;
-    let pvec = dir.cross(edge2);
-    let det = edge1.dot(pvec);
-
-    if det.abs() < eps {
-        return None;
-    }
-
-    let inv_det = 1.0 / det;
-    let tvec = orig - v0;
-    let u = tvec.dot(pvec) * inv_det;
-    if !(0.0..=1.0).contains(&u) {
-        return None;
-    }
-
-    let qvec = tvec.cross(edge1);
-    let v = dir.dot(qvec) * inv_det;
-    if v < 0.0 || u + v > 1.0 {
-        return None;
-    }
-
-    let t = edge2.dot(qvec) * inv_det;
-    if t > eps { Some(t) } else { None }
+    // Mesma interseção do picking, com folga nas arestas (B10).
+    petunia_mesh::triangulate::ray_tri(orig, dir, v0, v1, v2).filter(|t| *t > 1e-7)
 }
 
 /// Calcula estações transportadas paralelamente (RMF / Bishop Frame) ao longo de uma sequência de pontos 3D.

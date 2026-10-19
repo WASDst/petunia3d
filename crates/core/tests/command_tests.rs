@@ -1591,6 +1591,44 @@ fn test_frame_all_and_selection_dont_dirty_project() {
 }
 
 #[test]
+fn camera_frame_advances_to_goal_and_ignores_hostile_dt() {
+    let mut state = AppState::default();
+    state.camera.target.x = 40.0;
+    state.camera.distance = 90.0;
+    state.camera.yaw = 1.3;
+    assert!(!state.advance_camera_frame(0.033), "nothing scheduled");
+    state
+        .dispatch_command("view.frame_selection")
+        .expect("frame selection");
+    let goal = state.camera_frame.clone().expect("framing scheduled").1;
+
+    for hostile in [f32::NAN, f32::INFINITY, -1.0] {
+        assert!(state.advance_camera_frame(hostile));
+        assert_eq!(state.camera.target.x, 40.0, "hostile dt must not move");
+    }
+    assert!(state.advance_camera_frame(0.1));
+    assert!(state.camera.target.x < 40.0 && state.camera.target.x > goal.target.x);
+    state.camera.yaw = 2.0; // órbita durante a transição é preservada
+    let mut ticks = 0;
+    while state.advance_camera_frame(0.1) {
+        ticks += 1;
+        assert!(ticks < 10, "animation must terminate");
+    }
+    assert!(state.camera_frame.is_none());
+    assert!((state.camera.target - goal.target).length() < 1e-5);
+    assert!((state.camera.distance - goal.distance).abs() < 1e-5);
+    assert_eq!(state.camera.yaw, 2.0);
+
+    state.ui.reduced_motion = true;
+    state.camera.distance = 90.0;
+    state.dispatch_command("view.frame_all").expect("frame all");
+    let goal = state.camera_frame.clone().expect("framing scheduled").1;
+    assert!(state.advance_camera_frame(0.0));
+    assert!(state.camera_frame.is_none(), "reduced motion jumps at once");
+    assert!((state.camera.distance - goal.distance).abs() < 1e-5);
+}
+
+#[test]
 fn test_instantiate_asset_command_and_undo() {
     let mut state = AppState::default();
     let asset_id = state.project.assets[0].id;
@@ -3339,14 +3377,14 @@ fn test_spatial_dimension_and_comparison_invariants_h29() {
     state.set_show_xray(true);
     assert!(state.show_xray);
     assert!(
-        !state.select_through,
+        state.select_policy != petunia_core::SelectPolicy::Through,
         "Ativar X-Ray visual nunca altera Select Through"
     );
     state.set_select_through(true);
     state.set_show_xray(false);
     assert!(!state.show_xray);
     assert!(
-        state.select_through,
+        state.select_policy == petunia_core::SelectPolicy::Through,
         "Desativar X-Ray nunca altera Select Through"
     );
 }

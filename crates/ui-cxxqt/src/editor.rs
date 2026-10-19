@@ -253,6 +253,15 @@ impl QtEditor {
             "rotation": locks.rotation,
             "scale": locks.scale,
         });
+        let [gizmo_move, gizmo_rotate, gizmo_scale] = self.state.ui.select_gizmo_handles;
+        v["select_gizmo_move"] = json!(gizmo_move);
+        v["select_gizmo_rotate"] = json!(gizmo_rotate);
+        v["select_gizmo_scale"] = json!(gizmo_scale);
+        v["transform_orientation"] = json!(self.state.session.transform_orientation.id());
+        v["select_policy"] = json!({
+            "id": self.state.session.select_policy.id(),
+            "through_now": self.state.session.selects_through(),
+        });
         let grid = &self.state.session.grid_settings;
         v["viewport_grid"] = json!({
             "visible": self.state.session.show_grid,
@@ -892,6 +901,7 @@ impl QtEditor {
                 p.selection_thickness = state.ui.selection_thickness;
                 p.gizmo_size = state.ui.gizmo_size;
                 p.gizmo_thickness = state.ui.gizmo_thickness;
+                p.select_gizmo_handles = state.ui.select_gizmo_handles;
                 p.nav_cube_opacity = state.ui.nav_cube_opacity;
                 p.model_quick_actions = state.ui.model_quick_actions.clone();
                 p.active_keymap_id = state.ui.active_keymap_id.clone();
@@ -1293,6 +1303,7 @@ impl QtEditor {
                 } else {
                     false
                 };
+                changed |= b.state.advance_camera_frame(dt);
                 changed |= b.decal_playback_tick(dt);
                 changed |= with_tablet(b, tablet, |b| b.airbrush_tick());
                 if owns_session {
@@ -1830,6 +1841,30 @@ fn dispatch_controller(
         "toggle_edit_pivot" => b.toggle_edit_pivot(),
         "toggle_face_orientation" => b.toggle_face_orientation(),
         "toggle_grid" => b.toggle_grid(),
+        "set_select_gizmo_move" => b.set_select_gizmo_handle(0, boolean(v, "enabled")?),
+        "set_select_gizmo_rotate" => b.set_select_gizmo_handle(1, boolean(v, "enabled")?),
+        "set_select_gizmo_scale" => b.set_select_gizmo_handle(2, boolean(v, "enabled")?),
+        "set_transform_orientation" => {
+            let orientation = petunia_core::TransformOrientation::from_offered_id(string(v, "id")?)
+                .ok_or_else(|| "Orientação inválida (global, local, normal, view)".to_string())?;
+            if b.state.session.transform_orientation == orientation {
+                false
+            } else {
+                b.state.set_transform_orientation(orientation);
+                b.state.mark_dirty();
+                true
+            }
+        }
+        "select_policy" => {
+            let policy =
+                petunia_core::SelectPolicy::from_id(string(v, "id")?).ok_or_else(|| {
+                    "Política de seleção inválida (auto, visible, through)".to_string()
+                })?;
+            b.state.set_select_policy(policy);
+            b.clear_hover();
+            b.state.mark_dirty();
+            true
+        }
         "toggle_world_axis" => b.toggle_world_axis(index(v, "axis")?),
         "set_viewport_grid" => b.set_viewport_grid(
             number(v, "size")?,

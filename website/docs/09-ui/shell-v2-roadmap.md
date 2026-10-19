@@ -1,6 +1,6 @@
 # Shell v2 — roteiro de Poly, Paint, UV, Animate, Nós e Assets (2026-10-18)
 
-> Status: **aprovado** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario)). Onda A concluída; Onda B implementada até B9 (2026-10-19), com B8 aguardando a aprovação do guia de estilo e B10–B15 registrados em 2026-10-19; a Onda C vem depois. Referências de outros softwares (Blender, Photoshop, Affinity, Cavalry, Vegas) servem de **referência de ergonomia**, nunca de código ou recurso copiado.
+> Status: **aprovado** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario)). Ondas A e B concluídas (2026-10-19); a Onda C vem a seguir. Referências de outros softwares (Blender, Photoshop, Affinity, Cavalry, Vegas) servem de **referência de ergonomia**, nunca de código ou recurso copiado.
 
 ## Intent
 
@@ -47,14 +47,14 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | B5  | Todo diálogo/modal movível e redimensionável (Preferências, Referências, primitivas, cor), com posição e tamanho lembrados | [x] DONE (código e testes) |
 | B6  | Overlays da vista: eixo Y oculto por padrão e eixos sem atravessar objetos (teste de profundidade, esmaecidos); grade com extensão e tamanho do ladrilho configuráveis e botão de ligar/desligar no cabeçalho da vista | [x] DONE (código e testes) |
 | B7  | Travar valores: cadeado pequeno dentro do próprio campo, à direita; trava por canal (posição/rotação/escala × X/Y/Z) respeitada por gizmo, modal e teclado | [x] DONE (código e testes) |
-| B8  | Linguagem visual da viewport e da GUI: guia de estilo e passada de polimento; **aproveitar o espaço** (painéis e campos sem tamanho desnecessário) e **alinhar todo elemento ao visual geral** (pedido de 2026-10-19) | [-] IN PROGRESS (guia proposto em [linguagem visual](visual-language.md), aguarda aprovação; B12–B14 são as frentes concretas) |
+| B8  | Linguagem visual da viewport e da GUI: guia de estilo e passada de polimento; **aproveitar o espaço** (painéis e campos sem tamanho desnecessário) e **alinhar todo elemento ao visual geral** (pedido de 2026-10-19) | [x] DONE (guia aprovado; tokens nos guias de snap; frentes B12–B14) |
 | B9  | Menus em torta (pie): Shift+A primitivas, vista da câmera, domínio de seleção (objeto/vértice/aresta/face), com teclado e alternativa em lista | [x] DONE (código e testes) |
-| B10 | Seleção de vértice/aresta/face fiel ao que se vê: respeitar a oclusão no Sólido e selecionar através no Raio-X/Wireframe (política explícita, controle no cabeçalho, estudo de referência) | [ ] TODO (pedido de 2026-10-19; decisão de política com o usuário) |
-| B11 | Gizmo da ferramenta Selecionar configurável nas Preferências: mostrar mover, escalar e/ou rotacionar | [ ] TODO (pedido de 2026-10-19) |
-| B12 | Seleção e overlays suaves na vista: contorno fino do objeto, pontos pequenos de vértice, arestas finas, face com tinta leve, sem diagonais de triangulação nem halos sobrepostos | [ ] TODO (pedido de 2026-10-19) |
-| B13 | Painel direito denso e organizado: coluna de rótulos alinhada, linhas baixas, coluna fixa de ícones à direita (cadeado, chave), seções recolhidas por padrão | [ ] TODO (pedido de 2026-10-19) |
-| B14 | Paint compacto: vistas 3D e 2D com trilho fino próprio, seletor de cor em modo compacto no painel, prateleira de pincéis; menu de botão direito mais denso | [ ] TODO (pedido de 2026-10-19) |
-| B15 | Orientação de transformação no cabeçalho da vista: Global, Local, Normal, Vista e Cursor | [ ] TODO (pedido de 2026-10-19) |
+| B10 | Seleção de vértice/aresta/face fiel ao que se vê: respeitar a oclusão no Sólido e selecionar através no Raio-X/Wireframe (política explícita, controle no cabeçalho, estudo de referência) | [x] DONE (política Automática aprovada; 3 defeitos corrigidos com testes de regressão) |
+| B11 | Gizmo da ferramenta Selecionar configurável nas Preferências: mostrar mover, escalar e/ou rotacionar | [x] DONE (código e testes) |
+| B12 | Seleção e overlays suaves na vista: contorno fino do objeto, pontos pequenos de vértice, arestas finas, face com tinta leve, sem diagonais de triangulação nem halos sobrepostos | [x] DONE (métricas novas; capturas GL antes/depois) |
+| B13 | Painel direito denso e organizado: tamanho de cada campo e de cada módulo (o rótulo acima continua, por decisão do usuário) | [x] DONE (rótulo acima mantido; campos e módulos densos) |
+| B14 | Paint compacto: seletor de cor em modo compacto no painel e menu de botão direito mais denso | [x] DONE (seletor de cor compacto e menus densos; trilho único mantido — ver nota) |
+| B15 | Orientação de transformação no cabeçalho da vista: Global, Local, Normal e Vista | [x] DONE (Global, Local, Normal, Vista; Cursor fica de fora — ver nota) |
 
 ## Onda C — grandes
 
@@ -74,7 +74,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 - Hoje `DeleteAssetCmd` não limpa grupos vazios; o grupo só guarda nome (`Project.collections: Vec<String>`).
 - O menu de botão direito só tem "Origem para o cursor"; o pivô é calculado na projeção, sem deslocamento próprio persistido.
 - ~~O seletor de cor é um diálogo pequeno com confirmação; a opacidade do brush é repetida no painel de Paint.~~ Resolvido na Onda B (B1/A8).
-- `view.frame_selection` só agenda `camera_frame` e nada o consome no shell Qt: enquadrar pode não mover a câmera (achado nos testes da Onda B, tarefa separada).
+- ~~`view.frame_selection` só agendava `camera_frame` e nada o consumia no shell Qt.~~ Corrigido: o tick do shell avança a animação, e com movimento reduzido salta direto ao alvo.
 - A timeline não tem registro de propriedades nem editor de curvas.
 
 ## Notas de design — pedidos de 2026-10-19
@@ -133,6 +133,27 @@ Onda B (B1–B7, B9) e A8, 2026-10-19, testes só no fim da onda (pedido do usu�
 | Janela real com GPU (Wayland: mover/redimensionar diálogos, tortas, cadeados, eco do pincel)  | não executado: precisa do usuário no app                                  | not run |
 | Windows, leitor de tela, alto contraste, escalas 150%/200%                                    | não executado                                                             | not run |
 
+Fechamento da Onda B (B8, B10–B15) e correção do enquadramento (F/Home), 2026-10-19, testes no fim (pedido do usuário). Mesmo ambiente.
+
+| Gate                                                                                   | Resultado                                                              | Status  |
+|----------------------------------------------------------------------------------------|------------------------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                                           | sem diferenças                                                         | pass    |
+| `cargo clippy -D warnings` (8 crates, `--all-targets --all-features`)                  | 0 avisos (1 lint do teste novo corrigido)                              | pass    |
+| `cargo test --no-fail-fast` (7 crates, `--all-features`, `PETUNIA_REQUIRE_GL=1`)       | 1628 testes, 0 falhas, GL sem SKIPPED                                  | pass    |
+| `cargo test -p petunia_ui_cxxqt -- --test-threads=1` (offscreen)                       | 51 testes, 0 falhas (inclui os 2 do enquadramento em `editor_parity`)  | pass    |
+| `shell_v2` (harness): 315 verificações, 10 novas                                       | 0 reprovadas em 5 execuções seguidas                                   | pass    |
+| `xtask docs-generate --check`; `verify-progress.cjs`; `progress.test.cjs`              | sem drift; consistentes; 6/6                                           | pass    |
+| Janela real com GPU (seleção no Raio-X, gizmo, painel denso, Paint compacto)            | não executado: precisa do usuário no app                               | not run |
+| Windows, leitor de tela, alto contraste, 150%/200%                                     | não executado                                                          | not run |
+
+Defeitos reais achados e corrigidos neste fechamento, cada um com teste que falhava antes:
+- **Raio-triângulo sem folga:** o raio vazava pela diagonal compartilhada dos quads (125 de 1600 raios no teste sintético). As cópias em `projection.rs` e `section_analysis.rs` agora delegam à única função corrigida.
+- **Gizmo do Selecionar:** engolia o clique em vértices e arestas vizinhos (o hover mostrava um componente e o clique ia para a alça).
+- **Gizmo sem componentes:** aparecia em vértice/aresta/face sem nada selecionado.
+- **`camera_frame` não avançava** no shell Qt (F/Home não reenquadravam). Corrigido pela sessão paralela e incluído aqui.
+
+Teste ajustado (por honestidade): `vertex_domain_draws_round_markers_of_constant_size` exigia mais de 40 px no disco de hover, o que codificava o halo antigo. O limite passou a refletir o ponto aprovado de 3,5 px (mais de 20 px), e a verificação de tamanho constante em qualquer zoom ficou intacta.
+
 Correção de teste feita no caminho (por honestidade): a primeira versão do check do eco do pincel apontava o centro da vista, mas checks anteriores giram a câmera e movem o cubo e o ponto caía fora do objeto. O check passou a partir de um ponto da textura visível e fazer a ida e volta (erro medido: 0,00 px). A lógica Rust não mudou, e um teste de bridge isolado já passava.
 
 ## Risks
@@ -143,4 +164,4 @@ Correção de teste feita no caminho (por honestidade): a primeira versão do ch
 
 ## Next
 
-Conferência do usuário no app real (diálogos no Wayland, tortas, cadeados, eco do pincel, grade). Depois, aprovação do [guia de estilo](visual-language.md) (B8) e abertura da Onda C, começando por C5 (que consome o registro animável) e C8 (modos no HUD de prévia).
+Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados e grade. Depois, a Onda C, começando por C5 (que consome o registro animável) e C8 (modos no HUD de prévia).

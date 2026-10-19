@@ -557,7 +557,20 @@ PetuniaColorPanel::PetuniaColorPanel(QWidget *parent) : QWidget(parent) {
     m_modelChooser = new QComboBox(this);
     m_modelChooser->addItems({QStringLiteral("RGB"), QStringLiteral("HSL"), QStringLiteral("HSV")});
     m_modelChooser->setAccessibleName(tr("Modelo de cor"));
-    right->addWidget(m_modelChooser);
+    auto *modelRow = new QHBoxLayout();
+    modelRow->setSpacing(t.space(1));
+    modelRow->addWidget(m_modelChooser, 1);
+    // Modo compacto (B14): os canais ficam recolhidos atrás deste botão.
+    m_channelsToggle = new QToolButton(this);
+    m_channelsToggle->setObjectName(QStringLiteral("color-channels-toggle"));
+    m_channelsToggle->setCheckable(true);
+    m_channelsToggle->setText(tr("Canais"));
+    m_channelsToggle->setToolTip(tr("Mostrar os canais numéricos"));
+    m_channelsToggle->setAccessibleName(tr("Mostrar os canais numéricos"));
+    m_channelsToggle->setVisible(false);
+    connect(m_channelsToggle, &QToolButton::toggled, this, [this] { applyCompactLayout(); });
+    modelRow->addWidget(m_channelsToggle);
+    right->addLayout(modelRow);
     connect(m_modelChooser, &QComboBox::currentIndexChanged, this, [this](int index) {
         m_model = index == 1 ? Model::Hsl : index == 2 ? Model::Hsv : Model::Rgb;
         refreshChannels();
@@ -715,10 +728,39 @@ void PetuniaColorPanel::resizeEvent(QResizeEvent *event) {
         m_stacked = stacked;
         m_root->setDirection(stacked ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
     }
-    // Empilhado, a roda acompanha a largura (sem passar de 210 px nem ficar ilegível).
+    // Empilhado, a roda acompanha a largura (sem passar de 210 px nem ficar ilegível);
+    // compacta, ela não passa de 150 px para o painel continuar com espaço.
     const int scale = std::max(1, PetuniaTheme::instance().scaled(100));
-    const int logical = stacked ? std::clamp(width() * 100 / scale - 16, 140, 210) : 210;
+    const int ceiling = m_compact ? 150 : 210;
+    const int floor = m_compact ? 120 : 140;
+    const int logical = stacked ? std::clamp(width() * 100 / scale - 16, floor, ceiling) : ceiling;
     m_wheel->setDiameter(logical);
+    // A caixa acompanha a roda: a pilha reserva o maior filho, e uma caixa fixa
+    // de 210 px deixava um vão embaixo da roda compacta (B14).
+    if (m_box->size() != m_wheel->size())
+        m_box->setFixedSize(m_wheel->size());
+}
+
+void PetuniaColorPanel::setCompact(bool compact) {
+    if (m_compact == compact)
+        return;
+    m_compact = compact;
+    m_channelsToggle->setVisible(compact);
+    applyCompactLayout();
+    QResizeEvent event(size(), size());
+    resizeEvent(&event);
+}
+
+void PetuniaColorPanel::applyCompactLayout() {
+    const bool channels = !m_compact || m_channelsToggle->isChecked();
+    for (int i = 0; i < 4; ++i) {
+        // O alfa é a opacidade do pincel (A8): fica à vista mesmo no compacto.
+        const bool alphaRow = i == 3;
+        const bool show = alphaRow ? m_alphaEnabled : channels;
+        m_channelLabels[i]->setVisible(show);
+        m_channelSliders[i]->setVisible(show);
+        m_channelFields[i]->setVisible(show);
+    }
 }
 
 void PetuniaColorPanel::setMode(int index) {
@@ -738,9 +780,7 @@ void PetuniaColorPanel::setColor(const QColor &color) {
 
 void PetuniaColorPanel::setAlphaEnabled(bool enabled) {
     m_alphaEnabled = enabled;
-    m_channelLabels[3]->setVisible(enabled);
-    m_channelSliders[3]->setVisible(enabled);
-    m_channelFields[3]->setVisible(enabled);
+    applyCompactLayout();
     if (!enabled) {
         QColor opaque = m_color;
         opaque.setAlpha(255);

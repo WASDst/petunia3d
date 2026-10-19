@@ -382,6 +382,45 @@ fn idle_tick_does_not_request_redraw_and_motion_tick_advances() {
     assert!(!e.request(&json!({"action":"tick","dt":0.033})).unwrap());
 }
 
+/// Regressão: `view.frame_selection` só agendava `camera_frame`; nenhum caminho
+/// do shell Qt o avançava, então F / "Enquadrar seleção" não movia a câmera.
+#[test]
+fn frame_selection_reaches_goal_through_shell_tick() {
+    let mut e = editor();
+    e.state.camera.target.x = 40.0;
+    e.state.camera.distance = 90.0;
+    request(
+        &mut e,
+        json!({"action":"command","id":"view.frame_selection"}),
+    );
+    let goal = e.state.camera_frame.clone().expect("framing scheduled").1;
+    assert!(
+        e.request(&json!({"action":"tick","dt":0.033})).unwrap(),
+        "framing tick must request a redraw"
+    );
+    for _ in 0..30 {
+        e.request(&json!({"action":"tick","dt":0.033})).unwrap();
+    }
+    assert!(e.state.camera_frame.is_none(), "animation must finish");
+    assert!((e.state.camera.target - goal.target).length() < 1e-4);
+    assert!((e.state.camera.distance - goal.distance).abs() < 1e-4);
+    assert!(!e.request(&json!({"action":"tick","dt":0.033})).unwrap());
+}
+
+#[test]
+fn frame_selection_with_reduced_motion_jumps_on_first_tick() {
+    let mut e = editor();
+    e.state.ui.reduced_motion = true;
+    e.state.camera.target.x = 40.0;
+    e.state.camera.distance = 90.0;
+    request(&mut e, json!({"action":"command","id":"view.frame_all"}));
+    let goal = e.state.camera_frame.clone().expect("framing scheduled").1;
+    assert!(e.request(&json!({"action":"tick","dt":0.001})).unwrap());
+    assert!(e.state.camera_frame.is_none());
+    assert!((e.state.camera.target - goal.target).length() < 1e-4);
+    assert!((e.state.camera.distance - goal.distance).abs() < 1e-4);
+}
+
 #[test]
 fn imported_palette_is_saved_and_restored_by_native_project_open() {
     let mut e = editor();

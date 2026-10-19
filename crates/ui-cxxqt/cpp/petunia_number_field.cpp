@@ -160,14 +160,14 @@ QSize PetuniaNumberField::sizeHint() const {
     const int chip = m_prefix.isEmpty() ? 0 : chipRect().width();
     const int text = fm.horizontalAdvance(QStringLiteral("-000.0000")) +
                      (m_suffix.isEmpty() ? 0 : fm.horizontalAdvance(m_suffix + QLatin1Char(' ')));
-    return {chip + text + t.space(4), t.controlHeight()};
+    return {chip + text + t.space(4), t.fieldHeight()};
 }
 
 QSize PetuniaNumberField::minimumSizeHint() const {
     const auto &t = PetuniaTheme::instance();
     const QFontMetrics fm(m_lineEdit->font());
     const int chip = m_prefix.isEmpty() ? 0 : chipRect().width();
-    return {chip + fm.horizontalAdvance(QStringLiteral("0.00")) + t.space(3), t.controlHeight()};
+    return {chip + fm.horizontalAdvance(QStringLiteral("0.00")) + t.space(3), t.fieldHeight()};
 }
 
 // ── Tema ────────────────────────────────────────────────────────────────────
@@ -182,8 +182,8 @@ void PetuniaNumberField::applyTheme() {
     p.setColor(QPalette::Highlight, t.accentPrimary());
     p.setColor(QPalette::HighlightedText, t.textActive());
     m_lineEdit->setPalette(p);
-    setMinimumHeight(t.controlHeight());
-    setMaximumHeight(t.controlHeight());
+    setMinimumHeight(t.fieldHeight());
+    setMaximumHeight(t.fieldHeight());
     const int chip = m_prefix.isEmpty() ? 0 : chipRect().width();
     const int lock = m_lockable ? std::max(12, t.iconPx() - 2) + t.space(1) : 0;
     layout()->setContentsMargins(chip + t.space(2), 1, t.space(1) + lock, 1);
@@ -200,7 +200,7 @@ QRect PetuniaNumberField::chipRect() const {
     f.setBold(true);
     const QFontMetrics fm(f);
     const int width = std::max(t.space(5), fm.horizontalAdvance(m_prefix) + t.space(2));
-    const int h = std::max(0, t.controlHeight() - 2);
+    const int h = std::max(0, t.fieldHeight() - 2);
     return {1, 1, width, h};
 }
 

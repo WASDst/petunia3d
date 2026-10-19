@@ -2041,6 +2041,7 @@ dependencies = [
  "glam",
  "glow",
  "glutin",
+ "image",
  "petunia_config",
  "petunia_core",
  "petunia_mesh",

@@ -233,7 +233,7 @@ pub use state::{
     PROPERTIES_MAX_WIDTH, PROPERTIES_MIN_WIDTH, PivotPoint, ProfileState, ProjectState, RefAxis,
     ReferenceImage, RenderResources, RenderStats, SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT,
     SHELL_ASSET_LIBRARY_MAX_HEIGHT, SHELL_ASSET_LIBRARY_MIN_HEIGHT, SceneFilter, SceneObjectState,
-    Shading, TOOLBAR_DEFAULT_WIDTH, TextureDirtyRect, TextureUpdate, ToolActivation,
+    SelectPolicy, Shading, TOOLBAR_DEFAULT_WIDTH, TextureDirtyRect, TextureUpdate, ToolActivation,
     ToolSessionManager, ToolSettingsSnapshot, ToolState, TransformFrame, TransformOrientation,
     UiDensity, UiState, ViewportSession, WorkplaneKind, WorkspaceUiMemory, workspace_index,
 };

@@ -808,7 +808,9 @@ fn vertex_domain_draws_round_markers_of_constant_size() {
     };
     let near = marker_pixels(&mut h, 2.0);
     let far = marker_pixels(&mut h, 6.0);
-    assert!(near > 40, "disco de hover visível: {near}");
+    // B12: o hover é um ponto de 3,5 px de raio (π·3,5² ≈ 38 px; a borda
+    // suavizada sai do filtro de cor). Antes era um halo de 6,5 px (> 40).
+    assert!(near > 20, "disco de hover visível: {near}");
     let ratio = near as f32 / far.max(1) as f32;
     assert!((0.7..1.4).contains(&ratio), "tamanho em px: {near} × {far}");
 }
@@ -1313,4 +1315,94 @@ fn outline_uses_each_parts_selection_color_and_draws_hover() {
     );
     let (hover_total, _) = changed_pixels(&plain, &hovered);
     assert!(hover_total > 0, "o hover do objeto desenha um contorno");
+}
+
+/// B12: capturas reais (GL) do cubo em cada domínio de seleção, com seleção e
+/// hover, para comparar a hierarquia visual com o guia. Salvas em
+/// `target/render-captures/`; o teste confere só que há overlay sobre a face.
+#[test]
+fn edit_mode_overlays_capture_for_visual_review() {
+    use petunia_core::{HoverTarget, SelectionDomain};
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(480, 360) else {
+        return;
+    };
+    let dir =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/render-captures");
+    std::fs::create_dir_all(&dir).expect("diretório de capturas");
+    let camera = Camera {
+        target: Vec3::ZERO,
+        distance: 7.5,
+        aspect: 480.0 / 360.0,
+        ..Camera::default()
+    };
+    let cases: [(&str, SelectionDomain, HoverTarget); 4] = [
+        ("object", SelectionDomain::Object, HoverTarget::None),
+        ("vertex", SelectionDomain::Vertex, HoverTarget::Vertex(6)),
+        ("edge", SelectionDomain::Edge, HoverTarget::None),
+        ("face", SelectionDomain::Face, HoverTarget::None),
+    ];
+    for (name, domain, hover) in cases {
+        let mut project = cube_project();
+        let id = project.assets[0].id;
+        {
+            let mesh = project.active_mesh_mut().expect("cubo");
+            match domain {
+                SelectionDomain::Vertex => {
+                    for i in [2usize, 3] {
+                        mesh.verts[i].selected = true;
+                    }
+                }
+                SelectionDomain::Edge | SelectionDomain::Face => {
+                    // A primeira face de frente para a câmera e uma das suas arestas.
+                    let eye = camera.eye();
+                    let front = (0..mesh.faces.len())
+                        .find(|&f| {
+                            let c = mesh.faces[f]
+                                .verts
+                                .iter()
+                                .map(|&v| mesh.verts[v as usize].vec())
+                                .sum::<Vec3>()
+                                / mesh.faces[f].verts.len() as f32;
+                            mesh.face_normal(f).dot(eye - c) > 0.0
+                        })
+                        .expect("face de frente");
+                    if domain == SelectionDomain::Face {
+                        mesh.faces[front].selected = true;
+                    } else {
+                        let v = mesh.faces[front].verts.clone();
+                        let (a, b) = (v[0].min(v[1]), v[0].max(v[1]));
+                        mesh.selected_edges.insert((a, b));
+                    }
+                }
+                SelectionDomain::Object => {}
+            }
+        }
+        let selected = [id];
+        let image = h.render(
+            |parts| {
+                parts.settings.edge_mode = EdgeMode::Topology;
+                parts.settings.edit_mode_is_edit = domain != SelectionDomain::Object;
+                parts.components.domain = domain;
+                parts.components.hover = hover;
+                parts.components.thickness = 2.0;
+                if domain == SelectionDomain::Object {
+                    parts.outlined = &selected;
+                    parts.outlined_active = Some(id);
+                }
+            },
+            &project,
+            &camera,
+        );
+        let path = dir.join(format!("edit_{name}.png"));
+        image::save_buffer(
+            &path,
+            &image.pixels,
+            image.width,
+            image.height,
+            image::ExtendedColorType::Rgba8,
+        )
+        .expect("PNG salvo");
+        assert!(path.exists());
+    }
 }

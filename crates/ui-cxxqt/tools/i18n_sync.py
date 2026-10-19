@@ -17,6 +17,26 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "assets" / "native-translations.json"
 
 PT_TO_EN = {
+    # Onda B, fechamento (2026-10-19): seleção, orientação, gizmo do Selecionar, cor compacta
+    "O que a seleção alcança": "What selection reaches",
+    "Orientação de transformação": "Transform orientation",
+    "Orientação de transformação: %1": "Transform orientation: %1",
+    "através da malha": "through the mesh",
+    "só o visível": "visible only",
+    "Seleção: %1 (agora: %2)": "Selection: %1 (now: %2)",
+    "Automática": "Automatic",
+    "Só o visível": "Visible only",
+    "Através da malha": "Through the mesh",
+    "Automática: segue o que se vê (Raio-X e Wireframe selecionam através)": "Automatic: follows what you see (X-Ray and Wireframe select through)",
+    "Global (eixos do mundo)": "Global (world axes)",
+    "Local (eixos do objeto)": "Local (object axes)",
+    "Normal (da seleção)": "Normal (of the selection)",
+    "Vista (eixos da câmera)": "View (camera axes)",
+    "Canais": "Channels",
+    "Mostrar os canais numéricos": "Show the numeric channels",
+    "Selecionar mostra mover": "Select shows move",
+    "Selecionar mostra girar": "Select shows rotate",
+    "Selecionar mostra escalar": "Select shows scale",
     # Onda B (2026-10-19): seletor de cor, diálogos, grade, travas, tortas, prévia
     "Arraste para mover. Duplo clique volta ao canto; Ctrl+Alt+setas movem.": "Drag to move. Double-click returns to the corner; Ctrl+Alt+arrows move.",
     "Menu em torta: aponte e clique, use os números 1 a 8, ou setas e Enter. Esc cancela.": "Pie menu: point and click, use the numbers 1 to 8, or arrows and Enter. Esc cancels.",

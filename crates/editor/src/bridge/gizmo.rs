@@ -29,6 +29,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.gizmo_target_at(x, y).map(|target| target.handle)
     }
 
+    /// B10: no Selecionar, um vértice ou aresta ainda não selecionado sob o raio
+    /// de picking vence a alça do gizmo, que cobre ~70 px em volta da seleção e
+    /// engolia o clique no vizinho. Face e objeto continuam com a alça (estão sob
+    /// o gizmo inteiro); o que já está selecionado também (arrastar por cima).
+    /// Hover e clique usam esta mesma regra: o destaque é o que o clique faz.
+    pub(crate) fn component_beats_gizmo(&self, target: petunia_core::HoverTarget) -> bool {
+        use petunia_core::HoverTarget as Target;
+        if self.state.session.tools.active_tool != "select" {
+            return false;
+        }
+        let Some(mesh) = self.state.project.active_mesh() else {
+            return false;
+        };
+        match target {
+            Target::Vertex(index) => mesh.verts.get(index as usize).is_some_and(|v| !v.selected),
+            Target::Edge(a, b) => {
+                !(mesh.selected_edges.contains(&(a, b)) || mesh.selected_edges.contains(&(b, a)))
+            }
+            _ => false,
+        }
+    }
+
+    /// A alça do gizmo recebe o clique em `(x, y)` px? (já aplicada a regra acima)
+    pub(crate) fn gizmo_takes_press(&self, x: f32, y: f32) -> bool {
+        if self.gizmo_target_at(x, y).is_none() {
+            return false;
+        }
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return true;
+        }
+        !self.component_beats_gizmo(self.pick_viewport_target(x / width, y / height))
+    }
+
     pub(crate) fn gizmo_target_at(&self, x: f32, y: f32) -> Option<GizmoTarget> {
         let gizmo = self.projected_gizmo();
         if !gizmo.visible {

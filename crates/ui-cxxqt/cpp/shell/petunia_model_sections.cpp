@@ -18,9 +18,11 @@ namespace {
 QFormLayout *makeForm(QWidget *owner, bool labelsAbove = false) {
     auto *form = new QFormLayout(owner);
     const auto &theme = PetuniaTheme::instance();
-    form->setContentsMargins(theme.space(3), theme.space(2), theme.space(3), theme.space(2));
+    // B13: módulos compactos — rótulo acima do campo (decisão do usuário), mas
+    // margens e espaçamentos mínimos e campos na altura densa do tema.
+    form->setContentsMargins(theme.space(3), theme.space(1), theme.space(3), theme.space(2));
     form->setHorizontalSpacing(theme.space(2));
-    form->setVerticalSpacing(theme.space(1) + 1);
+    form->setVerticalSpacing(theme.space(1));
     form->setRowWrapPolicy(labelsAbove ? QFormLayout::WrapAllRows : QFormLayout::WrapLongRows);
     form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
