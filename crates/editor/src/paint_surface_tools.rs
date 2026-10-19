@@ -661,7 +661,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .active_mut()
                 .and_then(|a| a.paint_stack.as_mut())
                 .and_then(|s| s.active_mut())
-                .and_then(|l| l.canvas_mut())
+                .and_then(|l| l.paint_canvas_mut())
         {
             for (x, y) in removed {
                 if x < 0 || y < 0 || x >= canvas.w as i32 || y >= canvas.h as i32 {

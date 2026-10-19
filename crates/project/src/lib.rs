@@ -2967,6 +2967,9 @@ impl Project {
             if let Some(cv) = a.texture.as_mut() {
                 cv.validate();
             }
+            if let Some(stack) = a.paint_stack.as_mut() {
+                stack.repair();
+            }
             if !a.base_color.iter().all(|x| x.is_finite()) {
                 a.base_color = [0.75, 0.75, 0.78];
             }

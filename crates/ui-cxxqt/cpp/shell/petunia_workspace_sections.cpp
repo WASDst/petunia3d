@@ -13,8 +13,12 @@
 #include <QJsonArray>
 #include <QIcon>
 #include <QLabel>
+#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QRadialGradient>
+#include <QScrollArea>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace {
@@ -89,6 +93,121 @@ PetuniaPaintTargetForm::PetuniaPaintTargetForm(QWidget *parent) : PetuniaBoundFo
 
 // ── PAINT: Pincel ───────────────────────────────────────────────────────────
 
+namespace {
+/// Miniatura procedural do pincel (C2): lê tipo/tamanho/dureza do preset e
+/// desenha um traço em degradê. Clean-room: nada copiado de outras ferramentas.
+QPixmap brushThumbnail(const QString &kind, double sizePx, double hardness, const QColor &base) {
+    constexpr int side = 48;
+    QPixmap pixmap(side, side);
+    pixmap.fill(Qt::transparent);
+    const auto &theme = PetuniaTheme::instance();
+    QColor color = base;
+    if (kind == QLatin1String("eraser"))
+        color = theme.textMuted();
+    else if (kind == QLatin1String("clone"))
+        color = theme.statusInfo();
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    const double size = qBound(2.0, 2.0 + (sizePx / 2048.0) * 10.0, 12.0);
+    const bool soft = hardness < 0.75 || kind == QLatin1String("airbrush") || kind == QLatin1String("spray");
+    const bool square = kind == QLatin1String("pixel") || kind == QLatin1String("square");
+    const bool diamond = kind == QLatin1String("diamond");
+    const int steps = 7;
+    for (int i = 0; i < steps; ++i) {
+        const double t = double(i) / double(steps - 1);
+        const QPointF center(8.0 + t * 32.0, 40.0 - t * 32.0);
+        const double radius = size * (0.45 + 0.55 * t);
+        QColor dot = color;
+        dot.setAlphaF(qBound(0.15, 0.35 + 0.65 * t, 1.0));
+        if (square) {
+            painter.setBrush(dot);
+            const double cell = radius * 1.4;
+            painter.drawRect(QRectF(center.x() - cell / 2.0, center.y() - cell / 2.0, cell, cell));
+        } else if (soft) {
+            QRadialGradient gradient(center, radius * 1.6);
+            QColor core = dot;
+            core.setAlphaF(dot.alphaF() * 0.9);
+            QColor edge = dot;
+            edge.setAlphaF(0.0);
+            gradient.setColorAt(0.0, core);
+            gradient.setColorAt(1.0, edge);
+            painter.setBrush(gradient);
+            painter.drawEllipse(center, radius * 1.6, radius * 1.6);
+        } else if (diamond) {
+            painter.setBrush(dot);
+            QPolygonF polygon;
+            polygon << QPointF(center.x(), center.y() - radius) << QPointF(center.x() + radius, center.y())
+                    << QPointF(center.x(), center.y() + radius) << QPointF(center.x() - radius, center.y());
+            painter.drawPolygon(polygon);
+        } else {
+            painter.setBrush(dot);
+            painter.drawEllipse(center, radius, radius);
+        }
+    }
+    return pixmap;
+}
+} // namespace
+
+PetuniaBrushShelf::PetuniaBrushShelf(QWidget *parent) : QWidget(parent) {
+    const auto &theme = PetuniaTheme::instance();
+    m_layout = new QHBoxLayout(this);
+    m_layout->setContentsMargins(0, 0, 0, 0);
+    m_layout->setSpacing(theme.space(1));
+    m_empty = new QLabel(tr("Nenhum preset ainda. Salve o pincel atual para vê-lo aqui."), this);
+    m_empty->setProperty("role", QStringLiteral("muted"));
+    m_empty->setWordWrap(true);
+    m_empty->hide();
+    setAccessibleName(tr("Prateleira de pincéis"));
+    setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+}
+
+void PetuniaBrushShelf::setPresets(const QJsonArray &presets) {
+    QStringList names;
+    names.reserve(presets.size());
+    for (const auto &value : presets)
+        names << value.toObject()["name"].toString();
+    if (names != m_names) {
+        m_names = names;
+        m_buttons.clear();
+        while (QLayoutItem *item = m_layout->takeAt(0)) {
+            delete item->widget();
+            delete item;
+        }
+        if (presets.isEmpty()) {
+            m_empty->setParent(this);
+            m_layout->addWidget(m_empty);
+            m_empty->show();
+        } else {
+            const QColor accent = PetuniaTheme::instance().accentPrimary();
+            for (int i = 0; i < presets.size(); ++i) {
+                const auto preset = presets[i].toObject();
+                const QString kind = preset["kind"].toString();
+                const QString name = preset["name"].toString();
+                auto *button = new QToolButton(this);
+                button->setCheckable(true);
+                button->setAutoRaise(true);
+                button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+                button->setIconSize(QSize(44, 44));
+                button->setFixedSize(56, 56);
+                button->setCursor(Qt::PointingHandCursor);
+                button->setIcon(QIcon(brushThumbnail(kind, preset["size_px"].toDouble(), preset["hardness"].toDouble(),
+                                                     accent)));
+                button->setAccessibleName(tr("Pincel %1").arg(name));
+                button->setToolTip(tr("%1 · %2 · %3 px").arg(name, kind).arg(preset["size_px"].toDouble(), 0, 'f', 0));
+                connect(button, &QToolButton::clicked, this, [this, i] { emit presetChosen(i); });
+                m_layout->addWidget(button);
+                m_buttons.append(button);
+            }
+            m_layout->addStretch(1);
+        }
+        resize(sizeHint());
+        updateGeometry();
+    }
+    for (int i = 0; i < m_buttons.size() && i < presets.size(); ++i)
+        m_buttons[i]->setChecked(presets[i].toObject()["active"].toBool());
+}
+
 PetuniaBrushForm::PetuniaBrushForm(QWidget *parent) : PetuniaBoundForm(parent) {
     auto *form = workspaceForm(this);
     // Cor do pincel sempre visível (ADR-C16, B1): o painel fica embutido e aplica ao
@@ -134,8 +253,20 @@ PetuniaBrushForm::PetuniaBrushForm(QWidget *parent) : PetuniaBoundForm(parent) {
         number(form, tr(p.label), QStringLiteral("brush_panel.") + QLatin1String(p.name), "set_brush_param", "value",
                p.min, p.max, 0.01, {{"name", QLatin1String(p.name)}});
 
+    form->addRow(caption(this, tr("Prateleira de pincéis")));
+    m_shelf = new PetuniaBrushShelf(this);
+    auto *shelfScroll = new QScrollArea(this);
+    shelfScroll->setWidget(m_shelf);
+    shelfScroll->setWidgetResizable(false);
+    shelfScroll->setFrameShape(QFrame::NoFrame);
+    shelfScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    shelfScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    shelfScroll->setFixedHeight(76);
+    shelfScroll->setAccessibleName(tr("Prateleira de pincéis"));
+    form->addRow(shelfScroll);
+    connect(m_shelf, &PetuniaBrushShelf::presetChosen, this,
+            [this](int index) { send(QStringLiteral("apply_brush_preset"), {{"index", index}}); });
     form->addRow(caption(this, tr("Presets e paleta")));
-    rows(form, tr("Presets do pincel"), "brush_presets", "apply_brush_preset", "index");
     text(form, tr("Salvar preset como"), {}, "save_brush_preset", "name");
     button(form, tr("Remover preset selecionado"), "brush_preset_remove");
     button(form, tr("Paleta mais clara"), "command", {{"id", "paint.palette_lighter"}});
@@ -146,6 +277,8 @@ PetuniaBrushForm::PetuniaBrushForm(QWidget *parent) : PetuniaBoundForm(parent) {
 }
 
 void PetuniaBrushForm::afterSync(const QJsonObject &state) {
+    const auto panel = state["brush_panel"].toObject();
+    m_shelf->setPresets(panel["presets_info"].toArray());
     const auto rgb = state["paint_color"].toArray();
     if (rgb.size() < 3)
         return;
@@ -191,8 +324,19 @@ QString PetuniaPaintLayerForm::dynamicSignature(const QJsonObject &state) const 
         const auto layer = state["paint_layers"].toArray()[index].toObject();
         signature += layer["id"].toString() + layer["kind"].toString() + layer["name"].toString();
     }
-    for (const auto &v : state["paint_effect_params"].toArray())
-        signature += QLatin1Char('|') + v.toObject()["key"].toString();
+    const auto active = state["paint_active_layer"].toObject();
+    signature += QLatin1Char('#') + active["id"].toString() + active["kind"].toString()
+                 + active["paint_target"].toString() + active["paint_target_effect"].toString();
+    signature += QLatin1String(active["has_mask"].toBool() ? "M1" : "M0");
+    for (const auto &v : active["effects"].toArray()) {
+        const auto effect = v.toObject();
+        signature += QLatin1Char('|') + effect["id"].toString() + effect["kind"].toString()
+                     + QLatin1String(effect["has_mask"].toBool() ? "m1" : "m0");
+        for (const auto &p : effect["params"].toArray())
+            signature += QLatin1Char(',') + p.toObject()["key"].toString();
+    }
+    signature += QLatin1String("#g") + active["gradient_kind"].toString()
+                 + QString::number(active["gradient_stops"].toArray().size());
     return signature;
 }
 
@@ -203,29 +347,151 @@ void PetuniaPaintLayerForm::buildDynamic(const QJsonObject &state) {
         return;
     }
     const auto layer = state["paint_layers"].toArray()[index].toObject();
+    const auto active = state["paint_active_layer"].toObject();
     const QString id = layer["id"].toString();
-    m_title->setText(tr("Camada: %1 · %2").arg(layer["name"].toString(), layer["kind_label"].toString()));
+    const QString activePrefix = QStringLiteral("paint_active_layer.");
+    const QString target = active["paint_target"].toString();
+    QString targetHint = tr("conteúdo da camada");
+    if (target == QLatin1String("layer"))
+        targetHint = tr("máscara da camada");
+    else if (target == QLatin1String("effect"))
+        targetHint = tr("máscara do efeito");
+    m_title->setText(tr("Camada: %1 · %2 — o pincel pinta o %3")
+                         .arg(layer["name"].toString(), layer["kind_label"].toString(), targetHint));
     const QString prefix = QStringLiteral("paint_layers.%1.").arg(index);
     number(form(), tr("Opacidade da camada"), prefix + "opacity", "set_paint_layer_opacity", "opacity", 0, 1, 0.01,
            {{"id", id}});
     choice(form(), tr("Modo de mistura"), prefix + "blend", "set_paint_layer_blend", "blend",
            {"0", "1", "2", "3", "4", "5"},
            {tr("Normal"), tr("Multiplicar"), tr("Tela"), tr("Somar"), tr("Escurecer"), tr("Clarear")}, {{"id", id}});
-    int param = 0;
-    for (const auto &v : state["paint_effect_params"].toArray()) {
-        const auto o = v.toObject();
-        number(form(), petuniaTr(o["label"].toString()),
-               QStringLiteral("paint_effect_params.%1.value").arg(param++), "set_paint_effect_param", "value",
-               o["min"].toDouble(), o["max"].toDouble(), 0.01, {{"key", o["key"]}});
+
+    // C1 — alvo do pincel: conteúdo da camada ou a máscara (nunca ambiguidade).
+    form()->addRow(caption(this, tr("Alvo do pincel")));
+    QList<ButtonSpec> targetSpecs;
+    targetSpecs.append({tr("Conteúdo da camada"),
+                        "set_paint_target",
+                        {{"target", "content"}, {"id", ""}},
+                        {},
+                        {},
+                        tr("Pintar direto no conteúdo da camada ativa")});
+    if (active["has_mask"].toBool())
+        targetSpecs.append({tr("Máscara da camada"),
+                            "set_paint_target",
+                            {{"target", "layer"}, {"id", ""}},
+                            {},
+                            {},
+                            tr("Pintar a máscara que limita a camada")});
+    buttonRow(form(), targetSpecs, 2);
+    if (active["has_mask"].toBool()) {
+        check(form(), tr("Máscara ativa"), activePrefix + "mask_enabled", "set_paint_mask_enabled", "value",
+              {{"effect", ""}});
+        check(form(), tr("Inverter máscara"), activePrefix + "mask_inverted", "set_paint_mask_inverted", "value",
+              {{"effect", ""}});
+        button(form(), tr("Remover máscara da camada"), "remove_paint_mask", {{"effect", ""}});
+    } else {
+        button(form(), tr("Adicionar máscara à camada"), "add_paint_mask", {{"effect", ""}});
+    }
+
+    // C3 — gradiente é opção da camada; a forma se edita aqui, não em ferramenta.
+    if (active["kind"].toString() == QLatin1String("gradient")) {
+        form()->addRow(caption(this, tr("Gradiente (preenchimento editável)")));
+        choice(form(), tr("Tipo"), activePrefix + "gradient_kind", "set_gradient_kind", "kind",
+               {"linear", "radial", "angular", "reflected", "diamond"},
+               {tr("Linear"), tr("Radial"), tr("Angular"), tr("Refletido"), tr("Diamante")});
+        check(form(), tr("Repetir além das pontas"), activePrefix + "gradient_repeat", "set_gradient_repeat");
+        number(form(), tr("Início X"), activePrefix + "gradient_start.0", "set_gradient_start_axis", "value", -100, 100,
+               0.01, {{"axis", 0}});
+        number(form(), tr("Início Y"), activePrefix + "gradient_start.1", "set_gradient_start_axis", "value", -100, 100,
+               0.01, {{"axis", 1}});
+        number(form(), tr("Fim X"), activePrefix + "gradient_end.0", "set_gradient_end_axis", "value", -100, 100, 0.01,
+               {{"axis", 0}});
+        number(form(), tr("Fim Y"), activePrefix + "gradient_end.1", "set_gradient_end_axis", "value", -100, 100, 0.01,
+               {{"axis", 1}});
+        int stopIndex = 0;
+        const auto stops = active["gradient_stops"].toArray();
+        for (int stop = 0; stop < stops.size(); ++stop) {
+            const QString stopPrefix = activePrefix + QStringLiteral("gradient_stops.%1.").arg(stopIndex);
+            number(form(), tr("Posição da parada %1").arg(stopIndex + 1), stopPrefix + "position",
+                   "set_gradient_stop_position", "position", 0, 1, 0.01, {{"index", stopIndex}});
+            colorField(form(), tr("Cor da parada %1").arg(stopIndex + 1), stopPrefix + "color",
+                       "set_gradient_stop_color", "color", {{"index", stopIndex}});
+            button(form(), tr("Remover parada %1").arg(stopIndex + 1), "remove_gradient_stop", {{"index", stopIndex}});
+            ++stopIndex;
+        }
+        button(form(), tr("Adicionar parada no meio"), "add_gradient_stop", {{"position", 0.5}});
+    } else if (!active["is_group"].toBool()) {
+        form()->addRow(caption(this,
+                               tr("Use a seção Efeitos para criar uma camada de preenchimento editável "
+                                  "com gradiente.")));
     }
 }
 
 // ── PAINT: Efeitos ──────────────────────────────────────────────────────────
 
-PetuniaPaintEffectsForm::PetuniaPaintEffectsForm(QWidget *parent) : PetuniaBoundForm(parent) {
-    auto *form = workspaceForm(this);
-    form->addRow(caption(this, tr("Adiciona uma camada de ajuste não destrutiva acima da camada ativa.")));
-    const struct { const char *kind; const char *label; } effects[] = {
+PetuniaPaintEffectsForm::PetuniaPaintEffectsForm(QWidget *parent) : PetuniaDynamicForm(parent) {
+    form()->addRow(caption(this, tr("Efeitos são sub-camadas da camada ativa: aplicam ao conteúdo dela "
+                                   "antes de misturar com as camadas de baixo.")));
+    beginDynamic();
+}
+
+QString PetuniaPaintEffectsForm::dynamicSignature(const QJsonObject &state) const {
+    const auto active = state["paint_active_layer"].toObject();
+    QString signature = active["id"].toString();
+    for (const auto &v : active["effects"].toArray()) {
+        const auto effect = v.toObject();
+        signature += QLatin1Char('|') + effect["id"].toString() + effect["kind"].toString()
+                     + QLatin1String(effect["has_mask"].toBool() ? "m1" : "m0");
+        for (const auto &p : effect["params"].toArray())
+            signature += QLatin1Char(',') + p.toObject()["key"].toString();
+    }
+    return signature;
+}
+
+void PetuniaPaintEffectsForm::buildDynamic(const QJsonObject &state) {
+    const auto active = state["paint_active_layer"].toObject();
+    const QString prefix = QStringLiteral("paint_active_layer.");
+    const auto effects = active["effects"].toArray();
+    if (effects.isEmpty())
+        form()->addRow(caption(this, tr("Nenhum efeito na camada ativa. Adicione um abaixo.")));
+    int effectIndex = 0;
+    for (const auto &v : effects) {
+        const auto effect = v.toObject();
+        const QString effectId = effect["id"].toString();
+        const QString label = effect["label"].toString();
+        const QString effectPrefix = prefix + QStringLiteral("effects.%1.").arg(effectIndex++);
+        check(form(), tr("Ligar %1").arg(label), effectPrefix + "enabled", "set_layer_effect_enabled", "value",
+              {{"id", effectId}});
+        number(form(), tr("Opacidade de %1").arg(label), effectPrefix + "opacity", "set_layer_effect_opacity", "opacity",
+               0, 1, 0.01, {{"id", effectId}});
+        int paramIndex = 0;
+        for (const auto &p : effect["params"].toArray()) {
+            const auto param = p.toObject();
+            number(form(), petuniaTr(param["label"].toString()),
+                   effectPrefix + QStringLiteral("params.%1.value").arg(paramIndex++), "set_layer_effect_param", "value",
+                   param["min"].toDouble(), param["max"].toDouble(), 0.01, {{"id", effectId}, {"key", param["key"]}});
+        }
+        if (effect["has_mask"].toBool()) {
+            check(form(), tr("Máscara de %1 ativa").arg(label), effectPrefix + "mask_enabled", "set_paint_mask_enabled",
+                  "value", {{"effect", effectId}});
+            check(form(), tr("Inverter máscara de %1").arg(label), effectPrefix + "mask_inverted",
+                  "set_paint_mask_inverted", "value", {{"effect", effectId}});
+            buttonRow(form(),
+                      {{tr("Pintar na máscara de %1").arg(label),
+                        "set_paint_target",
+                        {{"target", "effect"}, {"id", effectId}},
+                        {},
+                        {},
+                        tr("Pintar a máscara deste efeito")},
+                       {tr("Remover máscara de %1").arg(label), "remove_paint_mask", {{"effect", effectId}}, {}, {}, {}}},
+                      2);
+        } else {
+            button(form(), tr("Adicionar máscara a %1").arg(label), "add_paint_mask", {{"effect", effectId}});
+        }
+        button(form(), tr("Remover efeito %1").arg(label), "remove_layer_effect", {{"id", effectId}});
+    }
+
+    form()->addRow(caption(this, tr("Adicionar à camada ativa")));
+    const struct { const char *kind; const char *label; } addEffects[] = {
         {"HueSaturation", QT_TR_NOOP("Matiz e saturação")},
         {"Levels", QT_TR_NOOP("Níveis")},
         {"BrightnessContrast", QT_TR_NOOP("Brilho e contraste")},
@@ -234,19 +500,28 @@ PetuniaPaintEffectsForm::PetuniaPaintEffectsForm(QWidget *parent) : PetuniaBound
         {"Pixelate", QT_TR_NOOP("Pixelizar")},
         {"Posterize", QT_TR_NOOP("Posterizar")},
     };
-    for (const auto &effect : effects)
-        button(form, tr(effect.label), "add_paint_effect_layer", {{"kind", QLatin1String(effect.kind)}});
+    QList<ButtonSpec> addSpecs;
+    for (const auto &effect : addEffects)
+        addSpecs.append({tr(effect.label), "add_layer_effect", {{"kind", QLatin1String(effect.kind)}}, {}, {}, {}});
+    buttonRow(form(), addSpecs, 3);
+    form()->addRow(caption(this, tr("Preenchimento")));
+    button(form(), tr("Nova camada de gradiente (linear)"), "add_gradient_layer", {{"kind", "linear"}});
+    form()->addRow(caption(this, tr("O tipo do gradiente (linear, radial, angular, refletido ou "
+                                   "diamante) se escolhe na seção Camada ativa.")));
 }
 
 // ── PAINT: Projeção e superfície ────────────────────────────────────────────
 
 PetuniaPaintProjectionForm::PetuniaPaintProjectionForm(QWidget *parent) : PetuniaBoundForm(parent) {
     auto *form = workspaceForm(this);
+    form->addRow(caption(this, tr("A ferramenta Projeção é única: projeta na superfície e, quando a camada "
+                                   "é um decalque, move as alças desse decalque.")));
+    check(form, tr("Isolar para pintura (fantasma/Raio-X)"), "paint_isolate_ghost", "toggle_paint_isolate");
     choice(form, tr("Projeção do pincel"), "paint_projection", "set_brush_projection", "projection",
            {"Surface", "ScreenSpace"}, {tr("Na superfície"), tr("Da tela")});
 
-    form->addRow(caption(this, tr("Traçados e estêncil")));
-    fileButton(form, tr("Importar SVG…"), "import_svg", tr("SVG (*.svg)"));
+    form->addRow(caption(this, tr("Manter editável ou aplicar")));
+    button(form, tr("Nova camada de decalque (projeção editável)"), "add_decal_layer");
     const struct { const char *id; const char *label; } commands[] = {
         {"paint.svg_resolution_512", QT_TR_NOOP("SVG em 512 px")},
         {"paint.svg_resolution_1024", QT_TR_NOOP("SVG em 1024 px")},
@@ -256,16 +531,19 @@ PetuniaPaintProjectionForm::PetuniaPaintProjectionForm(QWidget *parent) : Petuni
         {"paint.stencil", QT_TR_NOOP("Usar como estêncil")},
         {"paint.stencil_luma", QT_TR_NOOP("Estêncil por luminância")},
         {"paint.stencil_place", QT_TR_NOOP("Posicionar estêncil")},
-        {"paint.project_decal", QT_TR_NOOP("Projetar como decalque")},
+        {"paint.project_decal", QT_TR_NOOP("Converter projeção em decalque editável")},
+        {"paint.apply_surface", QT_TR_NOOP("Aplicar na superfície (bake)")},
+        {"paint.cancel_surface", QT_TR_NOOP("Cancelar projeção")},
         {"paint.projection_mirror", QT_TR_NOOP("Espelhar projeção")},
         {"paint.projection_rotate", QT_TR_NOOP("Girar projeção")},
         {"paint.projection_grow", QT_TR_NOOP("Aumentar projeção")},
         {"paint.projection_shrink", QT_TR_NOOP("Reduzir projeção")},
-        {"paint.apply_surface", QT_TR_NOOP("Aplicar na superfície")},
-        {"paint.cancel_surface", QT_TR_NOOP("Cancelar projeção")},
     };
     for (const auto &c : commands)
         button(form, tr(c.label), "command", {{"id", QLatin1String(c.id)}});
+
+    form->addRow(caption(this, tr("Traçados e estêncil")));
+    fileButton(form, tr("Importar SVG…"), "import_svg", tr("SVG (*.svg)"));
 
     form->addRow(caption(this, tr("Imagens de referência")));
     button(form, tr("Projetar referência na textura"), "project_from_reference");

@@ -1,6 +1,6 @@
 # Shell v2 — roteiro de Poly, Paint, UV, Animate, Nós e Assets (2026-10-18)
 
-> Status: **aprovado** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario)). Ondas A e B concluídas (2026-10-19); a Onda C vem a seguir. Referências de outros softwares (Blender, Photoshop, Affinity, Cavalry, Vegas) servem de **referência de ergonomia**, nunca de código ou recurso copiado.
+> Status: **aprovado** ([ADR-C16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuario)). Ondas A e B concluídas (2026-10-19); Onda C em andamento: C1–C3 entregues em 2026-10-19. Referências de outros softwares (Blender, Photoshop, Affinity, Cavalry, Vegas) servem de **referência de ergonomia**, nunca de código ou recurso copiado.
 
 ## Intent
 
@@ -60,9 +60,9 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 
 | ID  | Item                                                                                                     | Status   |
 |-----|----------------------------------------------------------------------------------------------------------|----------|
-| C1  | Camadas: opções da camada ativa no painel, efeitos como sub-camadas, máscara em camada e efeito         | [ ] TODO |
-| C2  | Paint: ferramenta única "Projeção"; pintar só a seleção; isolar para pintura (fantasma/raio-x)          | [ ] TODO |
-| C3  | Gradiente como camada de preenchimento editável (tipos como opção do painel)                            | [ ] TODO |
+| C1  | Camadas: opções da camada ativa no painel, efeitos como sub-camadas, máscara em camada e efeito         | [x] DONE (código e testes) |
+| C2  | Paint: ferramenta única "Projeção"; pintar só a seleção; isolar para pintura (fantasma/raio-x)          | [x] DONE (código e testes) |
+| C3  | Gradiente como camada de preenchimento editável (tipos como opção do painel)                            | [x] DONE (código e testes) |
 | C4  | Nós: DAG com portas tipadas, picker de objeto, menu ao arrastar uma saída, booleana com operando visível/fantasma | [ ] TODO |
 | C5  | Animate: bones/rigs/templates como módulo; timeline estilo motion design; **aba de Curvas**; morph targets | [ ] TODO |
 | C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [ ] TODO |
@@ -156,6 +156,25 @@ Teste ajustado (por honestidade): `vertex_domain_draws_round_markers_of_constant
 
 Correção de teste feita no caminho (por honestidade): a primeira versão do check do eco do pincel apontava o centro da vista, mas checks anteriores giram a câmera e movem o cubo e o ponto caía fora do objeto. O check passou a partir de um ponto da textura visível e fazer a ida e volta (erro medido: 0,00 px). A lógica Rust não mudou, e um teste de bridge isolado já passava.
 
+Onda C, parte 1 (C1–C3) e correção do wireframe nas bordas, 2026-10-19, testes no fim (pedido do usuário). Mesmo ambiente; decisões em [ADR-C16, item 16](../00-philosophy/decision-register.md#adr-c16--shell-v2-roteiro-de-poly-paint-uv-animate-nós-e-assets-2026-10-18--aprovado-pelo-usuário).
+
+| Gate                                                                                          | Resultado                                                                 | Status  |
+|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                                                  | sem diferenças                                                            | pass    |
+| `cargo clippy -D warnings` (core, project, module-paint, render, editor; `--all-targets`)     | 0 avisos (4 lints nos arquivos novos corrigidos)                          | pass    |
+| `cargo test --lib` (project, module-paint, core, render, editor `animation-workspace`)        | 293 + 125 + 210 + 40 + 148 testes, 0 falhas                               | pass    |
+| `cargo check -p petunia_ui_cxxqt`                                                             | C++/Qt compila (painéis de camada, efeitos, projeção e prateleira)        | pass    |
+| `cargo test -p petunia_ui_cxxqt --test editor_parity -- --test-threads=1` (offscreen)          | 24 testes, 0 falhas                                                       | pass    |
+| `cargo test -p petunia_ui_cxxqt --test shell_v2 -- --test-threads=1` (offscreen)               | 323 verificações, 0 reprovadas (8 novas: bindings dos painéis, máscara, sub-efeito, gradiente, isolar) | pass    |
+| Janela real com GPU (painéis novos, prateleira de pincéis, wireframe nas bordas)              | não executado: precisa do usuário no app                                  | not run |
+| Windows, leitor de tela, alto contraste, 150%/200%                                            | não executado                                                             | not run |
+
+Testes novos da entrega (todos passando): máscara da camada com inversão; ordem e opacidade dos sub-efeitos; gradiente com dados hostis (reparo de paradas e geometria); `composite_tiles == composite` com gradiente + sub-efeito + máscara; reparo de pilha hostil (índice ativo, efeitos, grupos órfãos/ciclo, alvo órfão) com idempotência; mescla recusando ajuste embaixo; alvo do pincel escolhendo canvas e chave de traço; operações de gradiente/efeito/máscara (limites, clamps, recusas); isolamento de pintura fantasma preservando o Raio-X; normais por aresta (borda aberta, cubo fechado, não-manifold) e layout das faixas no `edge_bands`.
+
+**Defeito achado e corrigido no próprio gate de interface:** o controle "Isolar para pintura" da seção Projeção compilava, mas enviava `{"id": <booleano>}` — o comando `paint.isolate` é ação de keymap, não comando registrado, então o clique não fazia nada. A verificação de harness `paint:isolate-ghost-toggles-the-mode` nasceu reprovando (0 -> 0) e só fechou depois de expor `toggle_paint_isolate` como ação de request (o keybind usa o mesmo método). Também foi conferido, por verificação de harness, que toda chave ligada pelos três painéis novos existe no snapshot (`paint:panels-have-no-missing-bindings`).
+
+Nota de infraestrutura: o vertex shader novo (`edge_line.vert`) entra na lista de fontes do teste de shaders, que compila cada fonte — sem isso o arquivo passaria despercebido.
+
 ## Risks
 
 - A cor por grupo muda o formato do documento: o campo é opcional (arquivos antigos abrem sem migração) e a validação rejeita valores inválidos.
@@ -164,4 +183,4 @@ Correção de teste feita no caminho (por honestidade): a primeira versão do ch
 
 ## Next
 
-Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados e grade. Depois, a Onda C, começando por C5 (que consome o registro animável) e C8 (modos no HUD de prévia).
+Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados, grade, e — da Onda C parte 1 — os painéis de camada/efeitos/gradiente, a prateleira de pincéis e o wireframe nas bordas. Depois, a Onda C segue por C5 (que consome o registro animável) e C8 (modos no HUD de prévia).

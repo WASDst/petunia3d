@@ -1334,6 +1334,13 @@ fn string<'a>(v: &'a Value, key: &str) -> Result<&'a str, String> {
         .filter(|s| s.len() <= 1024 * 1024)
         .ok_or_else(|| format!("Texto inválido: {key}"))
 }
+/// Argumento opcional de texto: ausente = vazio (ex.: máscara da camada).
+fn text_or_empty<'a>(v: &'a Value, key: &str) -> &'a str {
+    v.get(key)
+        .and_then(Value::as_str)
+        .filter(|s| s.len() <= 1024 * 1024)
+        .unwrap_or("")
+}
 fn number(v: &Value, key: &str) -> Result<f32, String> {
     v[key]
         .as_f64()
@@ -1441,10 +1448,14 @@ fn dispatch_controller(
     Ok(match action {
         "activate_keymap_profile" => b.activate_keymap_profile(string(v, "id")?),
         "add_decal_layer" => b.add_decal_layer(),
+        "add_gradient_layer" => b.add_gradient_layer(string(v, "kind")?),
+        "add_gradient_stop" => b.add_gradient_stop(number(v, "position")?),
+        "add_layer_effect" => b.add_layer_effect(string(v, "kind")?),
         "add_modifier" => b.add_modifier(string(v, "kind")?),
         "add_paint_effect_layer" => b.add_paint_effect_layer(string(v, "kind")?),
         "add_paint_group" => b.add_paint_group(),
         "add_paint_layer" => b.add_paint_layer(),
+        "add_paint_mask" => b.add_paint_mask(text_or_empty(v, "effect")),
         "add_profile_circle" => b.add_profile_circle(
             number(v, "radius")?,
             integer(v, "segments")?.max(0) as usize,
@@ -1648,8 +1659,11 @@ fn dispatch_controller(
         "project_from_reference" => b.project_from_reference(),
         "recover_pending" => b.recover_pending(),
         "remove_material" => b.remove_material(integer(v, "slot")? as i32),
+        "remove_gradient_stop" => b.remove_gradient_stop(index(v, "index")?),
+        "remove_layer_effect" => b.remove_layer_effect(string(v, "id")?),
         "remove_modifier" => b.remove_modifier(string(v, "id")?),
         "remove_paint_layer" => b.remove_paint_layer(string(v, "id")?),
+        "remove_paint_mask" => b.remove_paint_mask(text_or_empty(v, "effect")),
         "remove_reference_slot" => b.remove_reference_slot(string(v, "axis_str")?),
         "reset_cursor_3d" => b.reset_cursor_3d(),
         "reset_keymap_binding" => b.reset_keymap_binding(string(v, "target")?),
@@ -1759,6 +1773,33 @@ fn dispatch_controller(
         "set_origin_at_point" => {
             b.set_origin_at_screen_point(number(v, "norm_x")?, number(v, "norm_y")?)
         }
+        "set_gradient_geometry" => b.set_gradient_geometry(
+            [number(v, "sx")?, number(v, "sy")?],
+            [number(v, "ex")?, number(v, "ey")?],
+        ),
+        "set_gradient_kind" => b.set_gradient_kind(string(v, "kind")?),
+        "set_gradient_repeat" => b.set_gradient_repeat(boolean(v, "value")?),
+        "set_gradient_end_axis" => {
+            b.set_gradient_end_axis(integer(v, "axis")?.max(0) as usize, number(v, "value")?)
+        }
+        "set_gradient_start_axis" => {
+            b.set_gradient_start_axis(integer(v, "axis")?.max(0) as usize, number(v, "value")?)
+        }
+        "set_gradient_stop_color" => {
+            b.set_gradient_stop_color(index(v, "index")?, string(v, "color")?)
+        }
+        "set_gradient_stop_position" => {
+            b.set_gradient_stop_position(index(v, "index")?, number(v, "position")?)
+        }
+        "set_layer_effect_enabled" => {
+            b.set_layer_effect_enabled(string(v, "id")?, boolean(v, "value")?)
+        }
+        "set_layer_effect_opacity" => {
+            b.set_layer_effect_opacity(string(v, "id")?, number(v, "opacity")?)
+        }
+        "set_layer_effect_param" => {
+            b.set_layer_effect_param(string(v, "id")?, string(v, "key")?, number(v, "value")?)
+        }
         "set_paint_effect_param" => {
             b.set_paint_effect_param(string(v, "key")?, number(v, "value")?)
         }
@@ -1769,6 +1810,13 @@ fn dispatch_controller(
         "set_paint_layer_opacity" => {
             b.set_paint_layer_opacity(string(v, "id")?, number(v, "opacity")?)
         }
+        "set_paint_mask_enabled" => {
+            b.set_paint_mask_enabled(text_or_empty(v, "effect"), boolean(v, "value")?)
+        }
+        "set_paint_mask_inverted" => {
+            b.set_paint_mask_inverted(text_or_empty(v, "effect"), boolean(v, "value")?)
+        }
+        "set_paint_target" => b.set_paint_target(string(v, "target")?, text_or_empty(v, "id")),
         "set_paint_symmetry_x" => {
             b.set_paint_symmetry_x(boolean(v, "val")?);
             true
@@ -1877,6 +1925,7 @@ fn dispatch_controller(
         "toggle_paint_layer_lock" => b.toggle_paint_layer_lock(string(v, "id")?),
         "toggle_paint_layer_visibility" => b.toggle_paint_layer_visibility(string(v, "id")?),
         "toggle_paint_pip" => b.toggle_paint_pip(),
+        "toggle_paint_isolate" => b.toggle_paint_isolate(),
         "toggle_paint_symmetry_x" => b.toggle_paint_symmetry_x(),
         "toggle_paint_symmetry_y" => b.toggle_paint_symmetry_y(),
         "toggle_paint_symmetry_z" => b.toggle_paint_symmetry_z(),

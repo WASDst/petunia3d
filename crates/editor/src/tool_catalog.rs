@@ -261,7 +261,6 @@ const PROJECTION: ToolDescriptor = tool(
     G::Surface,
     None,
 );
-const DECAL: ToolDescriptor = tool("decal", "Decal", "paint_decal", G::Surface, None);
 
 /// O rail da esquerda só tem transformar, 3D Cursor e criação (primitivas /
 /// perfis). Operações (extrude, inset, bevel, push/pull, loop cut, knife,
@@ -293,7 +292,6 @@ const PAINT_TOOLS: &[ToolDescriptor] = &[
     ELLIPSE,
     PATH_PAINT,
     PROJECTION,
-    DECAL,
 ];
 const SELECT_ONLY: &[ToolDescriptor] = &[SELECT];
 

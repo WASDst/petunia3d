@@ -314,8 +314,63 @@ fn paintlayermodel(vm: &petunia_editor::PaintLayerModel) -> Value {
     obj.insert("is_group".into(), json!(&vm.is_group));
     obj.insert("kind_label".into(), json!(&vm.kind_label));
     obj.insert("kind".into(), json!(&vm.kind));
+    obj.insert("has_mask".into(), json!(&vm.has_mask));
+    obj.insert("effect_count".into(), json!(&vm.effect_count));
     obj.insert("blend".into(), json!(&vm.blend));
     obj.insert("depth".into(), json!(&vm.depth));
+    Value::Object(obj)
+}
+fn paintgradientstopmodel(vm: &petunia_editor::PaintGradientStopModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("position".into(), json!(&vm.position));
+    obj.insert("color".into(), json!(&vm.color));
+    Value::Object(obj)
+}
+fn paintlayereffectmodel(vm: &petunia_editor::PaintLayerEffectModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(&vm.id));
+    obj.insert("kind".into(), json!(&vm.kind));
+    obj.insert("label".into(), json!(&vm.label));
+    obj.insert("enabled".into(), json!(&vm.enabled));
+    obj.insert("opacity".into(), json!(&vm.opacity));
+    obj.insert("has_mask".into(), json!(&vm.has_mask));
+    obj.insert("mask_enabled".into(), json!(&vm.mask_enabled));
+    obj.insert("mask_inverted".into(), json!(&vm.mask_inverted));
+    obj.insert(
+        "params".into(),
+        Value::Array(vm.params.iter().map(painteffectparam).collect()),
+    );
+    Value::Object(obj)
+}
+fn paintactivelayermodel(vm: &petunia_editor::PaintActiveLayerModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(&vm.id));
+    obj.insert("name".into(), json!(&vm.name));
+    obj.insert("kind".into(), json!(&vm.kind));
+    obj.insert("kind_label".into(), json!(&vm.kind_label));
+    obj.insert("is_group".into(), json!(&vm.is_group));
+    obj.insert("paint_target".into(), json!(&vm.paint_target));
+    obj.insert("paint_target_effect".into(), json!(&vm.paint_target_effect));
+    obj.insert("has_mask".into(), json!(&vm.has_mask));
+    obj.insert("mask_enabled".into(), json!(&vm.mask_enabled));
+    obj.insert("mask_inverted".into(), json!(&vm.mask_inverted));
+    obj.insert(
+        "effects".into(),
+        Value::Array(vm.effects.iter().map(paintlayereffectmodel).collect()),
+    );
+    obj.insert("gradient_kind".into(), json!(&vm.gradient_kind));
+    obj.insert("gradient_repeat".into(), json!(&vm.gradient_repeat));
+    obj.insert("gradient_start".into(), json!(&vm.gradient_start));
+    obj.insert("gradient_end".into(), json!(&vm.gradient_end));
+    obj.insert(
+        "gradient_stops".into(),
+        Value::Array(
+            vm.gradient_stops
+                .iter()
+                .map(paintgradientstopmodel)
+                .collect(),
+        ),
+    );
     Value::Object(obj)
 }
 fn prefabitemmodel(vm: &petunia_editor::PrefabItemModel) -> Value {
@@ -418,6 +473,7 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         "paint_mask_selection".into(),
         json!(&vm.paint_mask_selection),
     );
+    obj.insert("paint_isolate_ghost".into(), json!(&vm.paint_isolate_ghost));
     obj.insert("isolate_active".into(), json!(&vm.isolate_active));
     obj.insert("status_message".into(), json!(&vm.status_message));
     obj.insert("status_severity".into(), json!(&vm.status_severity));
@@ -1328,6 +1384,10 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         "paint_layers".into(),
         Value::Array(vm.paint_layers.iter().map(paintlayermodel).collect()),
     );
+    obj.insert(
+        "paint_active_layer".into(),
+        paintactivelayermodel(&vm.paint_active_layer),
+    );
     obj.insert("paint_layer_count".into(), json!(&vm.paint_layer_count));
     obj.insert("paint_effect_kind".into(), json!(&vm.paint_effect_kind));
     obj.insert(
@@ -1896,6 +1956,21 @@ fn brushpanelmodel(vm: &petunia_editor::BrushPanelModel) -> Value {
     obj.insert("tip".into(), json!(&vm.tip));
     obj.insert("blend".into(), json!(&vm.blend));
     obj.insert("presets".into(), json!(&vm.presets));
+    obj.insert(
+        "presets_info".into(),
+        json!(
+            vm.presets_info
+                .iter()
+                .map(|preset| json!({
+                    "name": preset.name,
+                    "kind": preset.kind,
+                    "size_px": preset.size_px,
+                    "hardness": preset.hardness,
+                    "active": preset.active,
+                }))
+                .collect::<Vec<_>>()
+        ),
+    );
     obj.insert("active_preset".into(), json!(&vm.active_preset));
     obj.insert("clone_source_set".into(), json!(&vm.clone_source_set));
     Value::Object(obj)

@@ -60,6 +60,110 @@ fn effect_params(effect: &petunia_project::paint_layers::PaintEffect) -> Vec<Pai
     }
 }
 
+/// Tipo estável de um efeito (o painel escolhe rótulo/ícone por ele).
+fn paint_effect_kind(effect: &petunia_project::paint_layers::PaintEffect) -> &'static str {
+    use petunia_project::paint_layers::PaintEffect;
+    match effect {
+        PaintEffect::Pixelate { .. } => "Pixelate",
+        PaintEffect::Posterize { .. } => "Posterize",
+        PaintEffect::Invert => "Invert",
+        PaintEffect::Grain { .. } => "Grain",
+        PaintEffect::Levels { .. } => "Levels",
+        PaintEffect::BrightnessContrast { .. } => "BrightnessContrast",
+        PaintEffect::HueSaturation { .. } => "HueSaturation",
+    }
+}
+
+fn paint_effect_model(
+    effect: &petunia_project::paint_layers::LayerEffect,
+) -> PaintLayerEffectModel {
+    let kind = paint_effect_kind(&effect.effect);
+    PaintLayerEffectModel {
+        id: effect.id.to_string(),
+        kind: kind.to_string(),
+        label: kind.to_string(),
+        enabled: effect.enabled,
+        opacity: effect.opacity,
+        has_mask: effect.mask.is_some(),
+        mask_enabled: effect.mask.as_ref().is_some_and(|mask| mask.enabled),
+        mask_inverted: effect.mask.as_ref().is_some_and(|mask| mask.inverted),
+        params: effect_params(&effect.effect),
+    }
+}
+
+fn hex_color(color: [u8; 4]) -> String {
+    format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2])
+}
+
+fn paint_active_layer_model(
+    layer: &petunia_project::paint_layers::PaintLayer,
+) -> PaintActiveLayerModel {
+    use petunia_project::paint_layers::{LayerKind, PaintTarget};
+    let kind = if layer.is_group {
+        "group"
+    } else {
+        match layer.kind {
+            LayerKind::Raster(_) => "raster",
+            LayerKind::Decal(_) => "decal",
+            LayerKind::Effect(_) => "effect",
+            LayerKind::Gradient(_) => "gradient",
+        }
+    };
+    let kind_label = match kind {
+        "group" => "Group",
+        "decal" => "Decal",
+        "effect" => "Effect",
+        "gradient" => "Gradient",
+        _ => "Raster",
+    };
+    let (paint_target, paint_target_effect) = match layer.paint_target {
+        PaintTarget::Content => ("content", String::new()),
+        PaintTarget::LayerMask => ("layer", String::new()),
+        PaintTarget::EffectMask(id) => ("effect", id.to_string()),
+    };
+    let (gradient_kind, gradient_repeat, gradient_start, gradient_end, gradient_stops) =
+        match &layer.kind {
+            LayerKind::Gradient(fill) => (
+                fill.kind.id().to_string(),
+                fill.repeat,
+                fill.start,
+                fill.end,
+                fill.stops
+                    .iter()
+                    .map(|stop| PaintGradientStopModel {
+                        position: stop.position,
+                        color: hex_color(stop.color),
+                    })
+                    .collect(),
+            ),
+            _ => (
+                "linear".to_string(),
+                false,
+                [0.0, 0.5],
+                [1.0, 0.5],
+                Vec::new(),
+            ),
+        };
+    PaintActiveLayerModel {
+        id: layer.id.to_string(),
+        name: layer.name.clone(),
+        kind: kind.to_string(),
+        kind_label: kind_label.to_string(),
+        is_group: layer.is_group,
+        paint_target: paint_target.to_string(),
+        paint_target_effect,
+        has_mask: layer.mask.is_some(),
+        mask_enabled: layer.mask.as_ref().is_some_and(|mask| mask.enabled),
+        mask_inverted: layer.mask.as_ref().is_some_and(|mask| mask.inverted),
+        effects: layer.effects.iter().map(paint_effect_model).collect(),
+        gradient_kind,
+        gradient_repeat,
+        gradient_start,
+        gradient_end,
+        gradient_stops,
+    }
+}
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn view_model(&self) -> ShellViewModel {
         puffin::profile_function!();
@@ -842,6 +946,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         petunia_project::paint_layers::LayerKind::Raster(_) => "Raster",
                         petunia_project::paint_layers::LayerKind::Decal(_) => "Decal",
                         petunia_project::paint_layers::LayerKind::Effect(_) => "Effect",
+                        petunia_project::paint_layers::LayerKind::Gradient(_) => "Gradient",
                     }
                     .to_string(),
                     kind: if layer.is_group {
@@ -851,20 +956,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             petunia_project::paint_layers::LayerKind::Raster(_) => "raster",
                             petunia_project::paint_layers::LayerKind::Decal(_) => "decal",
                             petunia_project::paint_layers::LayerKind::Effect(_) => "effect",
+                            petunia_project::paint_layers::LayerKind::Gradient(_) => "gradient",
                         }
                     }
                     .to_string(),
+                    has_mask: layer.mask.is_some(),
+                    effect_count: layer.effects.len() as i32,
                     blend: layer.blend as i32,
                     depth: depth_of(layer),
                 })
                 .collect();
+            vm.paint_active_layer = stack
+                .active()
+                .map(paint_active_layer_model)
+                .unwrap_or_default();
             let (width, height) = self
                 .state
                 .project
                 .assets
                 .get(self.state.project.active)
                 .and_then(|asset| asset.paint_stack.as_ref())
-                .and_then(|stack| stack.active().and_then(|layer| layer.canvas()))
+                .and_then(|stack| stack.active())
+                .and_then(|layer| layer.paint_canvas().or_else(|| layer.canvas()))
                 .map(|canvas| (canvas.w, canvas.h))
                 .unwrap_or((0, 0));
             vm.paint_layer_count =
@@ -883,9 +996,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 is_group: false,
                 kind_label: "Raster".to_string(),
                 kind: "raster".to_string(),
+                has_mask: false,
+                effect_count: 0,
                 blend: 0,
                 depth: 0,
             }];
+            vm.paint_active_layer = PaintActiveLayerModel {
+                name: "Base".to_string(),
+                kind: "raster".to_string(),
+                kind_label: "Raster".to_string(),
+                paint_target: "content".to_string(),
+                gradient_kind: "linear".to_string(),
+                gradient_start: [0.0, 0.5],
+                gradient_end: [1.0, 0.5],
+                ..PaintActiveLayerModel::default()
+            };
             vm.paint_layer_count = match &asset.texture {
                 Some(canvas) => format!("1 layer(s)  ·  {} × {}", canvas.w, canvas.h),
                 None => "1 layer(s)".to_string(),

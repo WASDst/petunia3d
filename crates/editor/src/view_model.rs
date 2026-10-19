@@ -290,6 +290,8 @@ pub struct ShellViewModel {
     pub paint_symmetry_z: bool,
     pub paint_target_vertex: bool,
     pub paint_mask_selection: bool,
+    /// Isolamento de pintura em raio-X (C2).
+    pub paint_isolate_ghost: bool,
     /// Isolamento do objeto ativo ligado (esconde os demais).
     pub isolate_active: bool,
     pub status_message: String,
@@ -689,6 +691,7 @@ pub struct ShellViewModel {
     pub themes: Vec<ThemeEntryModel>,
     pub uv_editor: UvEditorModel,
     pub paint_layers: Vec<PaintLayerModel>,
+    pub paint_active_layer: PaintActiveLayerModel,
     pub paint_layer_count: String,
     pub paint_effect_kind: String,
     pub paint_effect_params: Vec<PaintEffectParam>,
@@ -1358,6 +1361,7 @@ impl ShellViewModel {
             paint_symmetry_z: state.session.tools.paint_symmetry_z,
             paint_target_vertex: false,
             paint_mask_selection: state.session.tools.paint_isolate_selection,
+            paint_isolate_ghost: state.session.paint_isolate_ghost,
             isolate_active: state.session.isolate_active,
             status_message,
             status_severity,
@@ -1746,6 +1750,7 @@ impl ShellViewModel {
             themes: Vec::new(),
             uv_editor: UvEditorModel::default(),
             paint_layers: Vec::new(),
+            paint_active_layer: PaintActiveLayerModel::default(),
             paint_layer_count: String::new(),
             paint_effect_kind: String::new(),
             paint_effect_params: Vec::new(),
@@ -2104,12 +2109,60 @@ pub struct PaintLayerModel {
     pub active: bool,
     pub is_group: bool,
     pub kind_label: String,
-    /// `raster`, `group`, `decal` ou `effect` (ícone por tipo, não pelo nome).
+    /// `raster`, `group`, `decal`, `effect` ou `gradient` (ícone por tipo).
     pub kind: String,
+    /// A camada tem máscara (C1) — o painel mostra o indicador.
+    pub has_mask: bool,
+    /// Quantidade de efeitos de sub-camada (C1) — indicador do painel.
+    pub effect_count: i32,
     /// Índice de `LayerBlendMode` (Normal, Multiply, Add, Screen).
     pub blend: i32,
     /// Profundidade no grupo (recuo da linha).
     pub depth: i32,
+}
+
+/// Efeito de sub-camada publicado para o painel da camada ativa (C1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaintLayerEffectModel {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub enabled: bool,
+    pub opacity: f32,
+    pub has_mask: bool,
+    pub mask_enabled: bool,
+    pub mask_inverted: bool,
+    pub params: Vec<PaintEffectParam>,
+}
+
+/// Parada de gradiente publicada para edição (C3). `color` é `#RRGGBB`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaintGradientStopModel {
+    pub position: f32,
+    pub color: String,
+}
+
+/// Estado da camada ativa para o painel de propriedades do PAINT (C1/C3).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PaintActiveLayerModel {
+    pub id: String,
+    pub name: String,
+    /// `raster`, `decal`, `effect`, `gradient` ou `group`.
+    pub kind: String,
+    pub kind_label: String,
+    pub is_group: bool,
+    /// `content`, `layer` ou `effect` (a máscara de qual efeito).
+    pub paint_target: String,
+    pub paint_target_effect: String,
+    pub has_mask: bool,
+    pub mask_enabled: bool,
+    pub mask_inverted: bool,
+    pub effects: Vec<PaintLayerEffectModel>,
+    pub gradient_kind: String,
+    pub gradient_repeat: bool,
+    pub gradient_start: [f32; 2],
+    pub gradient_end: [f32; 2],
+    pub gradient_stops: Vec<PaintGradientStopModel>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

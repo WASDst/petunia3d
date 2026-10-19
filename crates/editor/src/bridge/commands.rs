@@ -876,7 +876,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "window.workspace_animate" => self.apply(UiIntent::SetWorkspace(Workspace::Animate)),
             "paint.select" => self.apply(UiIntent::SetActiveTool("select".into())),
             "paint.isolate" => {
-                self.state.toggle_isolate();
+                self.toggle_paint_isolate();
             }
             "paint.airbrush" => self.apply(UiIntent::SetActiveTool("airbrush".into())),
             "paint.eraser" => self.apply(UiIntent::SetActiveTool("eraser".into())),
@@ -934,6 +934,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             "window.command_palette" => self.apply(UiIntent::OpenCommandSearch),
             _ => return false,
+        }
+        true
+    }
+
+    /// `paint.isolate` (C2): no PAINT, isolar é fantasma (Raio-X) e preserva o
+    /// Raio-X do usuário; nos outros workspaces é o isolamento comum. Exposto
+    /// também como ação de request para o controle da seção Projeção.
+    pub fn toggle_paint_isolate(&mut self) -> bool {
+        if self.state.workspace == Workspace::Paint {
+            self.state.toggle_paint_isolate_ghost();
+        } else {
+            self.state.toggle_isolate();
         }
         true
     }

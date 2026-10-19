@@ -4,11 +4,15 @@
 #include "petunia_shell_controller.h"
 
 #include <QFormLayout>
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QStringList>
 #include <QWidget>
 
+class QHBoxLayout;
 class QLabel;
 class QPushButton;
+class QToolButton;
 
 /// Seções nativas de Propriedades dos workspaces PAINT, UV e ANIMATE (Shell v2,
 /// F7). Substituem as abas do painel legado: cada seção agrupa uma
@@ -48,6 +52,26 @@ class PetuniaPaintTargetForm : public PetuniaBoundForm {
 
 class PetuniaColorPanel;
 
+/// Prateleira de pincéis (C2): um botão por preset, com miniatura desenhada
+/// proceduralmente a partir do tipo, tamanho e dureza — sem assets externos.
+/// Navegável por teclado (Tab/setas), com nome acessível por botão.
+class PetuniaBrushShelf : public QWidget {
+    Q_OBJECT
+  public:
+    explicit PetuniaBrushShelf(QWidget *parent = nullptr);
+    /// Reconstrói os botões quando a lista muda e atualiza o selecionado.
+    void setPresets(const QJsonArray &presets);
+
+  signals:
+    void presetChosen(int index);
+
+  private:
+    QHBoxLayout *m_layout{nullptr};
+    QLabel *m_empty{nullptr};
+    QStringList m_names;
+    QList<QToolButton *> m_buttons;
+};
+
 class PetuniaBrushForm : public PetuniaBoundForm {
     Q_OBJECT
   public:
@@ -58,6 +82,7 @@ class PetuniaBrushForm : public PetuniaBoundForm {
 
   private:
     PetuniaColorPanel *m_color{nullptr};
+    PetuniaBrushShelf *m_shelf{nullptr};
     bool m_syncingColor{false};
     double m_lastOpacity{1.0};
 };
@@ -75,10 +100,14 @@ class PetuniaPaintLayerForm : public PetuniaDynamicForm {
     QLabel *m_title{nullptr};
 };
 
-class PetuniaPaintEffectsForm : public PetuniaBoundForm {
+class PetuniaPaintEffectsForm : public PetuniaDynamicForm {
     Q_OBJECT
   public:
     explicit PetuniaPaintEffectsForm(QWidget *parent = nullptr);
+
+  protected:
+    QString dynamicSignature(const QJsonObject &state) const override;
+    void buildDynamic(const QJsonObject &state) override;
 };
 
 class PetuniaPaintProjectionForm : public PetuniaBoundForm {

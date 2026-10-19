@@ -46,6 +46,14 @@ fn shell_v2_regions_layout_focus_and_theme() {
     let names: Vec<&str> = checks.iter().filter_map(|c| c["name"].as_str()).collect();
     let missing: Vec<&str> = [
         "paint:native-property-sections",
+        "paint:panels-have-no-missing-bindings",
+        "paint:layer-mask-added-by-the-panel",
+        "paint:sub-effect-added-by-the-panel",
+        "paint:sub-effect-removed-by-the-panel",
+        "paint:gradient-layer-from-the-effects-panel",
+        "paint:gradient-stop-added-by-the-panel",
+        "paint:isolate-ghost-toggles-the-mode",
+        "paint:isolate-ghost-restores",
         "surface:2d-hides-3d-view",
         "surface:3d-hides-canvas",
         "surface:mode-persists-per-workspace",

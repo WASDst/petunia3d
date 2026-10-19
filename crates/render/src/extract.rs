@@ -919,9 +919,11 @@ pub fn build_edges(
                     WIRE_EDGE_COLOR
                 },
                 width: 1.0,
+                normals: [[0.0; 3]; 2],
             });
         }
     } else {
+        let adjacency = edge_face_normals(mesh);
         for (a, b, _selected, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
             if !edge_overlay_visible(settings.show_wireframe_overlay, settings.edge_mode, feature) {
                 continue;
@@ -931,7 +933,17 @@ pub fn build_edges(
             } else {
                 (THIN_EDGE_COLOR, THIN_EDGE_SCALE)
             };
-            edges.push(RenderEdge { a, b, color, width });
+            let normals = adjacency
+                .get(&position_key(a, b))
+                .copied()
+                .unwrap_or([[0.0; 3]; 2]);
+            edges.push(RenderEdge {
+                a,
+                b,
+                color,
+                width,
+                normals,
+            });
         }
     }
     if settings.show_triangulation {
@@ -941,10 +953,58 @@ pub fn build_edges(
                 b,
                 color: TRIANGULATION_COLOR,
                 width: THIN_EDGE_SCALE,
+                normals: [[0.0; 3]; 2],
             });
         }
     }
     edges
+}
+
+/// Chave de aresta pelas posições dos extremos, ordem-independente.
+type EdgeKey = ([u32; 3], [u32; 3]);
+
+/// Normais das (até duas) faces vizinhas de uma aresta.
+type EdgeNormals = [[f32; 3]; 2];
+
+/// Chave de aresta pelas posições (independe da ordem dos extremos).
+fn position_key(a: [f32; 3], b: [f32; 3]) -> EdgeKey {
+    let (ka, kb) = (a.map(f32::to_bits), b.map(f32::to_bits));
+    if ka <= kb { (ka, kb) } else { (kb, ka) }
+}
+
+/// Normais das (até) duas faces de cada aresta. Arestas com mais de duas faces
+/// (não-manifold) ou com uma só ficam com zero: sempre desenhadas.
+fn edge_face_normals(mesh: &petunia_core::Mesh) -> HashMap<EdgeKey, EdgeNormals> {
+    let mut faces_of: HashMap<EdgeKey, (u8, EdgeNormals)> = HashMap::new();
+    for (index, face) in mesh.faces.iter().enumerate() {
+        let normal = mesh.face_normal(index);
+        if !normal.is_finite() || normal.length_squared() < 1.0e-12 {
+            continue;
+        }
+        let count = face.verts.len();
+        for corner in 0..count {
+            let (Some(&ia), Some(&ib)) =
+                (face.verts.get(corner), face.verts.get((corner + 1) % count))
+            else {
+                continue;
+            };
+            let (Some(va), Some(vb)) = (mesh.verts.get(ia as usize), mesh.verts.get(ib as usize))
+            else {
+                continue;
+            };
+            let entry = faces_of
+                .entry(position_key(va.pos, vb.pos))
+                .or_insert((0, [[0.0; 3]; 2]));
+            if let Some(slot) = entry.1.get_mut(usize::from(entry.0)) {
+                *slot = normal.to_array();
+            }
+            entry.0 = entry.0.saturating_add(1);
+        }
+    }
+    faces_of
+        .into_iter()
+        .map(|(key, (count, normals))| (key, if count == 2 { normals } else { [[0.0; 3]; 2] }))
+        .collect()
 }
 
 fn build_object(
@@ -1275,6 +1335,85 @@ mod tests {
         settings.edge_mode = EdgeMode::Overlay;
         settings.show_wireframe_overlay = false;
         assert!(build_edges(&mesh, &settings).is_empty());
+    }
+
+    #[test]
+    fn edge_normals_come_from_the_two_neighbour_faces() {
+        let mesh = two_quads();
+        let key = position_key([0.0, -1.0, 0.0], [0.0, 1.0, 0.0]);
+        let adjacency = edge_face_normals(&mesh);
+        let normals = adjacency.get(&key).copied().expect("aresta do meio");
+        assert_eq!(normals[0], [0.0, 0.0, 1.0]);
+        assert_eq!(normals[1], [0.0, 0.0, 1.0]);
+        // A chave não depende da ordem dos extremos.
+        assert_eq!(position_key([0.0, 1.0, 0.0], [0.0, -1.0, 0.0]), key);
+
+        // O overlay entrega as normais à aresta que separa as duas faces.
+        let settings = ViewportRenderSettings {
+            edge_mode: EdgeMode::Topology,
+            show_wireframe_overlay: true,
+            ..ViewportRenderSettings::default()
+        };
+        let edges = build_edges(&mesh, &settings);
+        let middle = edges
+            .iter()
+            .find(|edge| position_key(edge.a, edge.b) == key)
+            .expect("aresta do meio no overlay");
+        assert_eq!(middle.normals, normals);
+        // Bordas abertas ficam sem normal: sempre desenhadas, mesmo sem Raio-X.
+        assert_eq!(
+            edges
+                .iter()
+                .filter(|edge| edge.normals == [[0.0; 3]; 2])
+                .count(),
+            6
+        );
+    }
+
+    #[test]
+    fn closed_mesh_knows_both_faces_and_non_manifold_edges_draw_always() {
+        let corners = [
+            [-1.0, -1.0, -1.0],
+            [1.0, -1.0, -1.0],
+            [1.0, 1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0],
+            [1.0, -1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+        ];
+        let mut cube = petunia_core::Mesh::default();
+        for corner in corners {
+            cube.verts
+                .push(Vertex::new(corner[0], corner[1], corner[2]));
+        }
+        for face in [
+            [0usize, 1, 2, 3],
+            [4, 5, 6, 7],
+            [0, 1, 5, 4],
+            [1, 2, 6, 5],
+            [2, 3, 7, 6],
+            [3, 0, 4, 7],
+        ] {
+            cube.faces
+                .push(Face::new(face.iter().map(|index| *index as u32).collect()));
+        }
+        let adjacency = edge_face_normals(&cube);
+        assert_eq!(adjacency.len(), 12, "cubo: 12 arestas");
+        assert!(
+            adjacency
+                .values()
+                .all(|normals| normals[0] != [0.0; 3] && normals[1] != [0.0; 3]),
+            "cubo fechado: toda aresta tem as duas faces"
+        );
+
+        // Uma terceira face na mesma aresta é não-manifold: sem normais, sempre desenhada.
+        cube.faces.push(Face::new(vec![0, 1, 2]));
+        let adjacency = edge_face_normals(&cube);
+        assert_eq!(
+            adjacency[&position_key(corners[0], corners[1])],
+            [[0.0; 3]; 2]
+        );
     }
 
     #[test]

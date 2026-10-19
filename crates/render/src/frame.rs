@@ -227,6 +227,11 @@ pub struct RenderEdge {
     pub color: [f32; 3],
     /// Multiplicador de [`ViewportRenderSettings::line_width_px`].
     pub width: f32,
+    /// Normais (locais) das duas faces vizinhas. Sem Raio-X, a aresta só é
+    /// desenhada se alguma delas está de frente para a câmera: sem isso o
+    /// deslocamento de profundidade deixava "tocos" de arestas de trás nos
+    /// cantos. Zero = sem face (borda aberta ou wireframe): sempre desenhada.
+    pub normals: [[f32; 3]; 2],
 }
 
 /// Objeto desenhável. Selecionar ou mover a câmera não altera as revisões.

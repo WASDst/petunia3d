@@ -707,14 +707,26 @@ void PetuniaStructurePanel::syncPaint(const QJsonObject &state) {
         QColor tint = theme.accentPrimary();
         const QString kind = o["kind"].toString();
         const bool isGroup = o["is_group"].toBool();
-        QString iconName = QStringLiteral("layers");
+        QString iconName = QStringLiteral("paint_layer");
         if (isGroup)
             iconName = QStringLiteral("folder");
         else if (kind == QLatin1String("decal"))
-            iconName = QStringLiteral("decal");
+            iconName = QStringLiteral("paint_decal");
         else if (kind == QLatin1String("effect"))
-            iconName = QStringLiteral("wand");
+            iconName = QStringLiteral("tune");
+        else if (kind == QLatin1String("gradient"))
+            iconName = QStringLiteral("paint_gradient");
         name->setIcon(PetuniaIcons::get(iconName, tint.name()));
+        QStringList badges;
+        if (o["has_mask"].toBool())
+            badges << tr("máscara");
+        const int effectCount = o["effect_count"].toInt();
+        if (effectCount > 0)
+            badges << tr("%n efeito(s)", "", effectCount);
+        const QString layerTip = active ? tr("Camada ativa") : tr("Camada de pintura");
+        name->setToolTip(badges.isEmpty() ? layerTip : layerTip + QStringLiteral(" · ") + badges.join(QStringLiteral(" · ")));
+        name->setData(badges.isEmpty() ? layerTip : layerTip + QStringLiteral(", ") + badges.join(QStringLiteral(", ")),
+                      Qt::AccessibleDescriptionRole);
 
         auto *eye = m_model->item(i, Visible);
         const bool visible = o["visible"].toBool(true);
@@ -1051,9 +1063,10 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
     const QString ws = m_controller->workspaceId();
     if (ws == QLatin1String("PAINT")) {
         QMenu menu(this);
-        auto *addLayer = menu.addAction(PetuniaIcons::get(QStringLiteral("plus")), tr("Nova camada"));
+        auto *addLayer = menu.addAction(PetuniaIcons::get(QStringLiteral("paint_layer")), tr("Nova camada"));
         auto *addGroup = menu.addAction(PetuniaIcons::get(QStringLiteral("folder")), tr("Novo grupo"));
-        auto *addDecal = menu.addAction(PetuniaIcons::get(QStringLiteral("decal")), tr("Novo decalque"));
+        auto *addGradient = menu.addAction(PetuniaIcons::get(QStringLiteral("paint_gradient")), tr("Nova camada de gradiente"));
+        auto *addDecal = menu.addAction(PetuniaIcons::get(QStringLiteral("paint_decal")), tr("Novo decalque"));
         menu.addSeparator();
         QAction *up = nullptr;
         QAction *down = nullptr;
@@ -1079,6 +1092,8 @@ void PetuniaStructurePanel::onContextMenu(const QPoint &pos) {
             m_controller->request(QStringLiteral("add_paint_layer"));
         else if (picked == addGroup)
             m_controller->request(QStringLiteral("add_paint_group"));
+        else if (picked == addGradient)
+            m_controller->request(QStringLiteral("add_gradient_layer"), {{"kind", "linear"}});
         else if (picked == addDecal)
             m_controller->request(QStringLiteral("add_decal_layer"));
         else if (picked == up)

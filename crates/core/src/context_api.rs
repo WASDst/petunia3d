@@ -970,6 +970,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn toggle_paint_isolate_ghost(&mut self) {
+        self.in_context(|ctx| ctx.toggle_paint_isolate_ghost())
+    }
+
+    #[inline]
     pub fn refresh_isolation(&mut self) {
         self.in_context(|ctx| ctx.refresh_isolation())
     }

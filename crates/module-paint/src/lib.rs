@@ -16,7 +16,9 @@ mod path_paint;
 pub mod projection;
 mod surface_commands;
 pub use engine::dab_falloff;
-pub use paint_stack_commands::{DecalEdit, PaintStackCmd, PaintStackOp};
+pub use paint_stack_commands::{
+    DecalEdit, MaskTarget, PaintStackCmd, PaintStackOp, effect_for_kind,
+};
 pub use path_paint::{
     MAX_LINE_PIXELS, MAX_PATH_DABS, MAX_PATH_NODES, SurfaceHit, line_pixels, pixel_perfect,
     project_path_onto_surface, sample_path, snap_to_surface,
@@ -476,6 +478,14 @@ impl PaintModule {
                     if let Some(cv) = layer.canvas_mut() {
                         let next = cv.resized(w, h);
                         *cv = next;
+                    }
+                    if let Some(mask) = layer.mask.as_mut() {
+                        mask.canvas = mask.canvas.resized(w, h);
+                    }
+                    for effect in &mut layer.effects {
+                        if let Some(mask) = effect.mask.as_mut() {
+                            mask.canvas = mask.canvas.resized(w, h);
+                        }
                     }
                 }
             }
@@ -1539,7 +1549,7 @@ impl PaintModule {
                 && let Some(layer) = stack.active_mut()
                 && !layer.locked
                 && layer.is_paintable()
-                && let Some(cv) = layer.canvas_mut()
+                && let Some(cv) = layer.paint_canvas_mut()
             {
                 let alpha_before = alpha_lock.then(|| cv.pixels.clone());
                 let snapshot = restriction.as_ref().map(|_| cv.pixels.clone());
@@ -1585,7 +1595,7 @@ impl PaintModule {
         if let Some(o) = state.document.assets.get_mut(active_idx)
             && let Some(stack) = o.paint_stack.as_mut()
             && let Some(layer) = stack.active_mut()
-            && let Some(cv) = layer.canvas_mut()
+            && let Some(cv) = layer.paint_canvas_mut()
         {
             cv.fill([0, 0, 0, 0]);
         }
@@ -1985,7 +1995,8 @@ impl PaintModule {
                     && let Some(stack) = o.paint_stack.as_mut()
                     && let Some(layer) = stack.active_mut()
                     && !layer.locked
-                    && let Some(cv) = layer.canvas_mut()
+                    && layer.is_paintable()
+                    && let Some(cv) = layer.paint_canvas_mut()
                 {
                     let (w, h) = (cv.w, cv.h);
                     for uv in uvs {

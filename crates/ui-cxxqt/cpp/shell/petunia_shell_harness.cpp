@@ -137,6 +137,22 @@ void sendKey(QWidget *target, int key, Qt::KeyboardModifiers mods = Qt::NoModifi
     QCoreApplication::sendEvent(target, &press);
     settle(1);
 }
+
+/// Texto pela mesma tradução que o painel usa (`tr()` da classe).
+QString translated(const char *context, const char *source) {
+    return QCoreApplication::translate(context, source);
+}
+
+/// Botão pelo texto já resolvido; nullptr quando não existe (a verificação falha
+/// com detalhe em vez de dereferenciar).
+QPushButton *buttonWithText(QWidget *root, const QString &text) {
+    if (!root)
+        return nullptr;
+    for (auto *button : root->findChildren<QPushButton *>())
+        if (button->text() == text)
+            return button;
+    return nullptr;
+}
 } // namespace
 
 namespace {
@@ -1616,6 +1632,117 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
                   ids.contains("paint.brush") && ids.contains("paint.layer") && ids.contains("paint.projection") &&
                       !ids.contains("transform") && !ids.contains("uv.unwrap"),
                   ids.join(","));
+        }
+        // C1–C3 (2026-10-19): máscara, sub-efeito, gradiente e "isolar para
+        // pintura" exercitados pelos próprios controles dos painéis novos.
+        {
+            c->request("add_paint_layer");
+            settle(4);
+            window.syncNow();
+            settle(4);
+
+            QStringList missingKeys;
+            for (auto *form : window.findChildren<PetuniaPaintLayerForm *>())
+                for (const auto &key : form->missingBindings(c->state()))
+                    missingKeys << QStringLiteral("camada.") + key;
+            for (auto *form : window.findChildren<PetuniaPaintEffectsForm *>())
+                for (const auto &key : form->missingBindings(c->state()))
+                    missingKeys << QStringLiteral("efeitos.") + key;
+            for (auto *form : window.findChildren<PetuniaPaintProjectionForm *>())
+                for (const auto &key : form->missingBindings(c->state()))
+                    missingKeys << QStringLiteral("projecao.") + key;
+            h.add("paint:panels-have-no-missing-bindings", missingKeys.isEmpty(), missingKeys.join(","));
+
+            auto *layerForm = window.findChild<PetuniaPaintLayerForm *>();
+            auto *effectsForm = window.findChild<PetuniaPaintEffectsForm *>();
+            auto activeLayer = [&] { return c->state()["paint_active_layer"].toObject(); };
+
+            auto *maskButton =
+                buttonWithText(layerForm, translated("PetuniaPaintLayerForm", "Adicionar máscara à camada"));
+            const bool hadMaskButton = maskButton != nullptr;
+            if (maskButton)
+                maskButton->click();
+            settle(4);
+            window.syncNow();
+            settle(4);
+            h.add("paint:layer-mask-added-by-the-panel",
+                  hadMaskButton && activeLayer()["has_mask"].toBool() &&
+                      activeLayer()["paint_target"].toString() == QLatin1String("layer"),
+                  activeLayer()["paint_target"].toString());
+
+            const int effectsBefore = activeLayer()["effects"].toArray().size();
+            auto *effectButton = buttonWithText(effectsForm, translated("PetuniaPaintEffectsForm", "Inverter cores"));
+            const bool hadEffectButton = effectButton != nullptr;
+            if (effectButton)
+                effectButton->click();
+            settle(4);
+            window.syncNow();
+            settle(4);
+            const auto effectsAfter = activeLayer()["effects"].toArray();
+            h.add("paint:sub-effect-added-by-the-panel", hadEffectButton && effectsAfter.size() == effectsBefore + 1,
+                  QStringLiteral("%1 -> %2").arg(effectsBefore).arg(effectsAfter.size()));
+            if (!effectsAfter.isEmpty()) {
+                const QString label = effectsAfter.last().toObject()["label"].toString();
+                const QString removeText = translated("PetuniaPaintEffectsForm", "Remover efeito %1").arg(label);
+                auto *removeButton = buttonWithText(effectsForm, removeText);
+                const bool hadRemoveButton = removeButton != nullptr;
+                if (removeButton)
+                    removeButton->click();
+                settle(4);
+                window.syncNow();
+                settle(4);
+                const int effectsNow = activeLayer()["effects"].toArray().size();
+                h.add("paint:sub-effect-removed-by-the-panel", hadRemoveButton && effectsNow == effectsBefore,
+                      QStringLiteral("%1 removido(s): %2 -> %3")
+                          .arg(hadRemoveButton ? 1 : 0)
+                          .arg(effectsAfter.size())
+                          .arg(effectsNow));
+            } else {
+                h.add("paint:sub-effect-removed-by-the-panel", false, QStringLiteral("sem efeito para remover"));
+            }
+
+            auto *gradientButton =
+                buttonWithText(effectsForm, translated("PetuniaPaintEffectsForm", "Nova camada de gradiente (linear)"));
+            const bool hadGradientButton = gradientButton != nullptr;
+            if (gradientButton)
+                gradientButton->click();
+            settle(4);
+            window.syncNow();
+            settle(4);
+            const int stopsBefore = activeLayer()["gradient_stops"].toArray().size();
+            const QString gradientKind = activeLayer()["kind"].toString();
+            h.add("paint:gradient-layer-from-the-effects-panel",
+                  hadGradientButton && gradientKind == QLatin1String("gradient") && stopsBefore >= 2,
+                  gradientKind + QStringLiteral(" paradas=") + QString::number(stopsBefore));
+
+            auto *stopButton = buttonWithText(layerForm, translated("PetuniaPaintLayerForm", "Adicionar parada no meio"));
+            const bool hadStopButton = stopButton != nullptr;
+            if (stopButton)
+                stopButton->click();
+            settle(4);
+            window.syncNow();
+            settle(4);
+            const int stopsAfter = activeLayer()["gradient_stops"].toArray().size();
+            h.add("paint:gradient-stop-added-by-the-panel", hadStopButton && stopsAfter == stopsBefore + 1,
+                  QStringLiteral("%1 -> %2").arg(stopsBefore).arg(stopsAfter));
+
+            auto *projectionForm = window.findChild<PetuniaPaintProjectionForm *>();
+            auto *isolate = projectionForm ? projectionForm->findChild<QCheckBox *>() : nullptr;
+            const bool isolateBefore = c->flag("paint_isolate_ghost");
+            if (isolate)
+                isolate->click();
+            settle(4);
+            window.syncNow();
+            settle(4);
+            const bool isolateOn = c->flag("paint_isolate_ghost");
+            h.add("paint:isolate-ghost-toggles-the-mode", isolate && isolateOn != isolateBefore,
+                  QStringLiteral("%1 -> %2").arg(isolateBefore).arg(isolateOn));
+            if (isolate)
+                isolate->click();
+            settle(4);
+            window.syncNow();
+            settle(4);
+            h.add("paint:isolate-ghost-restores", c->flag("paint_isolate_ghost") == isolateBefore);
         }
         // Wireframe UV sobre a pintura: alternância no próprio canvas 2D (sem abrir seção).
         {

@@ -956,6 +956,11 @@
       "revision": "árvore de trabalho sobre 4f983e64 (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Fechamento da Onda B (B8, B10–B15) + correção do camera_frame (sessão paralela). fmt limpo; clippy -D warnings sem avisos (8 crates). Rust 7 crates --all-features com PETUNIA_REQUIRE_GL=1: 1628 testes, 0 falhas, GL sem SKIPPED. Qt offscreen 51 testes, 0 falhas; shell_v2 315 verificações, 0 reprovadas em 5 execuções. Defeitos achados e corrigidos com teste de regressão: raio-triângulo vazava pela diagonal dos quads (125/1600), gizmo do Selecionar engolia clique em vértice/aresta vizinho, gizmo aparecia sem componentes, camera_frame não avançava no tick Qt. Capturas GL antes/depois do modo de edição em target/render-captures. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%."
+    },
+    "shell-v2-roadmap-c1-c3-2026-10-19": {
+      "revision": "árvore de trabalho sobre c7015320 (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda C, parte 1 (C1–C3) + correção do wireframe. C1: efeitos como sub-camadas (opacidade e máscara próprias) aplicados ao conteúdo antes da mescla, máscara em camada e em efeito, alvo do pincel (conteúdo/máscara) e opções da camada ativa no painel. C2: ferramenta única Projeção (descriptor Decal sai do catálogo), pintar só a seleção já existente, isolar para pintura em fantasma preservando o Raio-X do usuário, prateleira de pincéis com miniaturas procedurais. C3: gradiente como camada de preenchimento editável (linear/refletido/radial/diamante/angular no painel, paradas com posição e cor, geometria por eixo). Wireframe: cada aresta carrega as normais das duas faces vizinhas; sem Raio-X (e no Wireframe, que é Raio-X por definição) as arestas de trás são descartadas; arestas abertas ou não-manifold sempre aparecem — corrige o 'estouro' nas bordas relatado pelo usuário. Arquivo hostil: PaintLayerStack::repair normaliza índice ativo, parâmetros não finitos, limite de sub-efeitos, tamanho de máscaras, alvo órfão, grupo inexistente e ciclo de grupos, e é chamado de Project::validate. Gates: fmt limpo; clippy -D warnings (core, project, module-paint, render, editor; --all-targets) 0 avisos; testes de biblioteca 293 (project) + 125 (module-paint) + 210 (core) + 40 (render) + 148 (editor, animation-workspace), 0 falhas, incluindo os novos (máscara/inversão, ordem de sub-efeitos, gradiente hostil, tiling == full com gradiente+efeito+máscara, repair idempotente, mescla recusando ajuste embaixo, alvo do pincel, ops de gradiente/efeito/máscara, ghost isolation, normais de aresta e faixas). Qt: cargo check -p petunia_ui_cxxqt (C++ compila), editor_parity offscreen 24/24 e shell_v2 323 verificações, 0 reprovadas, com 8 novas dos painéis novos (toda chave ligada existe no snapshot, máscara pela interface, sub-efeito adicionar/remover, camada de gradiente e parada, isolar para pintura liga/restaura). Defeito achado pelo próprio harness e corrigido: o controle 'Isolar para pintura' compilava mas não fazia nada (enviava {\"id\": booleano} em vez da ação); virou a ação de request toggle_paint_isolate, a mesma do keybind. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, 150%/200%, capturas visuais."
     }
   },
   "tasks": [
@@ -5436,18 +5441,23 @@
       "checkpoints": [
         {
           "title": "C1 Camadas: efeitos como sub-camadas e máscara.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c1-c3-2026-10-19"
         },
         {
           "title": "C2 Projeção única, pintar só a seleção e isolar para pintura.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c1-c3-2026-10-19"
         },
         {
           "title": "C3 Gradiente como camada de preenchimento.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c1-c3-2026-10-19"
+        },
+        {
+          "title": "Correção: arestas do wireframe/overlay não 'estouram' nas bordas (normais das faces vizinhas; sem Raio-X as arestas de trás são descartadas; valem as bordas abertas e não-manifold).",
+          "completed": true,
+          "evidence": "shell-v2-roadmap-c1-c3-2026-10-19"
         },
         {
           "title": "C4 Nós como DAG com portas tipadas e booleana com operando visível/fantasma.",

@@ -1308,6 +1308,11 @@ pub struct EditorSession {
     pub locked_axes: [bool; 3],
     pub isolate_active: bool,
     pub isolate_prev_visibilities: Option<Vec<bool>>,
+    /// Isolamento de pintura (C2): mantém os demais objetos visíveis em raio-X
+    /// em vez de escondê-los, para conservar contexto ao pintar.
+    pub paint_isolate_ghost: bool,
+    /// Raio-X anterior ao isolamento de pintura (restaurado ao desligar).
+    pub paint_isolate_prev_xray: Option<bool>,
     pub snap_enabled: bool,
     pub snap_settings: crate::snap::SnapSettings,
     pub proportional_editing: bool,
@@ -1402,6 +1407,8 @@ impl EditorSession {
             locked_axes: [false; 3],
             isolate_active: false,
             isolate_prev_visibilities: None,
+            paint_isolate_ghost: false,
+            paint_isolate_prev_xray: None,
             // Snapping contextual por padrão (capítulo 01, "Smart Snap").
             snap_enabled: true,
             snap_settings: crate::snap::SnapSettings::default(),
@@ -4963,6 +4970,31 @@ impl CommandContext<'_> {
         self.mark_dirty();
     }
 
+    /// Isolamento voltado à pintura (C2): os demais objetos ficam em raio-X,
+    /// não escondidos, para que o artista conserve a referência de contexto.
+    /// Alternar de novo restaura o raio-X anterior. Convive com o isolamento
+    /// normal: ao ligar, ele é desfeito para não esconder objetos.
+    pub fn toggle_paint_isolate_ghost(&mut self) {
+        if self.editor.paint_isolate_ghost {
+            if let Some(previous) = self.editor.paint_isolate_prev_xray.take() {
+                self.editor.show_xray = previous;
+            }
+            self.editor.paint_isolate_ghost = false;
+            self.set_status("Isolamento de pintura desativado".to_string());
+        } else {
+            if self.editor.isolate_active {
+                self.toggle_isolate();
+            }
+            self.editor.paint_isolate_prev_xray = Some(self.editor.show_xray);
+            self.editor.show_xray = true;
+            self.editor.paint_isolate_ghost = true;
+            self.set_status(
+                "Isolamento de pintura: demais objetos em raio-X (fantasma)".to_string(),
+            );
+        }
+        self.mark_dirty();
+    }
+
     /// Mantém o isolamento na seleção depois de trocar de objeto.
     ///
     /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
@@ -5732,5 +5764,52 @@ mod model_quick_action_tests {
         );
         assert!(state.ui.reset_model_quick_actions());
         assert!(!state.ui.reset_model_quick_actions());
+    }
+}
+
+#[cfg(test)]
+mod paint_isolation_tests {
+    use super::*;
+
+    #[test]
+    fn paint_isolate_ghost_toggles_xray_and_restores_it() {
+        let mut state = AppState::new("en");
+        assert!(!state.session.paint_isolate_ghost);
+        assert!(!state.session.show_xray);
+
+        state.toggle_paint_isolate_ghost();
+        assert!(state.session.paint_isolate_ghost);
+        assert!(
+            state.session.show_xray,
+            "fantasma mantém o contexto com raio-X em vez de esconder objetos"
+        );
+        assert_eq!(state.session.paint_isolate_prev_xray, Some(false));
+
+        state.toggle_paint_isolate_ghost();
+        assert!(!state.session.paint_isolate_ghost);
+        assert!(!state.session.show_xray, "o raio-X anterior volta");
+        assert_eq!(state.session.paint_isolate_prev_xray, None);
+    }
+
+    #[test]
+    fn paint_isolate_ghost_keeps_the_users_xray_and_undoes_normal_isolate() {
+        let mut state = AppState::new("en");
+        state.session.show_xray = true;
+        state.session.isolate_active = true;
+        state.session.isolate_prev_visibilities = Some(Vec::new());
+
+        state.toggle_paint_isolate_ghost();
+        assert!(state.session.paint_isolate_ghost);
+        assert!(state.session.show_xray);
+        assert!(
+            !state.session.isolate_active,
+            "o isolamento normal sairia escondendo objetos; a pintura usa fantasma"
+        );
+        assert_eq!(state.session.paint_isolate_prev_xray, Some(true));
+
+        state.toggle_paint_isolate_ghost();
+        assert!(state.session.show_xray, "o raio-X do usuário é preservado");
+        assert!(!state.session.paint_isolate_ghost);
+        assert_eq!(state.session.paint_isolate_prev_xray, None);
     }
 }
