@@ -195,6 +195,15 @@ impl Command for MoveAssetsCmd {
             state.document.assets = rest;
             return Err(CommandError::StaleReference("objetos ausentes".into()));
         }
+        // Grupos de onde os objetos saem: se ficarem vazios, deixam de existir.
+        let mut left_groups: Vec<String> = Vec::new();
+        for asset in &moved {
+            if let Some(group) = &asset.collection
+                && !left_groups.contains(group)
+            {
+                left_groups.push(group.clone());
+            }
+        }
         if let Some(collection) = &self.collection {
             for asset in &mut moved {
                 asset.collection.clone_from(collection);
@@ -221,6 +230,9 @@ impl Command for MoveAssetsCmd {
             .collect();
         if after_order == before_order && after_groups == before_groups {
             return Err(CommandError::NoChange("a ordem já era essa".into()));
+        }
+        for group in &left_groups {
+            state.document.project.prune_collection_if_empty(group);
         }
         state.set_status("Estrutura reorganizada".to_string());
         Ok(())
@@ -275,22 +287,67 @@ impl Command for RenameGroupCmd {
         if to == self.from {
             return Err(CommandError::NoChange("o nome é o mesmo".into()));
         }
-        let Some(slot) = state
+        if !state.document.project.rename_collection(&self.from, &to) {
+            return Err(CommandError::StaleReference(self.from.clone()));
+        }
+        state.set_status(format!("Grupo renomeado para {to}"));
+        Ok(())
+    }
+}
+
+/// Cor de seleção de um grupo da Estrutura. O objeto com cor própria vence a do
+/// grupo, a menos que `force` esteja ligado (ADR-C16, item 1).
+#[derive(Debug, Clone)]
+pub struct SetGroupColorCmd {
+    pub name: String,
+    /// `None` remove a cor do grupo.
+    pub color: Option<[u8; 3]>,
+    /// A cor do grupo vence a cor própria de cada objeto. Ignorado sem cor.
+    pub force: bool,
+}
+
+impl Command for SetGroupColorCmd {
+    fn label(&self) -> &'static str {
+        "set group color"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state
             .document
             .project
             .collections
-            .iter_mut()
-            .find(|name| **name == self.from)
-        else {
-            return Err(CommandError::StaleReference(self.from.clone()));
-        };
-        slot.clone_from(&to);
-        for asset in &mut state.document.assets {
-            if asset.collection.as_deref() == Some(self.from.as_str()) {
-                asset.collection = Some(to.clone());
-            }
+            .iter()
+            .any(|name| name == &self.name)
+        {
+            Ok(())
+        } else {
+            Err("The group no longer exists")
         }
-        state.set_status(format!("Grupo renomeado para {to}"));
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if !state
+            .document
+            .project
+            .set_collection_color(&self.name, self.color, self.force)
+        {
+            return if state
+                .document
+                .project
+                .collections
+                .iter()
+                .any(|name| name == &self.name)
+            {
+                Err(CommandError::NoChange("a cor do grupo é a mesma".into()))
+            } else {
+                Err(CommandError::StaleReference(self.name.clone()))
+            };
+        }
+        state.set_status(format!("Cor de seleção de {} atualizada", self.name));
         Ok(())
     }
 }

@@ -757,6 +757,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection = val;
             }
             UiIntent::SetActiveTool(tool) => {
+                // Escolher outra ferramenta durante o Editar pivô confirma o pivô
+                // (só o Mover sabe deslocar a origem).
+                if self.state.session.edit_pivot && tool != "move" {
+                    self.state.session.edit_pivot_session = None;
+                    self.state.session.edit_pivot = false;
+                    self.state.set_status("Pivot confirmed.");
+                }
                 if self.state.session.tools.active_tool != tool {
                     self.previous_tool = self.state.session.tools.active_tool.clone();
                 }

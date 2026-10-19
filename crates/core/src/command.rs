@@ -4061,8 +4061,13 @@ impl Command for SetAssetCollectionCmd {
         let Some(asset) = state.document.assets.get_mut(self.asset_index) else {
             return Err(CommandError::InvalidAssetIndex(self.asset_index));
         };
-        asset.collection = self.collection.clone();
+        let left = std::mem::replace(&mut asset.collection, self.collection.clone());
         let name = asset.name.clone();
+        if let Some(group) = left.as_deref()
+            && self.collection.as_deref() != Some(group)
+        {
+            state.document.project.prune_collection_if_empty(group);
+        }
         if let Some(ref col) = self.collection {
             state.set_status(format!("Moved {} to collection {}", name, col));
         } else {

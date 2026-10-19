@@ -11,6 +11,10 @@ pub enum OriginPreset {
     Cursor,
     Selection,
     GeometryToOrigin,
+    /// Origem do mundo (0, 0, 0).
+    World,
+    /// Um ponto de mundo escolhido pelo usuário (ex.: a posição sob o mouse).
+    Point([f32; 3]),
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +81,8 @@ impl Command for OriginPresetCmd {
             OriginPreset::Cursor => "Set Origin to 3D Cursor",
             OriginPreset::Selection => "Set Origin to Selection",
             OriginPreset::GeometryToOrigin => "Geometry to Origin",
+            OriginPreset::World => "Set Origin to World Origin",
+            OriginPreset::Point(_) => "Set Origin to Point",
         }
     }
 
@@ -100,18 +106,19 @@ impl Command for OriginPresetCmd {
                 let center = min * 0.5 + max * 0.5;
                 Vec3::new(center.x, min.y, center.z)
             }
-            OriginPreset::Selection | OriginPreset::Geometry => {
-                let selected = matches!(self.0, OriginPreset::Selection);
-                let center = mean(
-                    asset
-                        .mesh
-                        .verts
-                        .iter()
-                        .filter(|v| !selected || v.selected)
-                        .map(|v| v.vec()),
-                )?;
+            OriginPreset::World => Vec3::ZERO,
+            OriginPreset::Point(point) => {
+                let point = Vec3::from(point);
+                if !point.is_finite() {
+                    return Err(CommandError::Execution("Non-finite origin point".into()));
+                }
+                point
+            }
+            OriginPreset::Geometry => {
+                let center = mean(asset.mesh.verts.iter().map(|v| v.vec()))?;
                 asset.to_world_point(center)
             }
+            OriginPreset::Selection => selection_center_world(asset)?,
             OriginPreset::GeometryToOrigin => {
                 let center = mean(asset.mesh.verts.iter().map(|v| v.vec()))?;
                 let delta = asset.origin.map_or(Vec3::ZERO, Vec3::from) - center;
@@ -162,6 +169,14 @@ impl CommandContext<'_> {
         self.origin_preset(OriginPreset::Selection)
     }
 
+    pub fn set_origin_world(&mut self) -> Result<(), &'static str> {
+        self.origin_preset(OriginPreset::World)
+    }
+
+    pub fn set_origin_point(&mut self, point: Vec3) -> Result<(), &'static str> {
+        self.origin_preset(OriginPreset::Point(point.to_array()))
+    }
+
     pub fn set_geometry_to_origin(&mut self) -> Result<(), &'static str> {
         self.origin_preset(OriginPreset::GeometryToOrigin)
     }
@@ -179,6 +194,52 @@ impl CommandContext<'_> {
             }
         }
     }
+}
+
+/// Centro (em mundo) dos elementos selecionados do objeto, seja qual for o
+/// domínio: vértices marcados, vértices das faces selecionadas e extremos das
+/// arestas selecionadas. Uma aresta dá o ponto médio, uma face o centroide e
+/// vários elementos a média dos vértices envolvidos.
+pub fn selection_center_world(asset: &Asset) -> Result<Vec3, CommandError> {
+    let mesh = &asset.mesh;
+    let mut marked = vec![false; mesh.verts.len()];
+    let mut mark = |index: usize| {
+        if let Some(slot) = marked.get_mut(index) {
+            *slot = true;
+        }
+    };
+    for (index, vertex) in mesh.verts.iter().enumerate() {
+        if vertex.selected {
+            mark(index);
+        }
+    }
+    for face in mesh.faces.iter().filter(|face| face.selected) {
+        for &vertex in &face.verts {
+            mark(vertex as usize);
+        }
+    }
+    for &(a, b) in &mesh.selected_edges {
+        mark(a as usize);
+        mark(b as usize);
+    }
+    let center = mean(
+        mesh.verts
+            .iter()
+            .zip(&marked)
+            .filter(|(_, marked)| **marked)
+            .map(|(vertex, _)| vertex.vec()),
+    )?;
+    let world = asset.to_world_point(center);
+    if world.is_finite() {
+        Ok(world)
+    } else {
+        Err(CommandError::Execution("Non-finite geometry center".into()))
+    }
+}
+
+/// Motivo pelo qual a origem do objeto não pode ser movida, ou `None` se pode.
+pub fn origin_refusal(asset: &Asset) -> Option<&'static str> {
+    validate_asset(asset).err()
 }
 
 fn validate_asset(asset: &Asset) -> Result<(), &'static str> {

@@ -203,7 +203,9 @@ pub use shape_builder::{
 };
 pub mod scene_commands;
 pub mod solid_commands;
-pub use scene_commands::{GroupSelectionCmd, MoveAssetsCmd, RenameGroupCmd, UngroupCmd};
+pub use scene_commands::{
+    GroupSelectionCmd, MoveAssetsCmd, RenameGroupCmd, SetGroupColorCmd, UngroupCmd,
+};
 pub use snap::{
     SnapElement, SnapQuery, SnapResult, SnapSettings, SnapTarget, snap_point, snap_point_to_edges,
     snap_point_to_faces, snap_point_to_grid, snap_point_to_increment, snap_point_to_vertices,
@@ -220,10 +222,10 @@ pub mod surface_commands;
 pub use state::{
     ASSET_NAME_MAX_LEN, ActiveTool, ActiveToolSessionKind, AnnotationItem, AnnotationStroke,
     AppState, AssetRenameError, DirtyReason, DockOrientation, DockSide, Document, DocumentHistory,
-    DocumentPath, DocumentSession, DomainState, EditMode, EditorSession, GridSettings, HoverTarget,
-    Measurement, MeasurementItem, PROPERTIES_DEFAULT_WIDTH, PROPERTIES_MAX_WIDTH,
-    PROPERTIES_MIN_WIDTH, PivotPoint, ProfileState, ProjectState, RefAxis, ReferenceImage,
-    RenderResources, RenderStats, SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT,
+    DocumentPath, DocumentSession, DomainState, EditMode, EditPivotSession, EditorSession,
+    GridSettings, HoverTarget, Measurement, MeasurementItem, PROPERTIES_DEFAULT_WIDTH,
+    PROPERTIES_MAX_WIDTH, PROPERTIES_MIN_WIDTH, PivotPoint, ProfileState, ProjectState, RefAxis,
+    ReferenceImage, RenderResources, RenderStats, SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT,
     SHELL_ASSET_LIBRARY_MAX_HEIGHT, SHELL_ASSET_LIBRARY_MIN_HEIGHT, SceneFilter, SceneObjectState,
     Shading, TOOLBAR_DEFAULT_WIDTH, TextureDirtyRect, TextureUpdate, ToolActivation,
     ToolSessionManager, ToolSettingsSnapshot, ToolState, TransformFrame, TransformOrientation,

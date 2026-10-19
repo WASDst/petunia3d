@@ -380,6 +380,9 @@ fn scenegroupmodel(vm: &petunia_editor::SceneGroupModel) -> Value {
     obj.insert("visible".into(), json!(&vm.visible));
     obj.insert("locked".into(), json!(&vm.locked));
     obj.insert("selected".into(), json!(&vm.selected));
+    obj.insert("has_color".into(), json!(&vm.has_color));
+    obj.insert("color_rgb".into(), json!(&vm.color_rgb));
+    obj.insert("force_color".into(), json!(&vm.force_color));
     Value::Object(obj)
 }
 fn sectionstatemodel(vm: &petunia_editor::SectionStateModel) -> Value {
@@ -1409,6 +1412,11 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         json!(&vm.pivot_individual_label),
     );
     obj.insert("edit_pivot".into(), json!(&vm.edit_pivot));
+    obj.insert("origin_refusal".into(), json!(&vm.origin_refusal));
+    obj.insert(
+        "has_element_selection".into(),
+        json!(&vm.has_element_selection),
+    );
     obj.insert(
         "label_origin_to_geometry".into(),
         json!(&vm.label_origin_to_geometry),
@@ -1857,6 +1865,7 @@ fn uvislandrowmodel(vm: &petunia_editor::UvIslandRowModel) -> Value {
     obj.insert("face_count".into(), json!(&vm.face_count));
     obj.insert("area".into(), json!(&vm.area));
     obj.insert("selected".into(), json!(&vm.selected));
+    obj.insert("center".into(), json!(&vm.center));
     Value::Object(obj)
 }
 fn worldaxislabelmodel(vm: &petunia_editor::projection::WorldAxisLabelModel) -> Value {

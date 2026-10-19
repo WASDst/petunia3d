@@ -1209,6 +1209,16 @@ impl From<&EditorSession> for ViewportSession {
 /// Gerenciador de sessões e configurações de ferramentas (website/docs/02-application/state-separation.md).
 pub type ToolSessionManager = ToolState;
 
+/// Estado de uma sessão do modo Editar pivô: serve para que Esc desfaça só o que
+/// a sessão fez e para devolver a ferramenta que estava ativa.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditPivotSession {
+    /// Profundidade do Undo quando a sessão começou.
+    pub undo_depth: usize,
+    /// Ferramenta ativa antes de a sessão ligar o Mover.
+    pub previous_tool: String,
+}
+
 /// 3. SESSÃO DO EDITOR: câmera, seleção, modos e viewport settings.
 pub struct EditorSession {
     /// Retângulo lógico da viewport e escala de pixels, informados pelo host.
@@ -1238,6 +1248,8 @@ pub struct EditorSession {
     /// Snapshot of an explicitly copied world-space transform center.
     pub transform_center: Option<[f32; 3]>,
     pub edit_pivot: bool,
+    /// Sessão do modo Editar pivô em andamento (Enter confirma, Esc desfaz).
+    pub edit_pivot_session: Option<EditPivotSession>,
     pub show_overlays: bool,
     pub show_xray: bool,
     /// Picking policy, independent of X-Ray and wireframe shading.
@@ -1323,6 +1335,7 @@ impl EditorSession {
             pivot_point: PivotPoint::MedianPoint,
             transform_center: None,
             edit_pivot: false,
+            edit_pivot_session: None,
             show_overlays: true,
             show_xray: false,
             select_through: false,

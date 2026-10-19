@@ -348,7 +348,7 @@ impl SceneExtractor {
                 components_key.f32(value);
             }
             // A cor da parte também entra: trocar só a cor refaz os overlays.
-            let [r, g, b] = asset.effective_selection_overlay_color().unwrap_or([0; 3]);
+            let [r, g, b] = project.selection_color_of(asset).unwrap_or([0; 3]);
             components_key.mix(u64::from(u32::from_le_bytes([r, g, b, 1])));
         }
         let components_key = components_key.finish();
@@ -728,10 +728,10 @@ fn rgb_f32(rgb: [u8; 3]) -> [f32; 3] {
 /// Cor do contorno de um objeto: a da própria parte (`selection_overlay_color`)
 /// ou a global. Os níveis seguem o papel: ativo pleno, selecionado mais escuro,
 /// hover discreto.
-fn outline_rgb(asset: &Asset, style: &ComponentStyle) -> [f32; 3] {
+fn outline_rgb(project: &Project, asset: &Asset, style: &ComponentStyle) -> [f32; 3] {
     rgb_f32(
-        asset
-            .effective_selection_overlay_color()
+        project
+            .selection_color_of(asset)
             .unwrap_or(style.selection_rgb),
     )
 }
@@ -751,7 +751,7 @@ fn resolve_outline(
         && asset.visible
         && !selected.contains(&asset.id)
     {
-        let rgb = outline_rgb(asset, style);
+        let rgb = outline_rgb(project, asset, style);
         entries.push(OutlineEntry {
             object_id: asset.id,
             color: [
@@ -765,7 +765,7 @@ fn resolve_outline(
     let active = active.filter(|id| selected.contains(id));
     for id in selected.iter().copied().filter(|id| Some(*id) != active) {
         if let Some(asset) = find(id) {
-            let rgb = outline_rgb(asset, style);
+            let rgb = outline_rgb(project, asset, style);
             entries.push(OutlineEntry {
                 object_id: id,
                 color: [rgb[0] * 0.62, rgb[1] * 0.62, rgb[2] * 0.62, 1.0],
@@ -775,7 +775,7 @@ fn resolve_outline(
     if let Some(id) = active
         && let Some(asset) = find(id)
     {
-        let rgb = outline_rgb(asset, style);
+        let rgb = outline_rgb(project, asset, style);
         entries.push(OutlineEntry {
             object_id: id,
             color: [rgb[0], rgb[1], rgb[2], 1.0],
@@ -1041,8 +1041,8 @@ pub fn build_component_overlays(
     };
     let mesh = mesh_to_draw(pose, asset);
     let selected = rgb_f32(
-        asset
-            .effective_selection_overlay_color()
+        project
+            .selection_color_of(asset)
             .unwrap_or(style.selection_rgb),
     );
     let face_color = [selected[0], selected[1], selected[2], 0.32];
@@ -1387,6 +1387,47 @@ mod tests {
         assert!(outline.entries[0].color[2] > outline.entries[0].color[0]);
         assert_eq!(outline.entries[1].object_id, first);
         assert!(outline.entries[1].color[0] > outline.entries[1].color[2]);
+    }
+
+    #[test]
+    fn outline_uses_the_group_color_unless_the_object_has_its_own() {
+        let mut project = Project::new();
+        let first = project.assets[0].id;
+        project.add("Segundo", petunia_core::Mesh::cube(1.0));
+        let second = project.assets[1].id;
+        project.add_collection("Rodas");
+        for asset in &mut project.assets {
+            asset.collection = Some("Rodas".into());
+        }
+        project.set_collection_color("Rodas", Some([0, 255, 0]), false);
+        project.assets[0].selection_overlay_color = Some([255, 0, 0]);
+        let style = ComponentStyle::default();
+        let green_dominant = |color: [f32; 4]| color[1] > color[0] && color[1] > color[2];
+        let red_dominant = |color: [f32; 4]| color[0] > color[1] && color[0] > color[2];
+        let outline = resolve_outline(&project, &style, &[first, second], Some(first));
+        let color_of = |id| {
+            outline
+                .entries
+                .iter()
+                .find(|entry| entry.object_id == id)
+                .map(|entry| entry.color)
+                .expect("entrada do objeto")
+        };
+        assert!(
+            red_dominant(color_of(first)),
+            "a cor própria vence por padrão"
+        );
+        assert!(green_dominant(color_of(second)), "o outro herda a do grupo");
+
+        // Forçar: o grupo vence a cor própria.
+        project.set_collection_color("Rodas", Some([0, 255, 0]), true);
+        let forced = resolve_outline(&project, &style, &[first, second], Some(first));
+        assert!(
+            forced
+                .entries
+                .iter()
+                .all(|entry| green_dominant(entry.color))
+        );
     }
 
     #[test]

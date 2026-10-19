@@ -711,6 +711,28 @@ impl QtEditor {
             "group_rename" => {
                 return Ok(b.rename_group(string(request, "from")?, string(request, "to")?));
             }
+            "group_color" => {
+                // `color` nulo remove a cor; só componentes 0..=255 inteiros valem.
+                let color = match request.get("color") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::Array(parts)) if parts.len() == 3 => {
+                        let mut rgb = [0u8; 3];
+                        for (slot, part) in rgb.iter_mut().zip(parts) {
+                            *slot = part
+                                .as_u64()
+                                .and_then(|value| u8::try_from(value).ok())
+                                .ok_or("Cor inválida")?;
+                        }
+                        Some(rgb)
+                    }
+                    Some(_) => return Err("Cor inválida".into()),
+                };
+                let force = request
+                    .get("force")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                return Ok(b.set_group_color(string(request, "name")?, color, force));
+            }
             "scene_drop" => {
                 let ids: Vec<String> = request["ids"]
                     .as_array()
@@ -1478,6 +1500,8 @@ fn dispatch_controller(
         "execute_quick_action" => b.execute_quick_action(string(v, "id")?),
         "frame_camera_on_uv" => b.frame_camera_on_uv(number(v, "u")?, number(v, "v")?),
         "frame_cursor" => b.frame_cursor(),
+        "cursor_to_selection" => b.cursor_to_selection(),
+        "cursor_to_active" => b.cursor_to_active(),
         "freeze_active_primitive" => b.freeze_active_primitive(),
         "generate_profile_extrude" => b.generate_profile_extrude(),
         "generate_profile_revolve" => b.generate_profile_revolve(),
@@ -1642,6 +1666,10 @@ fn dispatch_controller(
         "set_origin_cursor" => b.set_origin_cursor(),
         "set_origin_geometry" => b.set_origin_geometry(),
         "set_origin_selection" => b.set_origin_selection(),
+        "set_origin_world" => b.set_origin_world(),
+        "set_origin_at_point" => {
+            b.set_origin_at_screen_point(number(v, "norm_x")?, number(v, "norm_y")?)
+        }
         "set_paint_effect_param" => {
             b.set_paint_effect_param(string(v, "key")?, number(v, "value")?)
         }
@@ -1764,6 +1792,17 @@ fn dispatch_controller(
             number(v, "y")?,
             boolean(v, "fine")?,
             boolean(v, "snap")?,
+        ),
+        "uv_editor_press" => {
+            b.uv_editor_press(number(v, "u")?, number(v, "v")?, boolean(v, "extend")?)
+        }
+        "uv_box_select" => b.uv_box_select(
+            number(v, "x0")?,
+            number(v, "y0")?,
+            number(v, "x1")?,
+            number(v, "y1")?,
+            boolean(v, "extend")?,
+            boolean(v, "subtract")?,
         ),
         "uv_editor_click" => {
             b.uv_editor_click(number(v, "u")?, number(v, "v")?, boolean(v, "extend")?)

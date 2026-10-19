@@ -14,6 +14,8 @@
 QPainterPath petuniaPath(const QString &commands);
 
 class QKeyEvent;
+class QResizeEvent;
+class QToolButton;
 
 class PetuniaEditorCanvas : public QWidget {
     Q_OBJECT
@@ -27,6 +29,12 @@ class PetuniaEditorCanvas : public QWidget {
     /// Teclas de navegação que o canvas trata antes dos atalhos globais
     /// (Esc, Home, +/−, setas com ou sem Ctrl/Shift; o dope sheet só Esc/Home).
     bool ownsKey(const QKeyEvent *event) const;
+    /// Ponto do widget (px) que corresponde a (u, v) no canvas (origem do v embaixo).
+    /// Existe para testes de interface que clicam e arrastam em ilhas UV.
+    QPointF uvToWidget(const QPointF &uv) const {
+        const QRectF r = canvasRect();
+        return QPointF(r.left() + uv.x() * r.width(), r.top() + (1.0 - uv.y()) * r.height());
+    }
   signals:
     void editorChanged();
 
@@ -37,6 +45,7 @@ class PetuniaEditorCanvas : public QWidget {
     void mouseReleaseEvent(QMouseEvent *) override;
     void wheelEvent(QWheelEvent *) override;
     void tabletEvent(QTabletEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
     void focusOutEvent(QFocusEvent *) override;
     void enterEvent(QEnterEvent *) override;
@@ -62,6 +71,11 @@ class PetuniaEditorCanvas : public QWidget {
     bool m_panning{false}, m_stroking{false}, m_uvDragging{false},
         m_selecting{false};
     QPointF m_press, m_dragDelta;
+    /// Shift no pressionar do UV: o soltar sem arrastar não refaz a seleção.
+    bool m_uvPressExtend{false};
+    /// Alternância do wireframe UV sobre a pintura (canvas de Paint).
+    QToolButton *m_uvOverlayButton{nullptr};
+    void placeOverlayButton();
     QString m_dragRevision, m_dragAsset, m_dragSelection;
     qreal m_pressure{1.0};
 };

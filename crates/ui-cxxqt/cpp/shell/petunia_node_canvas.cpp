@@ -17,7 +17,9 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include <QResizeEvent>
 #include <QScrollBar>
+#include <QToolButton>
 #include <QSet>
 #include <QStyleOptionGraphicsItem>
 #include <QWheelEvent>
@@ -484,14 +486,61 @@ PetuniaNodeCanvas::PetuniaNodeCanvas(PetuniaShellController *controller, QWidget
     setFocusPolicy(Qt::StrongFocus);
     setFrameShape(QFrame::NoFrame);
     setDragMode(QGraphicsView::NoDrag);
-    setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+    // O zoom é ancorado à mão (zoomBy): sem barras de rolagem a âncora do Qt não vale.
+    setTransformationAnchor(QGraphicsView::NoAnchor);
     static const bool factoryInstalled = (QAccessible::installFactory(canvasAccessibleFactory), true);
     Q_UNUSED(factoryInstalled);
     setAccessibleName(tr("Editor de nós"));
     // A área interna recebe o foco do QGraphicsView; ela também se anuncia.
     viewport()->setAccessibleName(tr("Editor de nós"));
     setToolTip(tr("Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona"));
-    m_scene->setSceneRect(-400, -300, 1600, 900);
+    // Vista infinita: a cena é enorme e sem barras de rolagem; o pan é por arrasto
+    // (botão do meio, direito ou Espaço+esquerdo), roda/trackpad e Alt+setas.
+    m_scene->setSceneRect(-100000, -100000, 200000, 200000);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    m_fitButton = new QToolButton(viewport());
+    m_fitButton->setAutoRaise(true);
+    m_fitButton->setFocusPolicy(Qt::TabFocus);
+    m_fitButton->setIcon(PetuniaIcons::get(QStringLiteral("bounding_box")));
+    m_fitButton->setToolTip(tr("Enquadrar tudo (Home ou F)"));
+    m_fitButton->setAccessibleName(tr("Enquadrar tudo"));
+    connect(m_fitButton, &QToolButton::clicked, this, [this] { fitAll(); });
+    placeFitButton();
+}
+
+void PetuniaNodeCanvas::placeFitButton() {
+    if (!m_fitButton)
+        return;
+    const int side = 28;
+    m_fitButton->setFixedSize(side, side);
+    m_fitButton->move(viewport()->width() - side - 8, 8);
+    m_fitButton->raise();
+}
+
+void PetuniaNodeCanvas::resizeEvent(QResizeEvent *event) {
+    QGraphicsView::resizeEvent(event);
+    placeFitButton();
+}
+
+void PetuniaNodeCanvas::panBy(const QPointF &delta) {
+    if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()))
+        return;
+    horizontalScrollBar()->setValue(horizontalScrollBar()->value() - qRound(delta.x()));
+    verticalScrollBar()->setValue(verticalScrollBar()->value() - qRound(delta.y()));
+}
+
+void PetuniaNodeCanvas::zoomBy(qreal factor, const QPointF &anchorInView) {
+    if (!std::isfinite(factor) || factor <= 0)
+        return;
+    const qreal next = transform().m11() * factor;
+    if (next <= 0.3 || next >= 3.0)
+        return;
+    const QPointF before = mapToScene(anchorInView.toPoint());
+    scale(factor, factor);
+    // Devolve ao ponto de ancoragem o ponto da cena que estava sob ele.
+    panBy(anchorInView - QPointF(mapFromScene(before)));
 }
 
 PetuniaNodeCanvas::~PetuniaNodeCanvas() {
@@ -575,6 +624,7 @@ void PetuniaNodeCanvas::setDomain(Domain domain) {
     m_domain = domain;
     m_selected.clear();
     m_signature.clear();
+    m_viewFitted = false; // cada grafo enquadra na primeira vez que aparece
     setToolTip(domain == Domain::Material
                    ? tr("Nós do material: setas navegam, Enter liga a…, Delete remove, Shift+A adiciona")
                    : tr("Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona"));
@@ -703,8 +753,11 @@ void PetuniaNodeCanvas::rebuild(const QJsonArray &nodes, const QJsonArray &edges
         it.value()->setSelectedNode(it.key() == m_selected);
     m_rebuilding = false;
     releaseStaleAccessibles();
-    if (m_scene->items().size() > 0)
-        m_scene->setSceneRect(m_scene->itemsBoundingRect().adjusted(-200, -160, 200, 160));
+    // A primeira vez que um grafo aparece, enquadra tudo; depois a vista é do usuário.
+    if (!m_viewFitted && !m_nodes.isEmpty()) {
+        m_viewFitted = true;
+        fitAll();
+    }
 }
 
 void PetuniaNodeCanvas::updateWires() {
@@ -931,7 +984,9 @@ void PetuniaNodeCanvas::keyPressEvent(QKeyEvent *event) {
     default: break;
     }
     if (dx || dy) {
-        if (ctrl)
+        if (event->modifiers().testFlag(Qt::AltModifier)) {
+            panBy(QPointF(-dx * 80, -dy * 80)); // pan pelo teclado
+        } else if (ctrl)
             nudgeSelected(dx * 16, dy * 16);
         else
             moveSelection(dx, dy);
@@ -966,10 +1021,45 @@ void PetuniaNodeCanvas::keyPressEvent(QKeyEvent *event) {
         fitAll();
         event->accept();
         return;
+    case Qt::Key_F:
+        if (event->modifiers() == Qt::NoModifier) {
+            fitAll();
+            event->accept();
+            return;
+        }
+        break;
+    case Qt::Key_Plus:
+    case Qt::Key_Equal:
+        zoomBy(1.15, QPointF(viewport()->rect().center()));
+        event->accept();
+        return;
+    case Qt::Key_Minus:
+        zoomBy(1 / 1.15, QPointF(viewport()->rect().center()));
+        event->accept();
+        return;
+    case Qt::Key_Space:
+        if (!event->isAutoRepeat()) {
+            m_spaceHeld = true;
+            if (!m_panning)
+                setCursor(Qt::OpenHandCursor);
+        }
+        event->accept();
+        return;
     default:
         break;
     }
     QGraphicsView::keyPressEvent(event);
+}
+
+void PetuniaNodeCanvas::keyReleaseEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
+        m_spaceHeld = false;
+        if (!m_panning)
+            unsetCursor();
+        event->accept();
+        return;
+    }
+    QGraphicsView::keyReleaseEvent(event);
 }
 
 void PetuniaNodeCanvas::showConnectMenu(const QPoint &globalPos) {
@@ -1096,6 +1186,10 @@ void PetuniaNodeCanvas::showAddMenu(const QPoint &globalPos) {
 }
 
 void PetuniaNodeCanvas::contextMenuEvent(QContextMenuEvent *event) {
+    if (event->reason() == QContextMenuEvent::Mouse) {
+        event->accept(); // o botão direito abre o menu no release, se não houve arrasto
+        return;
+    }
     auto *hit = nodeAt(mapToScene(event->pos()));
     if (hit)
         selectNode(hit->id());
@@ -1133,10 +1227,18 @@ void PetuniaNodeCanvas::contextMenuEvent(QContextMenuEvent *event) {
 void PetuniaNodeCanvas::mousePressEvent(QMouseEvent *event) {
     setFocus(Qt::MouseFocusReason);
     const QPointF scenePos = mapToScene(event->pos());
-    if (event->button() == Qt::MiddleButton) {
+    // Pan: botão do meio, botão direito (só depois de arrastar; um clique abre o
+    // menu) ou Espaço + esquerdo.
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton ||
+        (event->button() == Qt::LeftButton && m_spaceHeld)) {
         m_panning = true;
+        m_panButton = event->button();
         m_panLast = event->pos();
-        setCursor(Qt::ClosedHandCursor);
+        m_panStart = event->pos();
+        m_panMoved = false;
+        if (m_panButton != Qt::RightButton)
+            setCursor(Qt::ClosedHandCursor);
+        event->accept();
         return;
     }
     if (event->button() != Qt::LeftButton) {
@@ -1164,10 +1266,21 @@ void PetuniaNodeCanvas::mousePressEvent(QMouseEvent *event) {
 
 void PetuniaNodeCanvas::mouseMoveEvent(QMouseEvent *event) {
     if (m_panning) {
-        const QPoint d = event->pos() - m_panLast;
+        if (m_panButton == Qt::RightButton && !m_panMoved) {
+            const QPoint total = event->pos() - m_panStart;
+            if (total.manhattanLength() <= 4) {
+                event->accept();
+                return;
+            }
+            m_panMoved = true; // passou do limiar: é um arrasto, não um clique
+            setCursor(Qt::ClosedHandCursor);
+            panBy(total);
+        } else {
+            m_panMoved = true;
+            panBy(event->pos() - m_panLast);
+        }
         m_panLast = event->pos();
-        horizontalScrollBar()->setValue(horizontalScrollBar()->value() - d.x());
-        verticalScrollBar()->setValue(verticalScrollBar()->value() - d.y());
+        event->accept();
         return;
     }
     const QPointF scenePos = mapToScene(event->pos());
@@ -1188,9 +1301,21 @@ void PetuniaNodeCanvas::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void PetuniaNodeCanvas::mouseReleaseEvent(QMouseEvent *event) {
-    if (m_panning && event->button() == Qt::MiddleButton) {
+    if (m_panning && event->button() == m_panButton) {
+        const bool plainRightClick = m_panButton == Qt::RightButton && !m_panMoved;
         m_panning = false;
-        unsetCursor();
+        m_panButton = Qt::NoButton;
+        if (m_spaceHeld)
+            setCursor(Qt::OpenHandCursor);
+        else
+            unsetCursor();
+        if (plainRightClick) {
+            // Clique sem arrasto: abre o menu de contexto (o evento do sistema, que
+            // chega no press, é ignorado para não abrir o menu antes do arrasto).
+            QContextMenuEvent menuEvent(QContextMenuEvent::Other, event->pos(), event->globalPosition().toPoint());
+            contextMenuEvent(&menuEvent);
+        }
+        event->accept();
         return;
     }
     const QPointF scenePos = mapToScene(event->pos());
@@ -1233,10 +1358,25 @@ void PetuniaNodeCanvas::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void PetuniaNodeCanvas::wheelEvent(QWheelEvent *event) {
-    const qreal factor = event->angleDelta().y() > 0 ? 1.15 : 1 / 1.15;
-    const qreal next = transform().m11() * factor;
-    if (next > 0.3 && next < 3.0)
-        scale(factor, factor);
+    const QPoint pixels = event->pixelDelta();
+    const QPoint angle = event->angleDelta();
+    const bool ctrl = event->modifiers().testFlag(Qt::ControlModifier);
+    const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
+    if (!pixels.isNull()) {
+        // Trackpad: dois eixos. Com Ctrl vira zoom; sem, é pan em qualquer direção.
+        if (ctrl)
+            zoomBy(std::pow(1.0025, pixels.y()), event->position());
+        else
+            panBy(QPointF(pixels));
+    } else if (angle.x() != 0 && angle.y() == 0) {
+        panBy(QPointF(angle.x() / 120.0 * 60.0, 0)); // roda inclinada: pan horizontal
+    } else if (shift) {
+        panBy(QPointF(0, angle.y() / 120.0 * 60.0)); // Shift + roda: pan vertical
+    } else if (ctrl) {
+        panBy(QPointF(angle.y() / 120.0 * 60.0, 0)); // Ctrl + roda: pan horizontal
+    } else {
+        zoomBy(angle.y() > 0 ? 1.15 : 1 / 1.15, event->position()); // roda: zoom no cursor
+    }
     event->accept();
 }
 

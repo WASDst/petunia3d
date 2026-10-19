@@ -553,10 +553,39 @@ PetuniaEditorCanvas::PetuniaEditorCanvas(const QString &mode, QWidget *parent)
     setAccessibleName(mode == "PAINT" ? tr("Canvas de pintura do documento")
                       : mode == "UV"  ? tr("Editor UV")
                                       : tr("Dope Sheet e editor de curvas"));
+    if (mode == "PAINT") {
+        // Wireframe (UVs) sobre a pintura: ligar/desligar sem abrir seção nenhuma.
+        m_uvOverlayButton = new QToolButton(this);
+        m_uvOverlayButton->setCheckable(true);
+        m_uvOverlayButton->setAutoRaise(true);
+        m_uvOverlayButton->setFocusPolicy(Qt::TabFocus);
+        m_uvOverlayButton->setIcon(PetuniaIcons::get(QStringLiteral("uv_island")));
+        m_uvOverlayButton->setToolTip(tr("Mostrar o wireframe UV sobre a pintura"));
+        m_uvOverlayButton->setAccessibleName(tr("Wireframe UV sobre a pintura"));
+        connect(m_uvOverlayButton, &QToolButton::clicked, this, [this] {
+            sync(petuniaRequest("paint_uv_overlay"));
+            emit editorChanged();
+        });
+        placeOverlayButton();
+    }
     if (mode != "ANIMATE")
         setAccessibleDescription(mode == "UV"
                                      ? tr("+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra; setas movem a seleção UV (Shift: passo maior)")
                                      : tr("+ e − aproximam, Ctrl+setas deslocam a vista, Home enquadra"));
+}
+
+void PetuniaEditorCanvas::placeOverlayButton() {
+    if (!m_uvOverlayButton)
+        return;
+    const int side = 28;
+    m_uvOverlayButton->setFixedSize(side, side);
+    m_uvOverlayButton->move(width() - side - 8, 8);
+    m_uvOverlayButton->raise();
+}
+
+void PetuniaEditorCanvas::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    placeOverlayButton();
 }
 
 bool PetuniaEditorCanvas::ownsKey(const QKeyEvent *event) const {
@@ -627,6 +656,10 @@ void PetuniaEditorCanvas::sync(const QJsonObject &state) {
         m_state["paint_layers"] != state["paint_layers"] ||
         m_state["texture_revision"] != state["texture_revision"];
     m_state = state;
+    if (m_uvOverlayButton) {
+        const QSignalBlocker blocker(m_uvOverlayButton);
+        m_uvOverlayButton->setChecked(state["paint_show_uv_overlay"].toBool());
+    }
     if (m_mode == "PAINT")
         m_zoom = qBound(0.1, state["paint_canvas_zoom"].toDouble(1.), 16.);
     if ((m_mode == "PAINT" ||
@@ -861,15 +894,22 @@ void PetuniaEditorCanvas::mousePressEvent(QMouseEvent *e) {
         }
     } else if (m_mode == "UV") {
         const auto n = normalized(e->position());
-        sync(petuniaRequest(
-            "uv_editor_click",
-            {{"u", n.x()},
-             {"v", 1. - n.y()},
-             {"extend", bool(e->modifiers() & Qt::ShiftModifier)}}));
-        m_uvDragging = true;
-        m_dragRevision = m_state["document_revision"].toString();
-        m_dragAsset = m_state["active_asset_id"].toString();
-        m_dragSelection = m_state["uv_selection_stamp"].toString();
+        m_uvPressExtend = bool(e->modifiers() & Qt::ShiftModifier);
+        const auto reply = petuniaRequest("uv_editor_press",
+                                          {{"u", n.x()},
+                                           {"v", 1. - n.y()},
+                                           {"extend", m_uvPressExtend}});
+        sync(reply);
+        if (reply.value("changed").toBool(true)) {
+            // Atingiu algo: arrastar move TODA a seleção (já mantida se o alvo
+            // estava nela). Soltar sem arrastar refaz a seleção só com o alvo.
+            m_uvDragging = true;
+            m_dragRevision = m_state["document_revision"].toString();
+            m_dragAsset = m_state["active_asset_id"].toString();
+            m_dragSelection = m_state["uv_selection_stamp"].toString();
+        } else {
+            m_selecting = true; // espaço vazio: caixa de seleção
+        }
         emit editorChanged();
     } else {
         const auto a = m_state["animate"].toObject();
@@ -957,7 +997,33 @@ void PetuniaEditorCanvas::mouseReleaseEvent(QMouseEvent *e) {
                                  {"asset", m_dragAsset},
                                  {"selection", m_dragSelection}}));
             emit editorChanged();
+        } else if (!m_uvPressExtend) {
+            // Clique sem arrasto num item de uma multisseleção: fica só ele.
+            const auto n = normalized(e->position());
+            sync(petuniaRequest("uv_editor_click",
+                                {{"u", n.x()}, {"v", 1. - n.y()}, {"extend", false}}));
+            emit editorChanged();
         }
+    }
+    if (m_selecting && m_mode == "UV") {
+        m_selecting = false;
+        const auto from = normalized(m_press), to = normalized(e->position());
+        if ((e->position() - m_press).manhattanLength() > 3) {
+            sync(petuniaRequest(
+                "uv_box_select",
+                {{"x0", from.x()},
+                 {"y0", from.y()},
+                 {"x1", to.x()},
+                 {"y1", to.y()},
+                 {"extend", bool(e->modifiers() & Qt::ShiftModifier)},
+                 {"subtract", bool(e->modifiers() & Qt::ControlModifier)}}));
+        } else {
+            // Clique no vazio: limpa (Shift não faz nada).
+            sync(petuniaRequest("uv_editor_click",
+                                {{"u", to.x()}, {"v", 1. - to.y()},
+                                 {"extend", m_uvPressExtend}}));
+        }
+        emit editorChanged();
     }
     if (m_selecting) {
         m_selecting = false;

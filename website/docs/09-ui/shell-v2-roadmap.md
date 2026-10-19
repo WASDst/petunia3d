@@ -14,13 +14,13 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 
 | ID  | Item                                                                                          | Status          |
 |-----|-----------------------------------------------------------------------------------------------|-----------------|
-| A1  | Apagar ou tirar o último membro de um grupo remove o grupo (um passo de Undo)                  | [-] IN PROGRESS |
-| A2  | Renomear grupo descobrível (F2 e duplo clique) e cor de seleção por grupo (+ forçar)          | [-] IN PROGRESS |
-| A3  | Pivô: deslocamento não destrutivo, Editar pivô modal (Enter/Esc) e menu de botão direito       | [-] IN PROGRESS |
-| A4  | Menu de botão direito do 3D Cursor (origem, seleção, ponto sob o mouse, origem para o cursor)  | [-] IN PROGRESS |
-| A5  | Nós: navegação infinita (pan em qualquer direção, zoom) e "Enquadrar tudo"                    | [-] IN PROGRESS |
-| A6  | Paint/UV: alternar wireframe sobre a pintura 2D                                                | [-] IN PROGRESS |
-| A7  | UV: mover várias ilhas e partes de uma vez                                                     | [-] IN PROGRESS |
+| A1  | Apagar ou tirar o último membro de um grupo remove o grupo (um passo de Undo)                  | [x] DONE (código e testes; gates no fim) |
+| A2  | Renomear grupo descobrível (F2 e duplo clique) e cor de seleção por grupo (+ forçar)          | [x] DONE (código e testes; gates no fim) |
+| A3  | Pivô: origem do objeto (rebase sem mudar a geometria), Editar pivô em sessão (Enter/Esc) e menu de botão direito | [x] DONE (código e testes; gates no fim) |
+| A4  | Menu de botão direito do 3D Cursor (mouse, seleção, pivô do objeto, origem do mundo, enquadrar) | [x] DONE (código e testes; gates no fim) |
+| A5  | Nós: navegação infinita (roda/trackpad, botão direito, Espaço, Alt+setas), zoom no cursor e "Enquadrar tudo" (botão, Home, F) | [x] DONE (código e testes; gates no fim) |
+| A6  | Paint: botão no canvas 2D para alternar o wireframe UV sobre a pintura (a UV já o mostra)      | [x] DONE (código e testes; gates no fim) |
+| A7  | UV: mover várias ilhas de uma vez (pressionar numa selecionada mantém tudo) e caixa de seleção | [x] DONE (código e testes; gates no fim) |
 | A8  | Remover a opacidade duplicada do Paint                                                         | [ ] TODO (depende de B1: a opacidade passa para o seletor de cor) |
 
 ## Onda B — alicerces
@@ -59,12 +59,26 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 
 ## Verification
 
-Por onda, quando entregue. A Onda A: ver o registro de evidência `shell-v2-roadmap-a-2026-10-18` em `website/progress/tasks.json`.
+Onda A, executada em 2026-10-18 no fim da implementação (árvore de trabalho sobre `743273e1`). Ambiente: Linux, `RUSTUP_TOOLCHAIN=1.98.1`, `CARGO_BUILD_JOBS=2`, Qt offscreen, GL por EGL headless.
+
+| Gate                                                                                          | Resultado                                                         | Status  |
+|-----------------------------------------------------------------------------------------------|-------------------------------------------------------------------|---------|
+| `cargo fmt --all -- --check`                                                                  | sem diferenças                                                    | pass    |
+| `cargo clippy -D warnings` (core, editor, render, config, mesh, project, application, ui-cxxqt) | 0 avisos                                                          | pass    |
+| `cargo test --no-fail-fast` (7 crates, `--all-features`, `PETUNIA_REQUIRE_GL=1`)              | 89 binários, 1570 testes, 0 falhas, nenhum SKIPPED (+51 novos)    | pass    |
+| `cargo test -p petunia_ui_cxxqt -- --test-threads=1` (offscreen)                              | contratos, i18n, bridge, editor_parity e `shell_v2` verdes        | pass    |
+| `shell_v2` (harness): 231 verificações, 42 novas desta onda e do conserto do gizmo            | 0 reprovadas; binário rodado 5 vezes seguidas sem falha           | pass    |
+| `xtask docs-generate --check`                                                                 | sem drift                                                         | pass    |
+| `verify-progress.cjs` e `progress.test.cjs`                                                   | 135 processos consistentes; 6/6                                   | pass    |
+| Janela real com GPU (menus de Pivô/Cursor, canvas de nós, UV, árvore de Partes)               | não executado                                                     | not run |
+| Windows, leitor de tela, alto contraste, escalas 150%/200%                                    | não executado                                                     | not run |
+
+Correções de teste feitas no caminho (registradas por honestidade): a primeira versão do check de órbita só olhava depois de soltar o botão e passava sem a correção; o check de "clique reduz a seleção UV" contava ilhas em vez de faces e partia de uma seleção que o Undo já tinha desfeito.
 
 ## Risks
 
 - A cor por grupo muda o formato do documento: o campo é opcional (arquivos antigos abrem sem migração) e a validação rejeita valores inválidos.
-- Mover o pivô sem regravar a malha exige que gizmo, snap e animação leiam o pivô do objeto, e não o centro da caixa.
+- Mover o pivô regrava as coordenadas locais da malha de forma compensada (a geometria no mundo não muda); por isso o rebase recusa primitiva paramétrica, modificadores, rig e objeto bloqueado, e a interface mostra o motivo.
 - Animar vértices à mão depende de topologia estável; operações que mudam topologia entram só por nós (ADR-C16, item 4).
 
 ## Next

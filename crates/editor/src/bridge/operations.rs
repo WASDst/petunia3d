@@ -340,13 +340,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return true;
         }
         if self.state.session.edit_pivot {
-            self.state.session.edit_pivot = false;
-            self.state.mark_dirty();
-            self.state.set_status(
-                self.state
-                    .t_id(petunia_config::text_id::STATUS_EDIT_PIVOT_EXITED),
-            );
-            return true;
+            return self.cancel_edit_pivot();
         }
         if let Some(entry) = self.overlays.esc() {
             self.hide_overlay(entry.id);
@@ -455,6 +449,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.drag.is_some() {
             return self.end_viewport_transform();
         }
-        self.commit_transform()
+        if self.commit_transform() {
+            return true;
+        }
+        // Nenhum gesto aberto: Enter confirma a sessão de Editar pivô.
+        self.state.session.edit_pivot && self.confirm_edit_pivot()
     }
 }

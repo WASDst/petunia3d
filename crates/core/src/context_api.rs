@@ -662,6 +662,22 @@ impl AppState {
     }
 
     #[inline]
+    pub fn uv_press(&mut self, point: glam::Vec2, radius: f32, extend: bool) -> bool {
+        self.in_context(|ctx| ctx.uv_press(point, radius, extend))
+    }
+
+    #[inline]
+    pub fn uv_box_select(
+        &mut self,
+        min: glam::Vec2,
+        max: glam::Vec2,
+        extend: bool,
+        subtract: bool,
+    ) -> bool {
+        self.in_context(|ctx| ctx.uv_box_select(min, max, extend, subtract))
+    }
+
+    #[inline]
     pub fn uv_select_faces(&mut self, faces: &[usize], extend: bool) -> bool {
         self.in_context(|ctx| ctx.uv_select_faces(faces, extend))
     }
@@ -729,6 +745,16 @@ impl AppState {
     #[inline]
     pub fn set_origin_selection(&mut self) -> Result<(), &'static str> {
         self.in_context(|ctx| ctx.set_origin_selection())
+    }
+
+    #[inline]
+    pub fn set_origin_world(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_world())
+    }
+
+    #[inline]
+    pub fn set_origin_point(&mut self, point: glam::Vec3) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_point(point))
     }
 
     #[inline]

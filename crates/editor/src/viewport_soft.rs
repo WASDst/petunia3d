@@ -408,8 +408,8 @@ impl PetuniaViewport for Software3dViewport {
                 let tint = if *asset_index == project.active
                     && state.selection_domain == SelectionDomain::Face
                 {
-                    let sel_rgb = asset
-                        .effective_selection_overlay_color()
+                    let sel_rgb = project
+                        .selection_color_of(asset)
                         .unwrap_or(state.selection_rgb);
                     if face.selected {
                         Some((sel_rgb.map(|value| value as f32 / 255.0), 0.32))
@@ -505,8 +505,8 @@ impl PetuniaViewport for Software3dViewport {
         // All opaque surfaces must be in the depth buffer before components.
         for (asset_index, asset, mesh) in &meshes {
             let active = *asset_index == project.active;
-            let sel_rgb = asset
-                .effective_selection_overlay_color()
+            let sel_rgb = project
+                .selection_color_of(asset)
                 .unwrap_or(state.selection_rgb);
             if state.show_wireframe_overlay
                 || state.show_triangulation

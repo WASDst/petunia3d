@@ -5454,5 +5454,141 @@
   "UV": {
     "pt-BR": "UV",
     "en": "UV"
+  },
+  "Editando pivô · arraste o gizmo · Enter confirma · Esc cancela": {
+    "pt-BR": "Editando pivô · arraste o gizmo · Enter confirma · Esc cancela",
+    "en": "Editing pivot · drag the gizmo · Enter confirms · Esc cancels"
+  },
+  "Concluir edição do pivô\tEnter": {
+    "pt-BR": "Concluir edição do pivô\tEnter",
+    "en": "Finish editing the pivot\tEnter"
+  },
+  "Resetar pivô (centro da geometria)": {
+    "pt-BR": "Resetar pivô (centro da geometria)",
+    "en": "Reset pivot (geometry center)"
+  },
+  "Pivô na origem do mundo": {
+    "pt-BR": "Pivô na origem do mundo",
+    "en": "Pivot at world origin"
+  },
+  "Pivô na posição do mouse": {
+    "pt-BR": "Pivô na posição do mouse",
+    "en": "Pivot at mouse position"
+  },
+  "Pivô no vértice selecionado": {
+    "pt-BR": "Pivô no vértice selecionado",
+    "en": "Pivot at selected vertex"
+  },
+  "Pivô no centro da aresta": {
+    "pt-BR": "Pivô no centro da aresta",
+    "en": "Pivot at edge center"
+  },
+  "Pivô no centro da face": {
+    "pt-BR": "Pivô no centro da face",
+    "en": "Pivot at face center"
+  },
+  "Pivô na seleção": {
+    "pt-BR": "Pivô na seleção",
+    "en": "Pivot at selection"
+  },
+  "Cursor 3D": {
+    "pt-BR": "Cursor 3D",
+    "en": "3D Cursor"
+  },
+  "Cursor na posição do mouse": {
+    "pt-BR": "Cursor na posição do mouse",
+    "en": "Cursor at mouse position"
+  },
+  "Cursor na seleção": {
+    "pt-BR": "Cursor na seleção",
+    "en": "Cursor at selection"
+  },
+  "Cursor no pivô do objeto": {
+    "pt-BR": "Cursor no pivô do objeto",
+    "en": "Cursor at object pivot"
+  },
+  "Cursor na origem do mundo": {
+    "pt-BR": "Cursor na origem do mundo",
+    "en": "Cursor at world origin"
+  },
+  "Enquadrar o cursor": {
+    "pt-BR": "Enquadrar o cursor",
+    "en": "Frame the cursor"
+  },
+  "Cor de seleção do grupo…": {
+    "pt-BR": "Cor de seleção do grupo…",
+    "en": "Group selection color…"
+  },
+  "Cor de seleção do grupo": {
+    "pt-BR": "Cor de seleção do grupo",
+    "en": "Group selection color"
+  },
+  "Cor do grupo vence a cor da parte": {
+    "pt-BR": "Cor do grupo vence a cor da parte",
+    "en": "Group color overrides the part color"
+  },
+  "Remover a cor do grupo": {
+    "pt-BR": "Remover a cor do grupo",
+    "en": "Remove the group color"
+  },
+  "Grupo com %1 parte(s) · cor de seleção %2%3": {
+    "pt-BR": "Grupo com %1 parte(s) · cor de seleção %2%3",
+    "en": "Group with %1 part(s) · selection color %2%3"
+  },
+  " (vence a cor da parte)": {
+    "pt-BR": " (vence a cor da parte)",
+    "en": " (overrides the part color)"
+  },
+  "Select a vertex, edge or face first": {
+    "pt-BR": "Selecione um vértice, aresta ou face primeiro",
+    "en": "Select a vertex, edge or face first"
+  },
+  "Select an object first": {
+    "pt-BR": "Selecione um objeto primeiro",
+    "en": "Select an object first"
+  },
+  "No active object": {
+    "pt-BR": "Nenhum objeto ativo",
+    "en": "No active object"
+  },
+  "Use Make Editable before changing a parametric origin": {
+    "pt-BR": "Use Tornar editável antes de mudar a origem de uma primitiva paramétrica",
+    "en": "Use Make Editable before changing a parametric origin"
+  },
+  "Apply or remove modifiers explicitly before changing origin": {
+    "pt-BR": "Aplique ou remova os modificadores antes de mudar a origem",
+    "en": "Apply or remove modifiers explicitly before changing origin"
+  },
+  "Rigged origin rebase requires bind compensation": {
+    "pt-BR": "Mudar a origem de um objeto com rig exige compensar o bind",
+    "en": "Rigged origin rebase requires bind compensation"
+  },
+  "Asset is locked": {
+    "pt-BR": "O objeto está bloqueado",
+    "en": "Asset is locked"
+  },
+  "Asset mesh is empty": {
+    "pt-BR": "A malha do objeto está vazia",
+    "en": "Asset mesh is empty"
+  },
+  "Invalid object frame or geometry": {
+    "pt-BR": "Referencial ou geometria do objeto inválidos",
+    "en": "Invalid object frame or geometry"
+  },
+  "Enquadrar tudo": {
+    "pt-BR": "Enquadrar tudo",
+    "en": "Frame all"
+  },
+  "Enquadrar tudo (Home ou F)": {
+    "pt-BR": "Enquadrar tudo (Home ou F)",
+    "en": "Frame all (Home or F)"
+  },
+  "Wireframe UV sobre a pintura": {
+    "pt-BR": "Wireframe UV sobre a pintura",
+    "en": "UV wireframe over the painting"
+  },
+  "Mostrar o wireframe UV sobre a pintura": {
+    "pt-BR": "Mostrar o wireframe UV sobre a pintura",
+    "en": "Show the UV wireframe over the painting"
   }
 }

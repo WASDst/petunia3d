@@ -1230,6 +1230,20 @@ impl ReferenceImage {
 /// Documento autoral canônico (website/docs/02-application/state-separation.md).
 pub type Document = Project;
 
+/// Metadados opcionais de um grupo (collection) da Estrutura.
+///
+/// Ficam à parte de `Project::collections` para que arquivos antigos abram sem
+/// migração: sem entrada aqui, o grupo não tem cor própria.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CollectionMeta {
+    /// Cor de seleção do grupo. Ver [`Project::selection_color_of`] para a precedência.
+    #[serde(default)]
+    pub color: Option<[u8; 3]>,
+    /// Quando verdadeiro, a cor do grupo vence a cor própria de cada objeto.
+    #[serde(default)]
+    pub force_color: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Project {
     #[serde(default = "Uuid::new_v4")]
@@ -1246,6 +1260,9 @@ pub struct Project {
     pub palette: Vec<[f32; 3]>,
     #[serde(default)]
     pub collections: Vec<String>,
+    /// Cor e opções de cada grupo; só tem entrada o grupo que as definiu.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub collection_meta: std::collections::BTreeMap<String, CollectionMeta>,
     #[serde(default)]
     pub annotations: Vec<AnnotationItem>,
     #[serde(default)]
@@ -1515,6 +1532,7 @@ impl Default for Project {
             motion_layers: Vec::new(),
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2096,6 +2114,7 @@ impl Project {
             motion_layers: Vec::new(),
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2408,10 +2427,96 @@ impl Project {
 
     pub fn remove_collection(&mut self, name: &str) {
         self.collections.retain(|c| c != name);
+        self.collection_meta.remove(name);
         for a in &mut self.assets {
             if a.collection.as_deref() == Some(name) {
                 a.collection = None;
             }
+        }
+    }
+
+    /// Renomeia um grupo levando consigo a cor e as opções. Devolve `false` se
+    /// `from` não existe ou `to` (já aparado) é vazio ou já está em uso.
+    pub fn rename_collection(&mut self, from: &str, to: &str) -> bool {
+        let to = to.trim();
+        if to.is_empty() || to == from || self.collections.iter().any(|c| c == to) {
+            return false;
+        }
+        let Some(slot) = self.collections.iter_mut().find(|c| c.as_str() == from) else {
+            return false;
+        };
+        *slot = to.to_string();
+        if let Some(meta) = self.collection_meta.remove(from) {
+            self.collection_meta.insert(to.to_string(), meta);
+        }
+        for asset in &mut self.assets {
+            if asset.collection.as_deref() == Some(from) {
+                asset.collection = Some(to.to_string());
+            }
+        }
+        true
+    }
+
+    /// Define a cor de seleção do grupo e se ela vence a cor de cada objeto.
+    /// `color = None` remove a cor (e a opção de forçar perde o sentido).
+    /// Devolve `false` se o grupo não existe ou nada mudou.
+    pub fn set_collection_color(
+        &mut self,
+        name: &str,
+        color: Option<[u8; 3]>,
+        force: bool,
+    ) -> bool {
+        if !self.collections.iter().any(|c| c == name) {
+            return false;
+        }
+        let force = force && color.is_some();
+        let current = self.collection_meta.get(name).cloned().unwrap_or_default();
+        let next = CollectionMeta {
+            color,
+            force_color: force,
+        };
+        if current == next {
+            return false;
+        }
+        if next == CollectionMeta::default() {
+            self.collection_meta.remove(name);
+        } else {
+            self.collection_meta.insert(name.to_string(), next);
+        }
+        true
+    }
+
+    /// Remove o grupo `name` se ele existir e já não tiver nenhum objeto.
+    ///
+    /// Só deve ser chamado para um grupo que **acabou de** perder membros, de
+    /// modo que um grupo vazio criado de propósito não suma por outro motivo.
+    pub fn prune_collection_if_empty(&mut self, name: &str) -> bool {
+        let occupied = self
+            .assets
+            .iter()
+            .any(|asset| asset.collection.as_deref() == Some(name));
+        if occupied || !self.collections.iter().any(|c| c == name) {
+            return false;
+        }
+        self.collections.retain(|c| c != name);
+        self.collection_meta.remove(name);
+        true
+    }
+
+    /// Cor de seleção efetiva de um objeto: **o mais específico vence**
+    /// (objeto > grupo > global). Com "forçar cor do grupo", a cor do grupo vence
+    /// a do objeto. `None` quando nada define a cor: usar a global.
+    pub fn selection_color_of(&self, asset: &Asset) -> Option<[u8; 3]> {
+        let own = asset.selection_overlay_color;
+        let group = asset
+            .collection
+            .as_deref()
+            .and_then(|name| self.collection_meta.get(name))
+            .filter(|meta| meta.color.is_some());
+        match group {
+            Some(meta) if meta.force_color => meta.color,
+            Some(meta) => own.or(meta.color),
+            None => own,
         }
     }
 
@@ -2446,6 +2551,10 @@ impl Project {
             self.active -= 1;
         } else {
             self.active = self.active.min(self.assets.len() - 1);
+        }
+        // Tirar o último membro de um grupo desfaz o grupo.
+        if let Some(group) = removed.collection.as_deref() {
+            self.prune_collection_if_empty(group);
         }
     }
 

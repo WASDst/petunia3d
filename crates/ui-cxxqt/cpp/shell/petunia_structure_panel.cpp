@@ -217,8 +217,14 @@ PetuniaStructurePanel::PetuniaStructurePanel(PetuniaShellController *controller,
             m_collapsed.remove(groupAt(index));
     });
     connect(m_tree, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
-        // Duplo clique num grupo recolhe/expande; numa parte, renomeia (F2).
-        if (m_sceneMode && kindAt(index) == QLatin1String("group"))
+        // Como no Photoshop e no Blender, duplo clique no nome renomeia (grupo ou parte,
+        // o mesmo que F2). Nas outras colunas de um grupo, recolhe/expande; a seta e as
+        // teclas ←/→ também recolhem e expandem.
+        if (!m_sceneMode || kindAt(index) != QLatin1String("group"))
+            return;
+        if (index.column() == Name)
+            m_tree->edit(index);
+        else
             m_tree->setExpanded(index.siblingAtColumn(Name), !m_tree->isExpanded(index.siblingAtColumn(Name)));
     });
     connect(m_model, &QStandardItemModel::itemChanged, this, [this](QStandardItem *item) {
@@ -941,8 +947,16 @@ void PetuniaStructurePanel::syncScene(const QJsonObject &state) {
         if (name->text() != label)
             name->setText(label);
         name->setData(g["selected"].toBool(), SelectedRole);
-        name->setIcon(PetuniaIcons::get(QStringLiteral("collection"), theme.accentPrimary().name()));
-        name->setToolTip(tr("Grupo com %1 parte(s)").arg(g["count"].toInt()));
+        const bool hasColor = g["has_color"].toBool();
+        const auto rgb = g["color_rgb"].toArray();
+        const QColor groupColor = hasColor && rgb.size() == 3 ? QColor(rgb[0].toInt(), rgb[1].toInt(), rgb[2].toInt())
+                                                              : theme.accentPrimary();
+        name->setIcon(PetuniaIcons::get(QStringLiteral("collection"), groupColor.name()));
+        name->setToolTip(hasColor ? tr("Grupo com %1 parte(s) · cor de seleção %2%3")
+                                        .arg(g["count"].toInt())
+                                        .arg(groupColor.name().toUpper())
+                                        .arg(g["force_color"].toBool() ? tr(" (vence a cor da parte)") : QString())
+                                  : tr("Grupo com %1 parte(s)").arg(g["count"].toInt()));
 
         const bool visible = g["visible"].toBool();
         eye->setIcon(stateIcon(visible ? QStringLiteral("eye") : QStringLiteral("eye_hidden"), false, !visible));
@@ -973,6 +987,21 @@ void PetuniaStructurePanel::showGroupMenu(const QString &group, const QPoint &gl
     auto *select = menu.addAction(PetuniaIcons::get(QStringLiteral("select_all")), tr("Selecionar os membros"));
     auto *rename = menu.addAction(tr("Renomear grupo\tF2"));
     menu.addSeparator();
+    // Cor de seleção do grupo: a da parte vence, a menos que o grupo a force.
+    QJsonObject groupState;
+    for (const auto &value : m_controller->state()["scene_groups"].toArray())
+        if (value.toObject()["name"].toString() == group)
+            groupState = value.toObject();
+    const bool groupHasColor = groupState["has_color"].toBool();
+    const bool groupForces = groupState["force_color"].toBool();
+    auto *groupColor = menu.addAction(tr("Cor de seleção do grupo…"));
+    auto *forceColor = menu.addAction(tr("Cor do grupo vence a cor da parte"));
+    forceColor->setCheckable(true);
+    forceColor->setChecked(groupForces);
+    forceColor->setEnabled(groupHasColor);
+    auto *clearColor = menu.addAction(tr("Remover a cor do grupo"));
+    clearColor->setEnabled(groupHasColor);
+    menu.addSeparator();
     auto *visibility = menu.addAction(tr("Alternar visibilidade do grupo"));
     auto *lock = menu.addAction(tr("Bloquear / desbloquear o grupo"));
     auto *isolate = menu.addAction(PetuniaIcons::get(QStringLiteral("isolate")), tr("Isolar o grupo"));
@@ -987,7 +1016,26 @@ void PetuniaStructurePanel::showGroupMenu(const QString &group, const QPoint &gl
         const auto index = indexOfId(groupItemId(group));
         if (index.isValid())
             m_tree->edit(index.siblingAtColumn(Name));
-    } else if (picked == visibility)
+    } else if (picked == groupColor) {
+        PetuniaColorPickerPopover picker(this);
+        picker.setTitle(tr("Cor de seleção do grupo"));
+        const auto rgb = groupState["color_rgb"].toArray();
+        picker.setColor(rgb.size() == 3 ? QColor(rgb[0].toInt(), rgb[1].toInt(), rgb[2].toInt())
+                                        : PetuniaTheme::instance().accentSelection());
+        if (picker.exec() == QDialog::Accepted) {
+            const auto c = picker.color();
+            m_controller->request(QStringLiteral("group_color"),
+                                  {{"name", group}, {"color", QJsonArray{c.red(), c.green(), c.blue()}},
+                                   {"force", groupForces}});
+        }
+    } else if (picked == forceColor) {
+        const auto rgb = groupState["color_rgb"].toArray();
+        m_controller->request(QStringLiteral("group_color"),
+                              {{"name", group}, {"color", rgb}, {"force", forceColor->isChecked()}});
+    } else if (picked == clearColor)
+        m_controller->request(QStringLiteral("group_color"),
+                              {{"name", group}, {"color", QJsonValue()}, {"force", false}});
+    else if (picked == visibility)
         m_controller->request(QStringLiteral("group_visibility"), {{"name", group}});
     else if (picked == lock)
         m_controller->request(QStringLiteral("group_lock"), {{"name", group}});

@@ -684,6 +684,65 @@ void PetuniaGlWidget::contextMenuEvent(QContextMenuEvent *event) {
         run.insert(menu.addAction(tr(item.label)),
                    [id] { petuniaRequest("context_menu_action", {{"target", id}}); });
     }
+    // Submenus Pivô e 3D Cursor: cada item é um pedido tipado ao editor (comando com
+    // Undo no caso do pivô). O ponto sob o mouse vai normalizado no próprio pedido.
+    const double normX = local.x() / qMax(1, width());
+    const double normY = local.y() / qMax(1, height());
+    const QString domain = state["selection_domain"].toString();
+    const QString refusal = state["origin_refusal"].toString();
+    const bool hasElements = state["has_element_selection"].toBool();
+    const bool editingPivot = state["edit_pivot"].toBool();
+    const auto addRequest = [&](QMenu *into, const QString &text, bool enabled, const QString &why,
+                                const QString &action, QJsonObject args = {}) {
+        auto *item = into->addAction(text);
+        item->setEnabled(enabled);
+        if (!enabled && !why.isEmpty())
+            item->setToolTip(petuniaTr(why));
+        run.insert(item, [action, args] {
+            petuniaRequest("close_context_menu");
+            petuniaRequest(action, args);
+        });
+        return item;
+    };
+    menu.addSeparator();
+    auto *pivotMenu = menu.addMenu(tr("Pivô"));
+    pivotMenu->setToolTipsVisible(true);
+    const bool canMovePivot = refusal.isEmpty();
+    const bool hasObject = refusal != QLatin1String("No active object");
+    addRequest(pivotMenu,
+               editingPivot ? tr("Concluir edição do pivô\tEnter") : state["label_edit_pivot"].toString(),
+               editingPivot || canMovePivot, refusal, QStringLiteral("toggle_edit_pivot"));
+    pivotMenu->addSeparator();
+    addRequest(pivotMenu, tr("Resetar pivô (centro da geometria)"), canMovePivot, refusal,
+               QStringLiteral("set_origin_geometry"));
+    addRequest(pivotMenu, state["label_origin_to_bottom"].toString(), canMovePivot, refusal,
+               QStringLiteral("set_origin_bottom"));
+    addRequest(pivotMenu, tr("Pivô na origem do mundo"), canMovePivot, refusal,
+               QStringLiteral("set_origin_world"));
+    addRequest(pivotMenu, state["label_origin_to_cursor"].toString(), canMovePivot, refusal,
+               QStringLiteral("set_origin_cursor"));
+    addRequest(pivotMenu, tr("Pivô na posição do mouse"), canMovePivot, refusal,
+               QStringLiteral("set_origin_at_point"), {{"norm_x", normX}, {"norm_y", normY}});
+    const QString selectionText = domain == QLatin1String("Vertex") ? tr("Pivô no vértice selecionado")
+                                  : domain == QLatin1String("Edge") ? tr("Pivô no centro da aresta")
+                                  : domain == QLatin1String("Face") ? tr("Pivô no centro da face")
+                                                                    : tr("Pivô na seleção");
+    addRequest(pivotMenu, selectionText, canMovePivot && hasElements,
+               canMovePivot ? QStringLiteral("Select a vertex, edge or face first") : refusal,
+               QStringLiteral("set_origin_selection"));
+
+    auto *cursorMenu = menu.addMenu(tr("Cursor 3D"));
+    cursorMenu->setToolTipsVisible(true);
+    addRequest(cursorMenu, tr("Cursor na posição do mouse"), true, {}, QStringLiteral("place_cursor_3d"),
+               {{"norm_x", normX}, {"norm_y", normY}});
+    addRequest(cursorMenu, tr("Cursor na seleção"), hasObject, QStringLiteral("Select an object first"),
+               QStringLiteral("cursor_to_selection"));
+    addRequest(cursorMenu, tr("Cursor no pivô do objeto"), hasObject, QStringLiteral("Select an object first"),
+               QStringLiteral("cursor_to_active"));
+    addRequest(cursorMenu, tr("Cursor na origem do mundo"), true, {}, QStringLiteral("reset_cursor_3d"));
+    cursorMenu->addSeparator();
+    addRequest(cursorMenu, tr("Enquadrar o cursor"), true, {}, QStringLiteral("frame_cursor"));
+
     const auto actions = state["context_actions"].toArray();
     if (!actions.isEmpty())
         menu.addSeparator();
@@ -957,7 +1016,7 @@ void PetuniaGlWidget::drawPivotMarker(QPainter &painter) {
         font.setPixelSize(theme.fontPx(PetuniaTheme::TextRole::Caption));
         font.setBold(true);
         painter.setFont(font);
-        const QString text = petuniaTr(QStringLiteral("Editando pivô · arraste o gizmo · Esc sai"));
+        const QString text = petuniaTr(QStringLiteral("Editando pivô · arraste o gizmo · Enter confirma · Esc cancela"));
         const QRectF box(pivot.x() - 130, pivot.y() + 22, 260, 18);
         painter.setPen(theme.bgCanvas());
         painter.drawText(box.translated(1, 1), Qt::AlignCenter, text);

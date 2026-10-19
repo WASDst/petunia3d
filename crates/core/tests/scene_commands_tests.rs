@@ -4,7 +4,8 @@
 
 use petunia_core::state::AppState;
 use petunia_core::{
-    GroupSelectionCmd, JoinObjectsCmd, MoveAssetsCmd, ProjectService, RenameGroupCmd, UngroupCmd,
+    DeleteAssetCmd, GroupSelectionCmd, JoinObjectsCmd, MoveAssetsCmd, ProjectService,
+    RenameGroupCmd, SetAssetCollectionCmd, SetGroupColorCmd, UngroupCmd,
 };
 use uuid::Uuid;
 
@@ -319,4 +320,197 @@ fn group_command_needs_something_to_group() {
     state.project.assets.clear();
     state.session.selection.assets.clear();
     assert!(state.dispatch(&GroupSelectionCmd::default()).is_err());
+}
+
+/// "Grupo 1" com A e B; C fora. O ativo é A.
+fn grouped_scene() -> (AppState, [Uuid; 3]) {
+    let (mut state, [a, b, c]) = scene();
+    select(&mut state, &[a, b]);
+    state.dispatch(&GroupSelectionCmd::default()).unwrap();
+    (state, [a, b, c])
+}
+
+fn delete(state: &mut AppState, index: usize) {
+    state
+        .dispatch(&DeleteAssetCmd {
+            asset_index: Some(index),
+        })
+        .unwrap();
+}
+
+#[test]
+fn deleting_the_last_member_removes_the_group_in_the_same_undo_step() {
+    let (mut state, _) = grouped_scene();
+    let depth = state.project.undo.depth().0;
+    delete(&mut state, 1); // B: sobra A no grupo
+    assert_eq!(state.project.project.collections, ["Grupo 1".to_string()]);
+    delete(&mut state, 0); // A: o grupo esvazia
+    assert!(state.project.project.collections.is_empty());
+    assert_eq!(
+        state.project.undo.depth().0,
+        depth + 2,
+        "um passo por exclusão"
+    );
+    assert!(state.undo());
+    assert_eq!(
+        state.project.project.collections,
+        ["Grupo 1".to_string()],
+        "desfazer a exclusão traz o grupo de volta"
+    );
+    assert_eq!(
+        state.project.assets[0].collection.as_deref(),
+        Some("Grupo 1")
+    );
+}
+
+#[test]
+fn deleting_an_ungrouped_object_keeps_every_group() {
+    let (mut state, _) = grouped_scene();
+    delete(&mut state, 2); // C
+    assert_eq!(state.project.project.collections, ["Grupo 1".to_string()]);
+}
+
+#[test]
+fn an_empty_group_made_on_purpose_survives_deleting_other_objects() {
+    let (mut state, _) = scene();
+    state.project.project.add_collection("Vazio");
+    delete(&mut state, 2);
+    assert_eq!(state.project.project.collections, ["Vazio".to_string()]);
+}
+
+#[test]
+fn dragging_the_last_member_out_removes_the_group() {
+    let (mut state, [a, b, _]) = grouped_scene();
+    state
+        .dispatch(&MoveAssetsCmd {
+            ids: vec![a, b],
+            before: None,
+            collection: Some(None),
+        })
+        .unwrap();
+    assert!(state.project.project.collections.is_empty());
+    assert!(state.undo());
+    assert_eq!(state.project.project.collections, ["Grupo 1".to_string()]);
+}
+
+#[test]
+fn moving_the_last_member_to_another_group_removes_the_old_one() {
+    let (mut state, [a, b, c]) = grouped_scene();
+    state.project.active = 2;
+    select(&mut state, &[c]);
+    state
+        .dispatch(&GroupSelectionCmd {
+            name: Some("Outro".into()),
+        })
+        .unwrap();
+    state
+        .dispatch(&MoveAssetsCmd {
+            ids: vec![a, b],
+            before: None,
+            collection: Some(Some("Outro".into())),
+        })
+        .unwrap();
+    assert_eq!(state.project.project.collections, ["Outro".to_string()]);
+}
+
+#[test]
+fn setting_the_collection_of_the_last_member_removes_the_group() {
+    let (mut state, _) = grouped_scene();
+    for index in 0..2 {
+        state
+            .dispatch(&SetAssetCollectionCmd {
+                asset_index: index,
+                collection: None,
+            })
+            .unwrap();
+    }
+    assert!(state.project.project.collections.is_empty());
+}
+
+#[test]
+fn joining_every_member_removes_the_emptied_group() {
+    let (mut state, [a, b, _]) = scene();
+    select(&mut state, &[a, b]);
+    state.dispatch(&GroupSelectionCmd::default()).unwrap();
+    // Funde B em A (ambos no grupo): sobra A, o grupo continua.
+    select(&mut state, &[a, b]);
+    state.dispatch(&JoinObjectsCmd).unwrap();
+    assert_eq!(state.project.project.collections, ["Grupo 1".to_string()]);
+}
+
+#[test]
+fn group_color_command_is_undoable_and_validated() {
+    let (mut state, _) = grouped_scene();
+    let depth = state.project.undo.depth().0;
+    state
+        .dispatch(&SetGroupColorCmd {
+            name: "Grupo 1".into(),
+            color: Some([10, 200, 10]),
+            force: true,
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth().0, depth + 1);
+    let asset = &state.project.assets[0];
+    assert_eq!(
+        state.project.project.selection_color_of(asset),
+        Some([10, 200, 10])
+    );
+    // Repetir a mesma cor não é mudança; grupo inexistente é recusado.
+    assert!(
+        state
+            .dispatch(&SetGroupColorCmd {
+                name: "Grupo 1".into(),
+                color: Some([10, 200, 10]),
+                force: true,
+            })
+            .is_err()
+    );
+    assert!(
+        state
+            .dispatch(&SetGroupColorCmd {
+                name: "Fantasma".into(),
+                color: Some([1, 2, 3]),
+                force: false,
+            })
+            .is_err()
+    );
+    assert!(state.undo());
+    assert!(state.project.project.collection_meta.is_empty());
+}
+
+#[test]
+fn rename_keeps_the_group_color_and_undo_restores_the_old_name() {
+    let (mut state, _) = grouped_scene();
+    state
+        .dispatch(&SetGroupColorCmd {
+            name: "Grupo 1".into(),
+            color: Some([10, 200, 10]),
+            force: false,
+        })
+        .unwrap();
+    state
+        .dispatch(&RenameGroupCmd {
+            from: "Grupo 1".into(),
+            to: "Rodas".into(),
+        })
+        .unwrap();
+    let meta = &state.project.project.collection_meta;
+    assert!(meta.contains_key("Rodas") && !meta.contains_key("Grupo 1"));
+    assert!(state.undo());
+    let meta = &state.project.project.collection_meta;
+    assert!(meta.contains_key("Grupo 1") && !meta.contains_key("Rodas"));
+}
+
+#[test]
+fn ungroup_drops_the_group_color_too() {
+    let (mut state, _) = grouped_scene();
+    state
+        .dispatch(&SetGroupColorCmd {
+            name: "Grupo 1".into(),
+            color: Some([10, 200, 10]),
+            force: false,
+        })
+        .unwrap();
+    state.dispatch(&UngroupCmd::default()).unwrap();
+    assert!(state.project.project.collection_meta.is_empty());
 }

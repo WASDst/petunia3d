@@ -20,6 +20,8 @@ class PetuniaWireItem;
 /// Operável **sem mouse**: setas navegam entre nós, Enter abre "Aplicar em…", Delete
 /// remove/desliga, Ctrl+setas movem o nó, Shift+A adiciona operação ao objeto ativo.
 /// O nome/descrição acessíveis resumem o nó selecionado e suas ligações.
+class QToolButton;
+
 class PetuniaNodeCanvas : public QGraphicsView {
     Q_OBJECT
 
@@ -59,7 +61,12 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QRectF nodeSceneRect(const QString &id) const;
     QPointF outputPortScenePos(const QString &id) const;
     QPointF inputPortScenePos(const QString &id) const;
+    /// Enquadra todos os nós (zoom e posição) sem ampliar além de 100 %.
     void fitAll();
+    /// Desloca a vista em pixels (a cena é infinita: não há limite de rolagem).
+    void panBy(const QPointF &delta);
+    /// Zoom por `factor` ancorado num ponto da vista, dentro de 30 %–300 %.
+    void zoomBy(qreal factor, const QPointF &anchorInView);
 
   signals:
     void nodeSelected(const QString &id);
@@ -69,6 +76,8 @@ class PetuniaNodeCanvas : public QGraphicsView {
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void focusInEvent(QFocusEvent *event) override;
@@ -120,5 +129,14 @@ class PetuniaNodeCanvas : public QGraphicsView {
     QPointF m_dragOffset;
     bool m_panning{false};
     QPoint m_panLast;
+    /// Botão que iniciou o pan (meio, direito ou esquerdo com Espaço).
+    Qt::MouseButton m_panButton{Qt::NoButton};
+    QPoint m_panStart;
+    /// O botão direito só vira pan depois de arrastar; um clique abre o menu.
+    bool m_panMoved{false};
+    bool m_spaceHeld{false};
+    bool m_viewFitted{false};
+    QToolButton *m_fitButton{nullptr};
+    void placeFitButton();
     bool m_rebuilding{false};
 };

@@ -129,6 +129,7 @@ impl LegacyProjectWithSplines {
             motion_layers: Vec::new(),
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
             references: Vec::new(),
         }
     }
@@ -207,6 +208,7 @@ impl LegacyProjectBeforeSplines {
             motion_layers: Vec::new(),
             op_graph: Default::default(),
             op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
             references: Vec::new(),
         }
     }

@@ -171,8 +171,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .enumerate()
             .map(|(index, island)| {
                 let area = island.area();
+                let center = island
+                    .faces
+                    .first()
+                    .and_then(|&fi| mesh.faces.get(fi))
+                    .filter(|face| !face.uv.is_empty())
+                    .map(|face| {
+                        let n = face.uv.len() as f32;
+                        [
+                            face.uv.iter().map(|uv| uv[0]).sum::<f32>() / n,
+                            face.uv.iter().map(|uv| uv[1]).sum::<f32>() / n,
+                        ]
+                    })
+                    .filter(|center| center.iter().all(|value| value.is_finite()))
+                    .unwrap_or([0.0, 0.0]);
                 UvIslandRowModel {
                     index,
+                    center,
                     face_count: island.faces.len(),
                     area: if area.is_finite() { area } else { 0.0 },
                     selected: !island.faces.is_empty()
@@ -265,6 +280,59 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             &[("face", face), ("0", total.to_string())],
         ));
         true
+    }
+
+    /// Pressionar no editor UV (início de um clique ou de um arrasto): se o alvo
+    /// já faz parte da seleção, a seleção é **mantida** (o arrasto move todos);
+    /// senão age como o clique. Devolve `true` se algum alvo foi atingido; com
+    /// `false` o editor começa uma caixa de seleção.
+    pub fn uv_editor_press(&mut self, u: f32, v: f32, extend: bool) -> bool {
+        if self.state.session.tools.uv_transform.is_some() || !u.is_finite() || !v.is_finite() {
+            return false;
+        }
+        const PICK_RADIUS: f32 = 6.0 / 256.0;
+        let hit = self
+            .state
+            .uv_press(glam::Vec2::new(u, v), PICK_RADIUS, extend);
+        self.state.mark_dirty();
+        hit
+    }
+
+    /// Seleção por caixa no editor UV. Os pontos são frações da textura com a
+    /// origem no canto superior esquerdo (como o canvas desenha).
+    #[allow(clippy::too_many_arguments)]
+    pub fn uv_box_select(
+        &mut self,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        extend: bool,
+        subtract: bool,
+    ) -> bool {
+        if self.state.session.tools.uv_transform.is_some()
+            || ![x0, y0, x1, y1].iter().all(|value| value.is_finite())
+        {
+            return false;
+        }
+        let min = glam::Vec2::new(x0.min(x1), 1.0 - y0.max(y1));
+        let max = glam::Vec2::new(x0.max(x1), 1.0 - y0.min(y1));
+        let changed = self.state.uv_box_select(min, max, extend, subtract);
+        if changed {
+            let total = self
+                .state
+                .project
+                .active_mesh()
+                .map_or(0, |mesh| self.state.session.uv_selection.faces(mesh).len());
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_UV_FACE_SELECTED_TOTAL),
+                &[("face", "-".to_string()), ("0", total.to_string())],
+            ));
+        }
+        self.state.mark_dirty();
+        changed
     }
 
     /// Move os cantos UV selecionados (um comando = um Undo).

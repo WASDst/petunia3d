@@ -936,6 +936,11 @@
       "revision": "árvore de trabalho sobre 85a7ed3b (commit desta entrega)",
       "document": "09-ui/shell-v2-refinement.md",
       "summary": "Refinamento do shell v2 (ADR-C15), executado no fim da implementação em 2026-10-18. fmt limpo; clippy -D warnings sem avisos (core, editor, render, config, mesh, project, application, ui-cxxqt). Rust (core, config, editor, project, mesh, render, application; --all-features; PETUNIA_REQUIRE_GL=1): 85 binários, 1519 testes, 0 falhas, nenhum SKIPPED (GL headless por EGL: contorno por parte, hover e contorno acompanhando a transformação). Qt (petunia_ui_cxxqt, offscreen, --test-threads=1, pulando test_widgets_studio_window_creation): 48 testes, 0 falhas; shell_v2 (harness) passou. xtask docs-generate --check sem drift; verify-progress e progress.test.cjs passam. Bug real achado pelo teste de operações em objeto esticado: dissolver arestas vizinhas gerava face com vértice repetido (3 testes de regressão falhavam antes do conserto). primitive_frame falhava já no HEAD por comparar HashSet serializado; corrigido ordenando os conjuntos. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, escalas 150%/200%. Correção posterior: gizmo, pivô e 3D Cursor ficavam parados ao mover a câmera (snapshot do shell velho); m_cameraDirty refaz o snapshot. Teste de regressão no harness (órbita e pan no meio do gesto) falha sem a correção e passa com ela; shell_v2 passou em 7 execuções diretas, com uma trava isolada sob carga concorrente sem causa identificada."
+    },
+    "shell-v2-roadmap-a-2026-10-18": {
+      "revision": "árvore de trabalho sobre 743273e1 (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda A do roteiro (ADR-C16), executada no fim da implementação. fmt limpo; clippy -D warnings sem avisos (core, editor, render, config, mesh, project, application e ui-cxxqt). Rust (7 crates, --all-features, PETUNIA_REQUIRE_GL=1, --no-fail-fast): 89 binários, 1570 testes, 0 falhas, nenhum SKIPPED (eram 1519; +51 testes novos: grupos e poda, cor por grupo com precedência e arquivo retrocompatível, pivô/origem, sessão de Editar pivô, seleção UV por caixa e multiarrasto, contorno com cor do grupo). Qt offscreen: suítes de contrato, i18n, bridge e editor_parity verdes; harness do shell com os checks novos de nós (pan por roda/trackpad/botão direito/Espaço, zoom no cursor, F/Home/botão), UV (caixa, manter multisseleção, arrastar todas, clique reduz, vazio limpa), Paint (botão de wireframe) e renomear grupo por duplo clique. Não executado: janela real com GPU, Windows, leitor de tela, alto contraste, escalas 150%/200%; A8 depende de B1."
     }
   },
   "tasks": [
@@ -5236,28 +5241,28 @@
       "checkpoints": [
         {
           "title": "A1 Grupo vazio some, com Undo e teste.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a-2026-10-18"
         },
         {
           "title": "A2 Renomear grupo descobrível e cor de seleção por grupo (objeto vence; forçar), com formato retrocompatível e teste.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a-2026-10-18"
         },
         {
           "title": "A3/A4 Pivô não destrutivo, Editar pivô modal e menus de botão direito de Pivô e 3D Cursor, com comandos, Undo e testes.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a-2026-10-18"
         },
         {
           "title": "A5 Navegação infinita e Enquadrar tudo nos nós.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a-2026-10-18"
         },
         {
           "title": "A6/A7 Wireframe sobre a pintura 2D e mover várias ilhas na UV.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "shell-v2-roadmap-a-2026-10-18"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual manual) com regressões e limites de ambiente.",

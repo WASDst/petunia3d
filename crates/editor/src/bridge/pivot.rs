@@ -25,10 +25,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    /// Posiciona o 3D Cursor na viewport dado um ponto normalizado (ou clique na tela).
-    pub fn place_cursor_3d(&mut self, norm_x: f32, norm_y: f32) -> bool {
+    /// Ponto de mundo sob um ponto normalizado da viewport: vértice próximo
+    /// (imã), senão a superfície sob o ponteiro, senão o chão (y = 0) e, no
+    /// último caso, o alvo da câmera. `None` se a entrada não é finita.
+    pub(crate) fn pick_world_point(&self, norm_x: f32, norm_y: f32) -> Option<glam::Vec3> {
         if !norm_x.is_finite() || !norm_y.is_finite() {
-            return false;
+            return None;
         }
         let nx = norm_x.clamp(0.0, 1.0) * 2.0 - 1.0;
         let ny = 1.0 - norm_y.clamp(0.0, 1.0) * 2.0;
@@ -77,7 +79,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         } else {
             self.state.session.camera.target
         };
+        target_pos.is_finite().then_some(target_pos)
+    }
 
+    /// Posiciona o 3D Cursor na viewport dado um ponto normalizado (ou clique na tela).
+    pub fn place_cursor_3d(&mut self, norm_x: f32, norm_y: f32) -> bool {
+        let Some(target_pos) = self.pick_world_point(norm_x, norm_y) else {
+            return false;
+        };
         self.state.session.cursor_3d = target_pos.to_array();
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_3D_CURSOR),
@@ -152,9 +161,135 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.set_geometry_to_origin().is_ok()
     }
 
-    /// Alterna o modo Ajustar Pivô (Edit Pivot).
+    /// Define a origem do objeto ativo para a origem do mundo.
+    pub fn set_origin_world(&mut self) -> bool {
+        self.state.set_origin_world().is_ok()
+    }
+
+    /// Define a origem do objeto ativo para o ponto sob o mouse (coordenadas
+    /// normalizadas da viewport): vértice próximo, superfície ou chão.
+    pub fn set_origin_at_screen_point(&mut self, norm_x: f32, norm_y: f32) -> bool {
+        let Some(point) = self.pick_world_point(norm_x, norm_y) else {
+            return false;
+        };
+        self.state.set_origin_point(point).is_ok()
+    }
+
+    /// Leva o 3D Cursor ao centro da seleção (elementos selecionados, ou a
+    /// origem do objeto ativo quando não há elemento selecionado).
+    pub fn cursor_to_selection(&mut self) -> bool {
+        let Some(asset) = self.state.project.active() else {
+            return false;
+        };
+        let point = petunia_core::origin_commands::selection_center_world(asset)
+            .unwrap_or_else(|_| asset.origin_world());
+        self.set_cursor_3d_point(point)
+    }
+
+    /// Leva o 3D Cursor à origem (pivô) do objeto ativo.
+    pub fn cursor_to_active(&mut self) -> bool {
+        let Some(asset) = self.state.project.active() else {
+            return false;
+        };
+        let point = asset.origin_world();
+        self.set_cursor_3d_point(point)
+    }
+
+    fn set_cursor_3d_point(&mut self, point: glam::Vec3) -> bool {
+        if !point.is_finite() {
+            return false;
+        }
+        self.state.session.cursor_3d = point.to_array();
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_3D_CURSOR),
+            &[
+                ("0", format!("{:.2}", point.x)),
+                ("1", format!("{:.2}", point.y)),
+                ("2", format!("{:.2}", point.z)),
+            ],
+        ));
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Editar pivô é uma **sessão**: liga a ferramenta Mover (que, nesse modo,
+    /// só desloca a origem do objeto), **Enter confirma** e **Esc cancela**,
+    /// desfazendo exatamente o que a sessão fez. Chamar de novo confirma.
     pub fn toggle_edit_pivot(&mut self) -> bool {
-        self.state.toggle_edit_pivot()
+        if self.state.session.edit_pivot {
+            return self.confirm_edit_pivot();
+        }
+        self.begin_edit_pivot()
+    }
+
+    fn begin_edit_pivot(&mut self) -> bool {
+        // Recusa já na entrada, com o motivo, em vez de falhar no primeiro arrasto.
+        match self.state.project.active() {
+            None => {
+                self.state.set_status("Select an object to edit its pivot");
+                return false;
+            }
+            Some(asset) => {
+                if let Some(reason) = petunia_core::origin_commands::origin_refusal(asset) {
+                    self.state.set_status(reason);
+                    return false;
+                }
+            }
+        }
+        if self.state.session.tools.modal.is_some() || !self.state.toggle_edit_pivot() {
+            return false;
+        }
+        self.state.session.edit_pivot_session = Some(petunia_core::EditPivotSession {
+            undo_depth: self.state.project.undo.depth().0,
+            previous_tool: self.state.session.tools.active_tool.clone(),
+        });
+        self.apply(UiIntent::SetActiveTool("move".into()));
+        self.state.set_status(
+            "Edit Pivot: drag the gizmo to place the pivot. Enter confirms, Esc cancels.",
+        );
+        true
+    }
+
+    /// **Enter**: mantém o pivô onde está e sai do modo.
+    pub fn confirm_edit_pivot(&mut self) -> bool {
+        self.end_edit_pivot(false)
+    }
+
+    /// **Esc**: desfaz o que a sessão fez (os passos ficam disponíveis no Redo) e sai.
+    pub fn cancel_edit_pivot(&mut self) -> bool {
+        self.end_edit_pivot(true)
+    }
+
+    fn end_edit_pivot(&mut self, revert: bool) -> bool {
+        if !self.state.session.edit_pivot {
+            return false;
+        }
+        let session = self.state.session.edit_pivot_session.take();
+        let mut reverted = 0usize;
+        if revert && let Some(session) = &session {
+            while self.state.project.undo.depth().0 > session.undo_depth {
+                if !self.state.undo() {
+                    break;
+                }
+                reverted += 1;
+            }
+        }
+        self.state.session.edit_pivot = false;
+        if let Some(session) = session
+            && self.state.session.tools.active_tool == "move"
+            && session.previous_tool != "move"
+        {
+            self.apply(UiIntent::SetActiveTool(session.previous_tool));
+        }
+        self.state.mark_dirty();
+        self.state.set_status(if revert && reverted > 0 {
+            "Edit Pivot cancelled: the pivot is back where it was."
+        } else if revert {
+            "Edit Pivot cancelled."
+        } else {
+            "Pivot confirmed."
+        });
+        true
     }
 
     /// Distância em mundo que um arrasto de tela representa ao longo de um eixo.

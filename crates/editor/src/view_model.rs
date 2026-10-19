@@ -33,6 +33,12 @@ pub struct SceneGroupModel {
     pub locked: bool,
     /// Todos os objetos do grupo estão selecionados.
     pub selected: bool,
+    /// O grupo define uma cor de seleção própria.
+    pub has_color: bool,
+    /// Cor de seleção do grupo (a global quando `has_color` é falso).
+    pub color_rgb: [u8; 3],
+    /// A cor do grupo vence a cor própria de cada objeto.
+    pub force_color: bool,
 }
 
 /// Prefab da biblioteca já resumido para a grade do Asset Library.
@@ -737,6 +743,10 @@ pub struct ShellViewModel {
     pub pivot_cursor_label: String,
     pub pivot_individual_label: String,
     pub edit_pivot: bool,
+    /// Motivo pelo qual a origem do objeto ativo não pode ser movida (vazio se pode).
+    pub origin_refusal: String,
+    /// Há vértice, aresta ou face selecionado no objeto ativo.
+    pub has_element_selection: bool,
     pub label_origin_to_geometry: String,
     pub label_origin_to_bottom: String,
     pub label_origin_to_cursor: String,
@@ -936,12 +946,18 @@ impl ShellViewModel {
                     .iter()
                     .filter(|item| &item.collection == name)
                     .collect();
+                let meta = state.project.project.collection_meta.get(name);
                 SceneGroupModel {
                     name: name.clone(),
                     count: members.len(),
                     visible: !members.is_empty() && members.iter().all(|item| item.visible),
                     locked: !members.is_empty() && members.iter().all(|item| item.locked),
                     selected: !members.is_empty() && members.iter().all(|item| item.selected),
+                    has_color: meta.is_some_and(|meta| meta.color.is_some()),
+                    color_rgb: meta
+                        .and_then(|meta| meta.color)
+                        .unwrap_or(state.ui.selection_rgb),
+                    force_color: meta.is_some_and(|meta| meta.force_color),
                 }
             })
             .collect();
@@ -1391,7 +1407,7 @@ impl ShellViewModel {
             active_selection_rgb: state
                 .project
                 .active()
-                .and_then(|a| a.effective_selection_overlay_color())
+                .and_then(|a| state.project.selection_color_of(a))
                 .unwrap_or(state.ui.selection_rgb),
             selection_thickness: state.ui.selection_thickness,
             gizmo_size: state.ui.gizmo_size,
@@ -1781,6 +1797,19 @@ impl ShellViewModel {
             pivot_cursor_label: state.t_id(petunia_config::text_id::PIVOT_CURSOR),
             pivot_individual_label: state.t_id(petunia_config::text_id::PIVOT_INDIVIDUAL),
             edit_pivot: state.session.edit_pivot,
+            origin_refusal: state.project.active().map_or_else(
+                || "No active object".to_string(),
+                |asset| {
+                    petunia_core::origin_commands::origin_refusal(asset)
+                        .unwrap_or_default()
+                        .to_string()
+                },
+            ),
+            has_element_selection: state.project.active_mesh().is_some_and(|mesh| {
+                mesh.verts.iter().any(|vertex| vertex.selected)
+                    || mesh.faces.iter().any(|face| face.selected)
+                    || !mesh.selected_edges.is_empty()
+            }),
             label_origin_to_geometry: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_GEOMETRY),
             label_origin_to_bottom: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_BOTTOM),
             label_origin_to_cursor: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_CURSOR),
@@ -2022,6 +2051,8 @@ pub struct UvIslandRowModel {
     pub area: f32,
     /// Todas as faces da ilha estão na seleção UV.
     pub selected: bool,
+    /// Um ponto (u, v) dentro da ilha: o centroide de uma de suas faces.
+    pub center: [f32; 2],
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

@@ -56,6 +56,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
+    /// Cor de seleção do grupo; `None` a remove. `force` faz o grupo vencer a cor
+    /// própria de cada objeto (por padrão o objeto vence).
+    pub fn set_group_color(&mut self, name: &str, color: Option<[u8; 3]>, force: bool) -> bool {
+        self.run_scene_command(&petunia_core::SetGroupColorCmd {
+            name: name.to_string(),
+            color,
+            force,
+        })
+    }
+
     pub fn toggle_group_visibility(&mut self, name: &str) -> bool {
         self.run_scene_command(&petunia_core::ToggleCollectionVisibilityCmd {
             collection: name.to_string(),

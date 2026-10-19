@@ -44,6 +44,7 @@
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <QSettings>
 #include <QSplitter>
 #include <QStandardPaths>
@@ -200,6 +201,21 @@ void checkRefinement(Harness &h, PetuniaShellWindow &window) {
           window.structure()->indexOfId(QStringLiteral("group:") + groupName).isValid() &&
               window.structure()->indexOfId(firstThree[0]).isValid());
     h.shot(&window, "shell_POLY_groups");
+
+    // Duplo clique no nome do grupo renomeia (como F2); Esc fecha sem alterar.
+    {
+        const auto groupIndex = window.structure()->indexOfId(QStringLiteral("group:") + groupName);
+        emit tree->doubleClicked(groupIndex.siblingAtColumn(0));
+        auto *editor = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        const bool editing = editor && tree->isAncestorOf(editor) && editor->text() == groupName;
+        if (editor)
+            sendKey(editor, Qt::Key_Escape);
+        window.syncNow();
+        const auto after = c->state()["scene_groups"].toArray();
+        h.add("structure:double-click-renames-a-group",
+              editing && after.size() == 1 && after.first().toObject()["name"].toString() == groupName,
+              editing ? QStringLiteral("editou") : QStringLiteral("não abriu o editor"));
+    }
 
     // Arrastar e soltar: a 4ª parte entra no grupo (soltar sobre o grupo)...
     const QString loose = ids[3];
@@ -568,6 +584,91 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         canvas->fitAll();
         h.add("nodes:canvas-projects-graph", canvas && canvas->nodeCount() >= 2,
               QString::number(canvas ? canvas->nodeCount() : -1));
+
+        // Vista infinita: roda/trackpad, botão direito arrastando, Espaço+esquerdo, F e botão.
+        {
+            auto *surface = canvas->viewport();
+            const QPoint mid(surface->width() / 2, surface->height() / 2);
+            const auto wheel = [&](QPoint pixels, QPoint angle, const QPoint &at, Qt::KeyboardModifiers mods) {
+                QWheelEvent event(QPointF(at), QPointF(surface->mapToGlobal(at)), pixels, angle, Qt::NoButton, mods,
+                                  Qt::NoScrollPhase, false);
+                QCoreApplication::sendEvent(surface, &event);
+            };
+            const auto mouse = [&](QEvent::Type type, const QPoint &at, Qt::MouseButton button, Qt::MouseButtons held) {
+                QMouseEvent event(type, QPointF(at), QPointF(surface->mapToGlobal(at)), button, held, Qt::NoModifier);
+                QCoreApplication::sendEvent(surface, &event);
+            };
+            const auto nodesVisible = [&] {
+                const QRectF seen = canvas->mapToScene(surface->rect()).boundingRect();
+                for (const auto &id : canvas->nodeIds())
+                    if (!seen.contains(canvas->nodeSceneRect(id)))
+                        return false;
+                return !canvas->nodeIds().isEmpty();
+            };
+            const auto sceneAt = [&](const QPoint &at) { return canvas->mapToScene(at); };
+
+            const QPointF before = sceneAt(mid);
+            wheel(QPoint(60, 40), QPoint(), mid, Qt::NoModifier); // trackpad: dois eixos
+            const QPointF afterPad = sceneAt(mid);
+            h.add("nodes:trackpad-pans-both-axes", std::abs(afterPad.x() - before.x()) > 1 && std::abs(afterPad.y() - before.y()) > 1,
+                  QStringLiteral("%1,%2").arg(afterPad.x() - before.x()).arg(afterPad.y() - before.y()));
+
+            wheel(QPoint(), QPoint(120, 0), mid, Qt::NoModifier); // roda inclinada: horizontal
+            const QPointF afterTilt = sceneAt(mid);
+            h.add("nodes:tilted-wheel-pans-horizontally", std::abs(afterTilt.x() - afterPad.x()) > 1 && std::abs(afterTilt.y() - afterPad.y()) < 0.5);
+
+            wheel(QPoint(), QPoint(0, 120), mid, Qt::ShiftModifier); // Shift+roda: vertical
+            const QPointF afterShift = sceneAt(mid);
+            h.add("nodes:shift-wheel-pans-vertically", std::abs(afterShift.y() - afterTilt.y()) > 1 && std::abs(afterShift.x() - afterTilt.x()) < 0.5);
+
+            // Zoom ancorado: o ponto sob o cursor não se mexe.
+            const QPoint aside = mid + QPoint(120, 40);
+            const QPointF underCursor = sceneAt(aside);
+            const qreal zoom0 = canvas->transform().m11();
+            wheel(QPoint(), QPoint(0, 120), aside, Qt::NoModifier);
+            const QPointF stillThere = sceneAt(aside);
+            h.add("nodes:wheel-zooms-under-the-cursor",
+                  canvas->transform().m11() > zoom0 && QLineF(underCursor, stillThere).length() < 1.5,
+                  QStringLiteral("%1 px").arg(QLineF(underCursor, stillThere).length()));
+
+            // Botão direito: arrastar faz pan (sem abrir menu).
+            const QPointF beforeDrag = sceneAt(mid);
+            mouse(QEvent::MouseButtonPress, mid, Qt::RightButton, Qt::RightButton);
+            for (int step = 1; step <= 8; ++step)
+                mouse(QEvent::MouseMove, mid + QPoint(step * 12, step * 6), Qt::NoButton, Qt::RightButton);
+            mouse(QEvent::MouseButtonRelease, mid + QPoint(96, 48), Qt::RightButton, Qt::NoButton);
+            const QPointF afterDrag = sceneAt(mid);
+            h.add("nodes:right-drag-pans-without-a-menu",
+                  QLineF(beforeDrag, afterDrag).length() > 20 && !QApplication::activePopupWidget(),
+                  QStringLiteral("%1").arg(QLineF(beforeDrag, afterDrag).length()));
+
+            // Espaço + esquerdo arrastando.
+            const QPointF beforeSpace = sceneAt(mid);
+            QKeyEvent spaceDown(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "));
+            QCoreApplication::sendEvent(canvas, &spaceDown);
+            mouse(QEvent::MouseButtonPress, mid, Qt::LeftButton, Qt::LeftButton);
+            for (int step = 1; step <= 6; ++step)
+                mouse(QEvent::MouseMove, mid + QPoint(step * 10, 0), Qt::NoButton, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, mid + QPoint(60, 0), Qt::LeftButton, Qt::NoButton);
+            QKeyEvent spaceUp(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "));
+            QCoreApplication::sendEvent(canvas, &spaceUp);
+            h.add("nodes:space-drag-pans", QLineF(beforeSpace, sceneAt(mid)).length() > 20);
+
+            // Longe dos nós a vista continua livre (cena infinita) e "enquadrar" volta.
+            canvas->panBy(QPointF(20000, 20000));
+            h.add("nodes:view-can-leave-the-graph", !nodesVisible());
+            sendKey(canvas, Qt::Key_F);
+            h.add("nodes:f-frames-everything", nodesVisible());
+            canvas->panBy(QPointF(-15000, 9000));
+            const bool lost = !nodesVisible();
+            auto *fitButton = canvas->viewport()->findChild<QToolButton *>();
+            if (fitButton)
+                fitButton->click();
+            h.add("nodes:fit-button-frames-everything", lost && fitButton && nodesVisible() && !fitButton->toolTip().isEmpty());
+            canvas->panBy(QPointF(-9000, -3000));
+            sendKey(canvas, Qt::Key_Home);
+            h.add("nodes:home-frames-everything", nodesVisible());
+        }
         QString opId;
         QString wallNode;
         for (const auto &id : canvas->nodeIds()) {
@@ -724,6 +825,27 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
                       !ids.contains("transform") && !ids.contains("uv.unwrap"),
                   ids.join(","));
         }
+        // Wireframe UV sobre a pintura: alternância no próprio canvas 2D (sem abrir seção).
+        {
+            auto *paintCanvas = qobject_cast<PetuniaEditorCanvas *>(window.workspaceCanvas("PAINT"));
+            auto *toggle = paintCanvas ? paintCanvas->findChild<QToolButton *>() : nullptr;
+            const bool initial = c->flag("paint_show_uv_overlay");
+            if (toggle)
+                toggle->click();
+            settle(3);
+            window.syncNow();
+            const bool turnedOn = c->flag("paint_show_uv_overlay");
+            const bool buttonShowsIt = toggle && toggle->isChecked() == turnedOn;
+            if (toggle)
+                toggle->click();
+            settle(3);
+            window.syncNow();
+            const bool turnedOff = c->flag("paint_show_uv_overlay");
+            h.add("paint:canvas-button-toggles-the-uv-wireframe",
+                  toggle && turnedOn == !initial && turnedOff == initial && !toggle->toolTip().isEmpty(),
+                  QStringLiteral("%1 -> %2 -> %3").arg(initial).arg(turnedOn).arg(turnedOff));
+            h.add("paint:canvas-button-reflects-the-state", buttonShowsIt && toggle->isChecked() == turnedOff);
+        }
         // Superfície 3D | Dividido | 2D: escolha do usuário, persistida por workspace.
         {
             auto *modes = window.viewportHeader()->surfaceMode();
@@ -817,6 +939,83 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
             window.syncNow();
             realKey(uvCanvas, Qt::Key_Home);
             h.add("uv:home-frames", std::abs(uvCanvas->zoom() - 1.0) < 0.01 && uvCanvas->pan().isNull());
+
+            // Multisseleção: caixa no vazio, arrastar move TODAS as ilhas, clique reduz, vazio limpa.
+            {
+                const auto islandsNow = [&] { return c->state()["uv_editor"].toObject()["islands"].toArray(); };
+                const auto centerOf = [&](int index) {
+                    const auto center = islandsNow()[index].toObject()["center"].toArray();
+                    return QPointF(center[0].toDouble(), center[1].toDouble());
+                };
+                const auto mouse = [&](QEvent::Type type, const QPointF &at, Qt::MouseButton button, Qt::MouseButtons held,
+                                       Qt::KeyboardModifiers mods = Qt::NoModifier) {
+                    QMouseEvent event(type, at, uvCanvas->mapToGlobal(at.toPoint()), button, held, mods);
+                    QCoreApplication::sendEvent(uvCanvas, &event);
+                    settle(1);
+                };
+                const auto selectedCount = [&] {
+                    int count = 0;
+                    for (const auto &value : islandsNow())
+                        count += value.toObject()["selected"].toBool() ? 1 : 0;
+                    return count;
+                };
+                if (islandsNow().size() >= 2) {
+                    const int total = islandsNow().size();
+                    // Caixa começando fora do canvas (espaço vazio) e cobrindo tudo.
+                    const QPointF from(2, 2), to(uvCanvas->width() - 2, uvCanvas->height() - 2);
+                    mouse(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+                    mouse(QEvent::MouseMove, (from + to) / 2, Qt::NoButton, Qt::LeftButton);
+                    mouse(QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton);
+                    mouse(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+                    window.syncNow();
+                    h.add("uv:box-selects-every-island", selectedCount() == total,
+                          QStringLiteral("%1 de %2").arg(selectedCount()).arg(total));
+
+                    // Arrastar a partir de uma ilha já selecionada move todas.
+                    const QPointF a0 = centerOf(0), b0 = centerOf(1);
+                    const QPointF press = uvCanvas->uvToWidget(a0);
+                    mouse(QEvent::MouseButtonPress, press, Qt::LeftButton, Qt::LeftButton);
+                    h.add("uv:pressing-a-selected-island-keeps-the-multi-selection", selectedCount() == total,
+                          QString::number(selectedCount()));
+                    for (int step = 1; step <= 10; ++step)
+                        mouse(QEvent::MouseMove, press + QPointF(step * 2.0, 0), Qt::NoButton, Qt::LeftButton);
+                    mouse(QEvent::MouseButtonRelease, press + QPointF(20, 0), Qt::LeftButton, Qt::NoButton);
+                    window.syncNow();
+                    const double moveA = centerOf(0).x() - a0.x(), moveB = centerOf(1).x() - b0.x();
+                    h.add("uv:dragging-moves-every-selected-island",
+                          moveA > 0.001 && std::abs(moveA - moveB) < 0.002,
+                          QStringLiteral("A %1  B %2").arg(moveA).arg(moveB));
+                    c->request("undo");
+                    settle(3);
+                    window.syncNow();
+
+                    // O Undo do arrasto também desfaz a seleção: refaz a multisseleção por caixa.
+                    mouse(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+                    mouse(QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton);
+                    mouse(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+                    window.syncNow();
+
+                    // Clique sem arrasto num item da multisseleção: fica só ele.
+                    const int facesBefore = c->state()["uv_editor"].toObject()["uv_selected_count"].toInt();
+                    const QPointF clickAt = uvCanvas->uvToWidget(centerOf(0));
+                    mouse(QEvent::MouseButtonPress, clickAt, Qt::LeftButton, Qt::LeftButton);
+                    mouse(QEvent::MouseButtonRelease, clickAt, Qt::LeftButton, Qt::NoButton);
+                    window.syncNow();
+                    // Modo Face: o clique deixa só a face clicada (uma ilha tem várias faces).
+                    const int facesAfterClick = c->state()["uv_editor"].toObject()["uv_selected_count"].toInt();
+                    h.add("uv:click-without-drag-narrows-to-the-clicked-item",
+                          facesAfterClick == 1 && facesBefore > 1,
+                          QStringLiteral("%1 faces depois, %2 antes").arg(facesAfterClick).arg(facesBefore));
+
+                    // Clique no vazio limpa a seleção.
+                    mouse(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+                    mouse(QEvent::MouseButtonRelease, from, Qt::LeftButton, Qt::NoButton);
+                    window.syncNow();
+                    h.add("uv:click-on-empty-space-clears", selectedCount() == 0, QString::number(selectedCount()));
+                } else {
+                    h.add("uv:box-selects-every-island", false, "menos de duas ilhas");
+                }
+            }
         } else {
             h.add("uv:plus-minus-zoom", false, "sem canvas UV");
         }
