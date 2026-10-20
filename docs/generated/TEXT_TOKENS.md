@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **2036**.
+Total de chaves de localização cadastradas: **2037**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -1477,6 +1477,8 @@ Total de chaves de localização cadastradas: **2036**.
 | `status.active_tool` | Active tool: {tool} | Ferramenta ativa: {tool} |
 | `status.added` | Added {0} | {0} adicionado |
 | `status.asset_not_found_in_project_library` | Asset not found in project library | Ativo não encontrado na biblioteca do projeto |
+| `status.boolean_operand_cleared` | Boolean operand cleared | Operando booleano removido |
+| `status.boolean_operand_set_fuse_cut_or_intersect` | Boolean operand set: Fuse, Cut or Intersect now applies | Operando booleano definido: Fuse, Cut ou Intersect agora se aplica |
 | `status.brush` | Brush: {name} | Pincel: {name} |
 | `status.brush_hardness` | Brush hardness: {0}% | Dureza do pincel: {0}% |
 | `status.brush_lock` | Brush lock: {lock} | Trava do pincel: {lock} |
@@ -1561,7 +1563,6 @@ Total de chaves de localização cadastradas: **2036**.
 | `status.loop_cut_topology_refused_at_commit` | Loop Cut: topology refused at commit | Loop Cut: topologia recusada na confirmação |
 | `status.no_active_mesh_to_paint` | No active mesh to paint | Nenhuma malha ativa para pintar |
 | `status.no_face_under_the_cursor` | No face under the cursor | Nenhuma face sob o cursor |
-| `status.no_mesh_imported` | no mesh found in {0} | nenhuma malha encontrada em {0} |
 | `status.nothing_under_the_cursor` | Nothing under the cursor | Nada sob o cursor |
 | `status.nudge` | Nudge [{dx}, {dy}, {dz}] | Deslocar [{dx}, {dy}, {dz}] |
 | `status.object_duplicated` | Object duplicated. | Objeto duplicado. |
@@ -1610,6 +1611,7 @@ Total de chaves de localização cadastradas: **2036**.
 | `status.selection_cleared` | Selection cleared. | Seleção limpa. |
 | `status.selection_inverted` | Selection inverted. | Seleção invertida. |
 | `status.selection_mode` | Selection mode: {0} | Modo de seleção: {0} |
+| `status.set_as_boolean_operand` | Set as boolean operand | Definido como operando booleano |
 | `status.shading` | Shading: {0} | Sombreamento: {0} |
 | `status.shape_anchored_release_to_commit` | Shape anchored: release to commit | Forma ancorada: solte para confirmar |
 | `status.shape_builder_cancelled` | Shape Builder cancelled | Shape Builder cancelado |
@@ -1755,11 +1757,7 @@ Total de chaves de localização cadastradas: **2036**.
 | `tools.measure` | Measure | Medir |
 | `tools.merge` | Merge | Fundir |
 | `tools.mirror` | Mirror | Espelho |
-| `tools.mode_along_normals` | Along normals | Ao longo das normais |
-| `tools.mode_individual` | Individual | Individual |
-| `tools.mode_region` | Region | Região |
 | `tools.move` | Move | Mover |
-| `tools.operation_mode` | Operation mode | Modo da operação |
 | `tools.paint` | Paint | Pintar |
 | `tools.picker` | Picker | Conta-gotas |
 | `tools.pivot` | Pivot | Pivô |
@@ -1803,6 +1801,9 @@ Total de chaves de localização cadastradas: **2036**.
 | `transform.unlink` | Unlink axes | Desligar eixos |
 | `ui.accent_color` | Interface accent color | Cor de destaque da interface |
 | `ui.accent_color_hint` | Active buttons, tools and focus. The selection in the viewport has its own color below. | Botões e ferramentas ativos e foco. A seleção na viewport tem a própria cor, abaixo. |
+| `ui.action_cut` | Cut | Cortar |
+| `ui.action_fuse` | Fuse | Fundir |
+| `ui.action_intersect` | Intersect | Interseção |
 | `ui.action_join` | Join | Juntar |
 | `ui.action_loop_cut` | Loop Cut | Loop Cut |
 | `ui.action_merge` | Merge | Mesclar |
