@@ -527,72 +527,8 @@ fn from_provider(manifold: &Manifold) -> Option<Mesh> {
     Some(mesh)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn cube_mesh(size: f32) -> Mesh {
-        Mesh::cube(size)
-    }
-
-    #[test]
-    fn union_of_identical_cubes_has_cube_volume() {
-        let mesh = boolean_cubes(2.0, 2.0, BooleanOp::Union).unwrap();
-        assert!(!mesh.faces.is_empty());
-        // Cube 2x2x2 centered: volume 8. Triangulated cube has 12 tris.
-        assert_eq!(mesh.faces.len(), 12);
-    }
-
-    #[test]
-    fn difference_of_identical_cubes_is_empty_or_rejected() {
-        // A - A removes everything: provider yields empty, mapped to InvalidOutput.
-        assert_eq!(
-            boolean_cubes(2.0, 2.0, BooleanOp::Difference).unwrap_err(),
-            BooleanError::InvalidOutput("cube result")
-        );
-    }
-
-    #[test]
-    fn mesh_roundtrip_through_provider() {
-        let cube = cube_mesh(1.0);
-        let triangulated = {
-            let mut m = cube.clone();
-            m.triangulate();
-            m
-        };
-        let back = boolean_meshes(&triangulated, &triangulated, BooleanOp::Union).unwrap();
-        assert!(!back.faces.is_empty());
-    }
-
-    #[test]
-    fn invalid_inputs_are_rejected() {
-        let empty = Mesh::default();
-        assert_eq!(
-            boolean_meshes(&empty, &empty, BooleanOp::Union).unwrap_err(),
-            BooleanError::InvalidInput("mesh A")
-        );
-        let mut bad = Mesh::cube(1.0);
-        bad.triangulate();
-        bad.verts[0].pos[0] = f32::NAN;
-        assert_eq!(
-            boolean_meshes(&bad, &bad, BooleanOp::Union).unwrap_err(),
-            BooleanError::InvalidInput("mesh A")
-        );
-    }
-
-    #[test]
-    fn disjoint_union_keeps_both_volumes() {
-        use manifold_rust::linalg::Vec3;
-        let a = Manifold::cube(Vec3::new(1.0, 1.0, 1.0), true);
-        let b = Manifold::cube(Vec3::new(1.0, 1.0, 1.0), true).translate(Vec3::new(5.0, 0.0, 0.0));
-        let union = a.union(&b);
-        assert!((union.volume() - 2.0).abs() < 1e-6);
-    }
-}
-
 const MAX_SOLID_TRIANGLES: usize = 200_000;
 const MAX_SOLID_COMPONENTS: usize = 128;
-
 
 fn validate_solid_operand(mesh: &Mesh) -> Result<(), BooleanError> {
     mesh.validate_invariants()
@@ -779,4 +715,67 @@ pub fn boolean_solid(a: &Mesh, b: &Mesh, op: BooleanOp) -> Result<BooleanSolid, 
     Ok(BooleanSolid::Mesh(Box::new(
         crate::boolean_cleanup::cleanup_boolean_surfaces(&raw, a, b).0,
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cube_mesh(size: f32) -> Mesh {
+        Mesh::cube(size)
+    }
+
+    #[test]
+    fn union_of_identical_cubes_has_cube_volume() {
+        let mesh = boolean_cubes(2.0, 2.0, BooleanOp::Union).unwrap();
+        assert!(!mesh.faces.is_empty());
+        // Cube 2x2x2 centered: volume 8. Triangulated cube has 12 tris.
+        assert_eq!(mesh.faces.len(), 12);
+    }
+
+    #[test]
+    fn difference_of_identical_cubes_is_empty_or_rejected() {
+        // A - A removes everything: provider yields empty, mapped to InvalidOutput.
+        assert_eq!(
+            boolean_cubes(2.0, 2.0, BooleanOp::Difference).unwrap_err(),
+            BooleanError::InvalidOutput("cube result")
+        );
+    }
+
+    #[test]
+    fn mesh_roundtrip_through_provider() {
+        let cube = cube_mesh(1.0);
+        let triangulated = {
+            let mut m = cube.clone();
+            m.triangulate();
+            m
+        };
+        let back = boolean_meshes(&triangulated, &triangulated, BooleanOp::Union).unwrap();
+        assert!(!back.faces.is_empty());
+    }
+
+    #[test]
+    fn invalid_inputs_are_rejected() {
+        let empty = Mesh::default();
+        assert_eq!(
+            boolean_meshes(&empty, &empty, BooleanOp::Union).unwrap_err(),
+            BooleanError::InvalidInput("mesh A")
+        );
+        let mut bad = Mesh::cube(1.0);
+        bad.triangulate();
+        bad.verts[0].pos[0] = f32::NAN;
+        assert_eq!(
+            boolean_meshes(&bad, &bad, BooleanOp::Union).unwrap_err(),
+            BooleanError::InvalidInput("mesh A")
+        );
+    }
+
+    #[test]
+    fn disjoint_union_keeps_both_volumes() {
+        use manifold_rust::linalg::Vec3;
+        let a = Manifold::cube(Vec3::new(1.0, 1.0, 1.0), true);
+        let b = Manifold::cube(Vec3::new(1.0, 1.0, 1.0), true).translate(Vec3::new(5.0, 0.0, 0.0));
+        let union = a.union(&b);
+        assert!((union.volume() - 2.0).abs() < 1e-6);
+    }
 }

@@ -247,8 +247,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_selected_point: None,
             profile_selected_segment: None,
             draw_planar_navigation: true,
-            planar_saved_camera: None,
-            profile_dimension_gesture: None,
             transform_initial: [0.0, 0.0, 0.0],
         };
         bridge.state.project.normalize_references();

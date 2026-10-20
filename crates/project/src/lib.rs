@@ -74,29 +74,29 @@ impl std::ops::BitOrAssign for ProjectChanges {
 
 pub mod align;
 pub mod animatable;
+pub mod animation;
 pub mod export_model;
 pub mod external_path;
 pub mod image_decode;
 pub mod material_recipe;
 pub mod op_graph;
 pub mod origin;
+pub mod shared;
 pub mod snapshot;
 pub mod solid_composition;
 pub mod transform_locks;
-pub mod animation;
-pub mod shared;
-pub use transform_locks::{TransformChannel, TransformLocks};
+pub use align::{
+    AlignAxis, AlignError, AlignMode, AlignReference, BoundingBox3D, compute_alignment_deltas,
+    compute_distribution_deltas,
+};
+pub use export_model::{ExportMaterial, ExportMesh, ExportMetadata, ExportModel};
+pub use shared::Shared;
 pub use snapshot::DocumentSnapshot;
 pub use solid_composition::{
     CompositionError, CompositionStatus, RecipeStatus, SOLID_COMPOSITION_SCHEMA_VERSION,
     SolidCompositionError, SolidCompositionRecipe, SolidCompositionStep, SolidSource,
 };
-pub use export_model::{ExportMaterial, ExportMesh, ExportMetadata, ExportModel};
-pub use align::{
-    AlignAxis, AlignError, AlignMode, AlignReference, BoundingBox3D, compute_alignment_deltas,
-    compute_distribution_deltas,
-};
-pub use shared::Shared;
+pub use transform_locks::{TransformChannel, TransformLocks};
 pub mod autosave;
 pub mod export;
 pub mod format;
@@ -1145,6 +1145,11 @@ impl Asset {
     /// Alterna estado de favorito.
     pub fn toggle_favorite(&mut self) {
         self.favorite = !self.favorite;
+    }
+
+    /// Caixa delimitadora alinhada aos eixos (AABB) em coordenadas de mundo.
+    pub fn world_bounds(&self) -> Option<align::BoundingBox3D> {
+        align::BoundingBox3D::from_asset(self)
     }
 }
 

@@ -1159,9 +1159,6 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// DRAW usa navegação planar (ortográfica, normal ao Workplane, sem
     /// orbit) enquanto isto for verdadeiro; desligar volta à câmera livre.
     pub draw_planar_navigation: bool,
-    /// Câmera de antes da navegação planar, restaurada ao sair dela
-    /// (estado de ViewportSession; nunca vai para o documento).
-    pub(crate) planar_saved_camera: Option<petunia_core::Camera>,
     /// Regiões por plano, recalculadas só quando o documento muda.
     region_planes_cache: std::cell::RefCell<Option<draw_shapes::ShapeCache>>,
     /// Planos editáveis do Shape Builder, por revisão (perfis em uso por geradores ficam de fora).
@@ -1183,9 +1180,6 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_preview_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_transform_gesture: Option<ProfileTransformGesture>,
-    profile_dimension_gesture: Option<(
-        petunia_project::ProfileResource,
-    )>,
     pub paint_show_uv_overlay: bool,
     pub uv_show_texture: bool,
     pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,

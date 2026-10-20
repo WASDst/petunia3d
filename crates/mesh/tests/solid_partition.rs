@@ -96,7 +96,7 @@ fn decompose_regions_and_region_plan_unite_remove_extract() {
         .unwrap();
     let overlap = regions
         .iter()
-        .find(|r| r.class == SolidRegionClass::Overlap)
+        .find(|r| r.class == SolidRegionClass::Intersection)
         .unwrap();
 
     assert!(

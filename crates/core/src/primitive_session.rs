@@ -163,69 +163,6 @@ pub(crate) fn build_primitive(
     Ok(mesh)
 }
 
-/// Prepare before checkpoint/publication. New primitives regenerate in their
-/// object frame. Legacy translation-only sources keep their old representation;
-/// an untracked baked rotation/scale cannot be inferred from accumulated Euler
-/// metadata, so refuse rather than silently erase it.
-pub(crate) fn regenerate_primitive(
-    asset: &petunia_project::Asset,
-    descriptor: PrimitiveDescriptor,
-) -> Result<petunia_mesh::Mesh, &'static str> {
-    let source = asset.parametric.ok_or("Object is no longer parametric")?;
-    if asset.locked {
-        return Err("Primitive is locked");
-    }
-    if asset.skeleton_id.is_some() || asset.skin_data.is_some() {
-        return Err("Rigged primitive regeneration requires bind compensation");
-    }
-    let mut mesh = build_primitive(descriptor)?;
-    let legacy = asset.has_legacy_baked_transform();
-    let offset = if legacy {
-        asset
-            .origin
-            .map(glam::Vec3::from)
-            .unwrap_or_else(|| asset.mesh.center())
-    } else {
-        glam::Vec3::ZERO
-    };
-    let original = build_primitive(source)?;
-    if !offset.is_finite()
-        || original.verts.len() != asset.mesh.verts.len()
-        || original.faces.len() != asset.mesh.faces.len()
-        || original
-            .verts
-            .iter()
-            .zip(&asset.mesh.verts)
-            .any(|(a, b)| !b.vec().is_finite() || (a.vec() + offset).distance(b.vec()) > 1.0e-4)
-        || original
-            .faces
-            .iter()
-            .zip(&asset.mesh.faces)
-            .any(|(a, b)| a.verts != b.verts)
-    {
-        return Err(
-            "Primitive has baked or free geometry edits; Make Editable preserves its surface",
-        );
-    }
-    if legacy {
-        for vertex in &mut mesh.verts {
-            vertex.pos = (vertex.vec() + offset).to_array();
-        }
-    }
-    let matrix = asset.world_matrix();
-    if !asset.transform.is_finite()
-        || !matrix.is_finite()
-        || !matrix.inverse().is_finite()
-        || mesh
-            .verts
-            .iter()
-            .any(|v| !v.vec().is_finite() || !matrix.transform_point3(v.vec()).is_finite())
-    {
-        return Err("Primitive object frame must be finite and invertible");
-    }
-    Ok(mesh)
-}
-
 /// Criação em andamento: alvo + parâmetros + contexto de reversão.
 #[derive(Debug, Clone)]
 pub struct PrimitiveCreationSession {

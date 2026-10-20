@@ -1,3 +1,6 @@
+//! O módulo entra pronto para ser ligado ao fluxo de booleana; por enquanto
+//! é a API pública do núcleo (sem consumidor no shell ainda).
+#![allow(dead_code)]
 //! Transfers painted albedo into the output atlas after a boolean.
 use glam::Vec3;
 use petunia_mesh::{Mesh, boolean_cleanup::surface_sources};
