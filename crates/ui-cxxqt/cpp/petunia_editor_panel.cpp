@@ -20,6 +20,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListView>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMouseEvent>
@@ -520,6 +521,17 @@ void PetuniaEditorPanel::setupAssets() {
     rows(form, tr("Assets · clique para inserir"), "prefab_items",
          "place_prefab");
     auto *list = m_rows.last().widget;
+    // C6: a galeria é uma grade de miniaturas (não uma lista de nomes): a
+    // miniatura é o que distingue um asset do outro.
+    list->setViewMode(QListView::IconMode);
+    list->setMovement(QListView::Static);
+    list->setResizeMode(QListView::Adjust);
+    list->setWrapping(true);
+    list->setSpacing(6);
+    list->setGridSize(QSize(132, 116));
+    list->setIconSize(QSize(96, 96));
+    list->setUniformItemSizes(true);
+    list->setWordWrap(true);
     list->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(list, &QListWidget::customContextMenuRequested, this,
             [this, list](const QPoint &pos) {

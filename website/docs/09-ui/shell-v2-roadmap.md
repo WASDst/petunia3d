@@ -65,7 +65,7 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | C3  | Gradiente como camada de preenchimento editável (tipos como opção do painel)                            | [x] DONE (código e testes) |
 | C4  | Nós: DAG com portas tipadas, picker de objeto, menu ao arrastar uma saída, booleana com operando visível/fantasma | [x] DONE (código e testes) |
 | C5  | Animate: bones/rigs/templates como módulo; timeline estilo motion design; **aba de Curvas**; morph targets | [ ] TODO |
-| C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [ ] TODO |
+| C6  | Assets: galeria nova (grade, busca, tags, arrastar para a viewport) e salvar grupos (depende de G09)    | [~] IN PROGRESS (grade entregue; tags/arrastar/salvar grupos dependem de P04 e G09) |
 | C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [x] DONE (código e testes) |
 | C8  | Modos das operações com vários elementos selecionados: extrudar a região (manifold), faces individuais, ao longo das normais; idem para inset/bevel, escolhidos no HUD da ferramenta | [x] DONE (código e testes) |
 
@@ -221,6 +221,20 @@ O que mudou (C4): as **portas tipadas** já existiam no grafo de materiais (entr
 - **Menu ao arrastar uma saída**: soltar um fio no vazio abre o menu de nós; no grafo de materiais, o nó novo **nasce ligado** à saída arrastada, na posição da soltura, com a entrada compatível escolhida pelo tipo (um tipo incompatível é recusado e não deixa nó órfão).
 - **Picker de objeto**: o alvo de uma operação é escolhido numa lista **buscável** (o antigo menu "Aplicar em…" virou o picker) — e soltar um fio no vazio no grafo de objetos abre o mesmo picker.
 - **Booleana com operando visível/fantasma**: o objeto que serve de ferramenta fica escondido no documento; no grafo ele aparece **esmaecido**, com a dica no tooltip dizendo por quê (não só pela cor).
+
+Onda C, parte 5 — C6 (galeria de assets) e C5 (Animate), 2026-10-19.
+
+**C6 — galeria (parcial).** A biblioteca de assets passa a ser uma **grade de miniaturas** (a miniatura é o que distingue um asset do outro), mantendo a busca e o clique para inserir. O que **não** foi entregue e por quê:
+
+| Parte | Situação | Motivo |
+|---|---|---|
+| Grade de miniaturas | entregue | — |
+| Buscar | já existia | — |
+| Arrastar para a viewport | pendente | a viewport ainda não aceita soltar assets; falta o pedido de inserção no ponto de soltura |
+| Tags | pendente | não existe modelo de metadados de asset (P04 está TODO) |
+| Salvar grupos | pendente | depende de **G09** (hierarquia/coleções/prefabs), que está TODO |
+
+**C5 — Animate (parcial).** Entregue nesta onda: os **morph targets** (blend shapes) no crate de malha — contrato de dados, mistura linear (`p = p_base + Σ peso·(alvo − p_base)`), recusas tipadas e 11 testes. Ficam de fora: a **aba de Curvas** (o modelo do Animate publica as trilhas e os tempos dos keyframes, mas não os *valores* das curvas — sem eles não há o que desenhar; falta a amostragem da curva no modelo e o editor de gráfico), a **timeline estilo motion design** (a barra de transporte e o dope sheet existem; a barra de tempo em motion design, com camadas e marcador de quadro, é reescrita de tela) e **bones/rigs/templates como módulo** (reorganização do `crates/editor/src/animate.rs` em crate próprio — trabalho de forma, sem valor novo para quem usa).
 
 ## Risks
 

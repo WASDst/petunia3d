@@ -981,6 +981,11 @@
       "revision": "árvore de trabalho sobre 4b8443de (commit desta entrega)",
       "document": "09-ui/shell-v2-roadmap.md",
       "summary": "Onda C, parte 4: C4 (nós). As portas tipadas já existiam; esta entrega fecha as três peças: (1) menu ao arrastar uma saída — soltar o fio no vazio abre o menu de nós e, no grafo de materiais, o nó novo nasce ligado à saída arrastada na posição da soltura, com a entrada compatível escolhida pelo tipo (tipo incompatível é recusado sem deixar nó órfão); (2) picker de objeto — o alvo de uma operação passa a ser escolhido numa lista buscável (o antigo menu 'Aplicar em…' virou o picker), e soltar o fio no vazio no grafo de objetos abre o mesmo picker; (3) booleana com operando visível/fantasma — o objeto-ferramenta, escondido no documento, aparece esmaecido no grafo, com a dica no tooltip. No mesmo lote: morph targets (blend shapes) no crate de malha, com mistura linear, recusas tipadas e 11 testes. Gates: fmt limpo; clippy -D warnings; core 212 (+1 novo), mesh 283 (+11), ui-cxxqt offscreen: shell_v2 328 verificações (1 nova: graph:boolean-operand-shows-as-a-ghost), ui_i18n_catalog 3; não executado: janela real com GPU (arrastar fio, picker, fantasma)."
+    },
+    "shell-v2-roadmap-c5-c6-partial-2026-10-19": {
+      "revision": "árvore de trabalho sobre 870c37fc (commit desta entrega)",
+      "document": "09-ui/shell-v2-roadmap.md",
+      "summary": "Onda C, parte 5: C6 (galeria de assets) e C5 (Animate) — entregas parciais, com o restante explicitado. C6 entregue: a biblioteca de assets virou grade de miniaturas (busca e clique para inserir mantidos). C6 pendente e por quê: arrastar para a viewport (a viewport não aceita soltar assets), tags (não há modelo de metadados de asset; P04 está TODO) e salvar grupos (depende de G09, TODO). C5 entregue: morph targets (blend shapes) no crate de malha, com mistura linear, recusas tipadas e 11 testes. C5 pendente e por quê: aba de Curvas (o modelo do Animate publica trilhas e tempos, mas não os valores das curvas — falta a amostragem no modelo e o editor de gráfico), timeline estilo motion design (a barra de transporte e o dope sheet existem; a barra de tempo em motion design é reescrita de tela) e bones/rigs/templates como módulo (reorganização de código, sem valor novo). Gates: fmt limpo; clippy -D warnings; ui-cxxqt offscreen: shell_v2 328 verificações, ui_i18n_catalog 3; não executado: janela real com GPU."
     }
   },
   "tasks": [
@@ -5531,14 +5536,14 @@
           "evidence": "shell-v2-roadmap-c4-nodes-2026-10-19"
         },
         {
-          "title": "C5 Animate: módulo de rig, timeline estilo motion design, aba de Curvas e morph targets.",
+          "title": "C5 Animate: morph targets entregues; aba de Curvas, timeline motion design e módulo de bones/rigs/templates em aberto.",
           "completed": false,
-          "evidence": null
+          "evidence": "shell-v2-roadmap-c5-c6-partial-2026-10-19"
         },
         {
-          "title": "C6 Galeria de assets e salvar grupos.",
+          "title": "C6 Assets: grade de miniaturas entregue; tags, arrastar para a viewport e salvar grupos dependem de P04/G09 (em aberto).",
           "completed": false,
-          "evidence": null
+          "evidence": "shell-v2-roadmap-c5-c6-partial-2026-10-19"
         },
         {
           "title": "C7 Grupo especial Referência no painel de Partes.",
