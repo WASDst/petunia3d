@@ -328,7 +328,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let interval_ms = self.preferences.double_tap_interval_ms;
 
         let is_double_tap = if interval_ms > 0 {
-            if let Some((ref last_tool, last_time)) = self.last_tool_press {
+            if let Some((ref last_tool, _, last_time)) = self.last_tool_press {
                 last_tool == id && now.duration_since(last_time).as_millis() <= interval_ms as u128
             } else {
                 false
@@ -377,11 +377,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             // Gramática única: a tecla seleciona a ferramenta persistente; a
             // operação acontece pelo arrasto (ADR 007). O duplo toque continua
             // abrindo o modo que segue o ponteiro.
-            self.last_tool_press = Some((id.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
+            self.last_tool_press = Some((id.to_string(), origin_tool, now));
             self.keyboard_tool_modal_active = false;
             self.activate_parametric_tool(kind);
         } else {
-            self.last_tool_press = Some((id.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
+            self.last_tool_press = Some((id.to_string(), origin_tool, now));
             if self.tool_modal.is_none() {
                 let _ = self.execute_core_command(id);
             }
@@ -401,6 +403,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if text == "Enter" && !ctrl && !alt {
             return self.confirm_active_operation();
+        }
+        // Animate owns its authoring/transport keys before geometry fallbacks.
+        if self.state.workspace.is_animate()
+            && self.rename_draft.is_none()
+            && !self.state.is_interacting()
+            && self.drag.is_none()
+        {
+            let action = input::key_code_from_slint(text).and_then(|key| {
+                self.state
+                    .ui
+                    .keybinds
+                    .find_in_context(key, Mods2 { ctrl, shift, alt }, "animate")
+            });
+            let intent = match action {
+                Some("animate.toggle_play") => Some(animate::AnimateIntent::TogglePlay),
+                Some("animate.step_backward") => Some(animate::AnimateIntent::StepFrame(-1)),
+                Some("animate.step_forward") => Some(animate::AnimateIntent::StepFrame(1)),
+                Some("animate.insert_keyframe") => Some(animate::AnimateIntent::InsertKeyframe),
+                Some("animate.delete_keyframe") => {
+                    Some(animate::AnimateIntent::DeleteKeyframe(None))
+                }
+                Some("animate.jump_to_start") => Some(animate::AnimateIntent::JumpToStart),
+                _ => None,
+            };
+            if let Some(intent) = intent {
+                self.apply(UiIntent::Animate(intent));
+                return true;
+            }
+            if matches!(text, "Delete" | "Backspace") {
+                return false;
+            }
         }
         if self.decal_gesture.is_some() && !ctrl && !alt {
             // Buffer numérico do gesto de decalque (constituição 11).
@@ -427,6 +460,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if text == "F4" && !ctrl && !alt && !shift {
             return self.toggle_reference_manager();
         }
+        if ctrl
+            && !alt
+            && text.eq_ignore_ascii_case("g")
+            && self.state.workspace == Workspace::Model
+        {
+            return if shift {
+                self.ungroup(None)
+            } else {
+                self.group_selection()
+            };
+        }
         if ctrl && !shift && !alt && text.eq_ignore_ascii_case("c") {
             return self.copy_selection();
         }
@@ -442,21 +486,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.mark_dirty();
             return true;
         }
-        if (text == "Delete" || text == "Backspace") && !ctrl && !alt && !shift {
-            if self.state.session.tools.modal.is_some()
-                && !self.tool_session.numeric_text().is_empty()
-            {
-                self.tool_session.pop_numeric();
-                if self.tool_session.numeric_text().is_empty() {
-                    let [x, y] = self.pointer_position;
-                    self.update_viewport_transform(x, y);
-                } else {
-                    self.preview_modal_text();
-                }
-                return true;
+        if matches!(text, "Delete" | "Backspace")
+            && !ctrl
+            && !alt
+            && !shift
+            && self.state.session.tools.modal.is_some()
+            && !self.tool_session.numeric_text().is_empty()
+        {
+            self.tool_session.pop_numeric();
+            if self.tool_session.numeric_text().is_empty() {
+                let [x, y] = self.pointer_position;
+                self.update_viewport_transform(x, y);
+            } else {
+                self.preview_modal_text();
             }
-            return self.delete_or_dissolve_selection();
+            return true;
         }
+        // Idle Delete/Backspace belongs to the effective keymap.
         if self.state.session.tools.modal.is_none()
             && self.drag.is_none()
             && self.rename_draft.is_none()
@@ -493,17 +539,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
         }
-        if (text == "Insert" || text.eq_ignore_ascii_case("d"))
-            && !ctrl
-            && !alt
-            && !shift
-            && self.state.session.tools.modal.is_none()
-            && self.drag.is_none()
-            && self.rename_draft.is_none()
-        {
-            self.apply(UiIntent::ToggleEditPivot);
-            return true;
-        }
+
         if (text == " " || text == "Space") && !ctrl && !alt && !shift {
             if self.state.session.tools.active_tool == "slice"
                 && (self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some())
@@ -605,74 +641,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return true;
             }
         }
-        if text.eq_ignore_ascii_case("z")
-            && !ctrl
-            && !alt
-            && self.state.session.tools.modal.is_none()
-            && self.drag.is_none()
-            && self.rename_draft.is_none()
-        {
-            if let Err(error) = self.execute_core_command("view.toggle_wireframe") {
-                self.state.set_status(error.to_string());
-            }
-            return true;
-        }
-        if self.state.workspace == Workspace::Model
-            && self.state.session.tools.modal.is_none()
-            && self.drag.is_none()
-            && self.rename_draft.is_none()
-            && !ctrl
-            && !alt
-            && !shift
-        {
-            match text {
-                "1" => {
-                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Vertex));
-                    return true;
-                }
-                "2" => {
-                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge));
-                    return true;
-                }
-                "3" => {
-                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face));
-                    return true;
-                }
-                "4" => {
-                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Object));
-                    return true;
-                }
-                "Tab" => {
-                    self.apply(UiIntent::CycleSelectionDomain);
-                    return true;
-                }
-                _ => {}
-            }
-        }
-        if self.state.workspace == Workspace::Paint
-            && self.state.session.tools.modal.is_none()
-            && self.drag.is_none()
-            && self.rename_draft.is_none()
-            && !ctrl
-            && !alt
-        {
-            if text == "[" || text == "{" {
-                if shift {
-                    self.adjust_brush_hardness(-0.1);
-                } else {
-                    self.adjust_brush_size(-0.2);
-                }
-                return true;
-            }
-            if text == "]" || text == "}" {
-                if shift {
-                    self.adjust_brush_hardness(0.1);
-                } else {
-                    self.adjust_brush_size(0.2);
-                }
-                return true;
-            }
-        }
+
         if self.state.session.tools.modal.is_none()
             && self.drag.is_none()
             && self.rename_draft.is_none()
@@ -794,30 +763,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .find_in_context(key, mods, context)
             .map(str::to_owned)
         else {
-            if text.eq_ignore_ascii_case("w")
-                && !ctrl
-                && !alt
-                && !shift
-                && self.state.session.tools.modal.is_none()
-                && self.drag.is_none()
-                && self.rename_draft.is_none()
-            {
-                if self.state.workspace == Workspace::Model {
-                    let next = if self.state.session.tools.active_tool == "select" {
-                        "box_select"
-                    } else {
-                        "select"
-                    };
-                    self.apply(UiIntent::SetActiveTool(next.to_string()));
-                    return true;
-                } else if self.state.workspace == Workspace::Uv {
-                    self.apply(UiIntent::SetActiveTool("select".to_string()));
-                    return true;
-                }
-            }
             return false;
         };
         match action.as_str() {
+            "uv.move" => self.apply(UiIntent::BeginUvTransform(
+                petunia_core::UvTransformKind::Move,
+            )),
+            "uv.rotate" => self.apply(UiIntent::BeginUvTransform(
+                petunia_core::UvTransformKind::Rotate,
+            )),
+            "uv.scale" => self.apply(UiIntent::BeginUvTransform(
+                petunia_core::UvTransformKind::Scale,
+            )),
             "global.undo" => self.apply(UiIntent::Undo),
             "global.redo" => self.apply(UiIntent::Redo),
             "global.reset_camera" => self.apply(UiIntent::ResetCamera),
@@ -836,16 +793,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.select_edge" => self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge)),
             "model.select_face" => self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face)),
             "model.tool_select" | "model.select" | "model.select_tool" => {
-                if self.state.workspace == Workspace::Model {
-                    let next = if self.state.session.tools.active_tool == "select" {
-                        "box_select"
-                    } else {
-                        "select"
-                    };
-                    self.apply(UiIntent::SetActiveTool(next.to_string()));
-                } else if self.state.workspace == Workspace::Uv {
-                    self.apply(UiIntent::SetActiveTool("select".to_string()));
-                }
+                self.apply(UiIntent::SetActiveTool("select".into()));
             }
             "model.box_select" => self.apply(UiIntent::SetActiveTool("box_select".into())),
             "model.move" | "model.transform" => {
@@ -857,12 +805,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let _ = self.execute_core_command("model.make_face");
             }
             "model.frame_selection" => {
-                if self.state.selection_domain().is_component() {
-                    let _ = self.execute_core_command("model.make_face");
-                } else {
-                    let _ = self.execute_core_command("view.frame_selection");
-                }
+                let _ = self.execute_core_command("view.frame_selection");
             }
+            "model.toggle_edit_pivot" => self.apply(UiIntent::ToggleEditPivot),
             "model.extrude" => {
                 if self.state.session.tools.active_tool == "draw_profile"
                     && (self.active_profile_closed() || self.active_profile_point_count() >= 3)
@@ -931,7 +876,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "window.workspace_animate" => self.apply(UiIntent::SetWorkspace(Workspace::Animate)),
             "paint.select" => self.apply(UiIntent::SetActiveTool("select".into())),
             "paint.isolate" => {
-                self.state.toggle_isolate();
+                self.toggle_paint_isolate();
             }
             "paint.airbrush" => self.apply(UiIntent::SetActiveTool("airbrush".into())),
             "paint.eraser" => self.apply(UiIntent::SetActiveTool("eraser".into())),
@@ -991,5 +936,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         }
         true
+    }
+
+    /// `paint.isolate` (C2): no PAINT, isolar é fantasma (Raio-X) e preserva o
+    /// Raio-X do usuário; nos outros workspaces é o isolamento comum. Exposto
+    /// também como ação de request para o controle da seção Projeção.
+    pub fn toggle_paint_isolate(&mut self) -> bool {
+        if self.state.workspace == Workspace::Paint {
+            self.state.toggle_paint_isolate_ghost();
+        } else {
+            self.state.toggle_isolate();
+        }
+        true
+    }
+
+    /// C8 — modo da operação com vários elementos, escolhido no HUD da
+    /// ferramenta: extrusão (região, faces individuais, ao longo das normais) e
+    /// inset (região, individual). O modo pertence à ferramenta ativa.
+    pub fn set_operation_mode(&mut self, id: &str) -> bool {
+        match self.state.session.tools.active_tool.as_str() {
+            "extrude" => {
+                let Some(mode) = petunia_mesh::ExtrudeMode::from_id(id) else {
+                    return false;
+                };
+                self.state.tools.extrude_mode = mode;
+                true
+            }
+            "inset" => {
+                let Some(mode) = petunia_mesh::InsetMode::from_id(id) else {
+                    return false;
+                };
+                self.state.tools.inset_mode = mode;
+                true
+            }
+            _ => false,
+        }
     }
 }

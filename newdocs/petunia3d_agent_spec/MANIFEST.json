@@ -1,0 +1,112 @@
+{
+  "package": "PETUNIA3D_DOCUMENTACAO_COMPLETA_CODE_AGENT",
+  "date": "2026-10-15",
+  "repo": "WASDst/petunia3d",
+  "baseline_main_sha": "92c22caa23f96f85f18e72a5e962a1d8831694db",
+  "stack": "Rust + Qt 6 Widgets + CXX-Qt + OpenGL 3.3",
+  "status": "approved specification (not implementation)",
+  "chapters": 11,
+  "svg_assets": 6,
+  "files": [
+    {
+      "path": "PETUNIA3D_CODE_AGENT_SPEC_COMPLETA.md",
+      "bytes": 112941,
+      "sha256": "f27084fefef6dea42bd11197cf906b5c090d08a14d788a5a53b655b0cff946c0"
+    },
+    {
+      "path": "PROMPT_FOR_CODE_AGENT.md",
+      "bytes": 3592,
+      "sha256": "22d45e151bb1b2ebc2895d96bad3f57f01f189fd2bcc17fb4dcd7af352a177a4"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4982,
+      "sha256": "378c91697f08b14613252f5dd38e4a3f8ff32e165f9a416c465a3f48d3232682"
+    },
+    {
+      "path": "assets/gizmo-and-selection.svg",
+      "bytes": 7882,
+      "sha256": "9fd5b55a061e2d36b6d4ce30ef68b5d18d48555dd6caa8068774316c01735bd7"
+    },
+    {
+      "path": "assets/operation-lifecycle.svg",
+      "bytes": 6347,
+      "sha256": "28576e374315a8eb870bb16ee5034e75857dde15d7f0901b7bc23626c6a30d0a"
+    },
+    {
+      "path": "assets/section-and-thickness.svg",
+      "bytes": 5059,
+      "sha256": "7745331c4ddf7af6a389f0b1211d4fd7f20f2b5cc404dae21409cea8cc915e1b"
+    },
+    {
+      "path": "assets/smart-rig-pipeline.svg",
+      "bytes": 7516,
+      "sha256": "a35af41f2483bb690874831f6b5a13a7770f8250001c953770ae16069e83c9e9"
+    },
+    {
+      "path": "assets/system-architecture.svg",
+      "bytes": 6644,
+      "sha256": "f9138d408d08b848a50fdecb47af041cc69ad11667d52789d53ace0c62f262f7"
+    },
+    {
+      "path": "assets/viewport-spatial-feedback.svg",
+      "bytes": 5904,
+      "sha256": "6c5b66596522f651890a6756e9001aee8edd813a4edad358794b70a2096a2f57"
+    },
+    {
+      "path": "chapters/00_AGENT_INSTRUCTIONS.md",
+      "bytes": 9096,
+      "sha256": "ed8d57688840c40a430de9e94d00c0d2a665eb69eb2fec97f20d861b18c54f51"
+    },
+    {
+      "path": "chapters/01_DECISION_REGISTER.md",
+      "bytes": 12875,
+      "sha256": "26676f6c9966eebf7bb83d3ed830831838ea122256a96ac6dd6ec5ccf92e8312"
+    },
+    {
+      "path": "chapters/02_SELECTION_TRANSFORM.md",
+      "bytes": 11397,
+      "sha256": "f0e45e38a41316e83cfb5f66fe32c59a998171a6737fee53f917ac81182f3688"
+    },
+    {
+      "path": "chapters/03_VIEWPORT_PERCEPTION.md",
+      "bytes": 17621,
+      "sha256": "125ba193ab1e537787297c92f21bb25801043a5dc21837b9aa507d66b4d93d24"
+    },
+    {
+      "path": "chapters/04_MODELING_OPERATION_FEEDBACK.md",
+      "bytes": 7608,
+      "sha256": "ecb6ea56e29903826ec5902846f4178bc7bc1993de643c3d367e81878cfe1c2d"
+    },
+    {
+      "path": "chapters/05_SMART_RIG.md",
+      "bytes": 13969,
+      "sha256": "c7115641317658939de8f0ebc824a56f7bf0e01af46ebe349f6b29de18eef7a0"
+    },
+    {
+      "path": "chapters/06_ARCHITECTURE_INTEGRATION.md",
+      "bytes": 9576,
+      "sha256": "885818645e273c569017f786c6f65ebf64c9d14e8fe92606b690467a5d337540"
+    },
+    {
+      "path": "chapters/07_ACCESSIBILITY_UX.md",
+      "bytes": 5809,
+      "sha256": "b88bf688c4ea3cce3f7f1aad8213feb913ca109adb67523f762457c95723483d"
+    },
+    {
+      "path": "chapters/08_IMPLEMENTATION_ROADMAP.md",
+      "bytes": 8243,
+      "sha256": "f38f18b7950e74239d4f440c902a5886f44c24fa99377e57a57b991b07bff2b3"
+    },
+    {
+      "path": "chapters/09_ACCEPTANCE_TEST_MATRIX.md",
+      "bytes": 8220,
+      "sha256": "b916d0021d83e77758509f3ec003c8e61d543caf9314624e5b4edd71eaff4e92"
+    },
+    {
+      "path": "chapters/10_REFERENCES_GLOSSARY.md",
+      "bytes": 6478,
+      "sha256": "1c23fe380afa8ff91a3989754adc93595e1c03492ca0bbbf386315c363bcca51"
+    }
+  ]
+}

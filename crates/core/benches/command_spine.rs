@@ -24,13 +24,21 @@ fn bench_dispatch(c: &mut Criterion) {
     c.bench_function("command/extrude", |b| {
         b.iter(|| {
             let mut state = primed();
-            std::hint::black_box(state.dispatch(&ExtrudeSelectedCmd { dist: 0.5 }))
+            std::hint::black_box(state.dispatch(&ExtrudeSelectedCmd {
+                dist: 0.5,
+                ..Default::default()
+            }))
         })
     });
     c.bench_function("command/checkpoint_metrics", |b| {
         b.iter(|| {
             let mut state = primed();
-            state.dispatch(&ExtrudeSelectedCmd { dist: 0.25 }).unwrap();
+            state
+                .dispatch(&ExtrudeSelectedCmd {
+                    dist: 0.25,
+                    ..Default::default()
+                })
+                .unwrap();
             std::hint::black_box(state.project.history_metrics())
         })
     });

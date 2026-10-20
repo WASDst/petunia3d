@@ -60,6 +60,10 @@ pub struct QtEditor {
     /// Pegada do pincel 3D sob o último ponto consultado: achatamento e giro
     /// do anel, como o Slint publica em `brush-cursor-squash/tilt`.
     brush_footprint: Option<[f32; 2]>,
+    /// Cursor do pincel espelhado entre 3D e 2D (B2): ponto da textura sob o
+    /// cursor na vista 3D e posição na vista do ponto sob o cursor do canvas 2D.
+    brush_texture_point: Option<[f32; 2]>,
+    brush_ghost_view: Option<[f32; 2]>,
     /// Alça do decalque sob o ponteiro (20 mover, 21 escalar, 22 girar).
     decal_hover_handle: Option<u8>,
     decal_gizmo: DecalGizmoMode,
@@ -88,6 +92,8 @@ impl QtEditor {
             tablet_input: None,
             session_lease: None,
             brush_footprint: None,
+            brush_texture_point: None,
+            brush_ghost_view: None,
             decal_hover_handle: None,
             decal_gizmo: DecalGizmoMode::Auto,
         }
@@ -131,6 +137,8 @@ impl QtEditor {
         v["document_revision"] = json!(self.state.project.project.revision_id().to_string());
         v["active_asset_id"] = json!(self.state.project.active().map(|a| a.id.to_string()));
         v["selected_count"] = json!(self.state.session.selection.assets.len());
+        // Traço de pintura com transação aberta (U05: nenhum gesto fica pendurado).
+        v["paint_stroke_open"] = json!(self.state.session.tools.paint_stroke.is_some());
         v["project_path"] = json!(self.state.project.project_path);
         // Native per-axis forms consume the same slot projection as Slint.
         for slot in v["reference_slots"].as_array().cloned().unwrap_or_default() {
@@ -159,6 +167,13 @@ impl QtEditor {
         v["brush_squash"] = json!(brush_squash);
         v["brush_tilt"] = json!(brush_tilt);
         v["brush_flow"] = json!(vm.brush_panel.flow);
+        v["brush_mirror"] = json!({
+            "texture": self.brush_texture_point,
+            "view": self.brush_ghost_view,
+        });
+        v["brush_size_jitter"] = json!(vm.brush_panel.size_jitter);
+        v["brush_scatter"] = json!(vm.brush_panel.scatter);
+        v["brush_opacity_jitter"] = json!(vm.brush_panel.opacity_jitter);
         // Sobe a cada mutação de pixels de textura/canvas: o host nativo usa
         // essa revisão para reler o raster em vez de redesenhar às cegas.
         v["texture_revision"] = json!(self.state.project.project.texture_revision);
@@ -180,6 +195,107 @@ impl QtEditor {
         if let Some(r) = &self.controller.pending_recovery {
             v["recovery"] = json!({"name":r.project_name,"path":r.snapshot_path.display().to_string(),"newer":r.is_newer_than_main});
         }
+        // Atalhos efetivos (keymap do usuário) por ação: menus e tooltips derivam
+        // daqui, nunca de texto fixo no widget (rebind propaga).
+        v["shortcut_map"] = Value::Object(
+            self.state
+                .ui
+                .keybinds
+                .all_bindings()
+                .into_iter()
+                .map(|(action, shortcut)| (action, Value::String(shortcut)))
+                .collect(),
+        );
+        // Catálogo único do rail (A08): a GUI projeta, nunca mantém listas.
+        v["tool_catalog"] = json!(
+            petunia_editor::tool_catalog::tools_for(
+                self.state.workspace,
+                self.controller.modeling_mode
+            )
+            .iter()
+            .map(|tool| json!({
+                "id": tool.id,
+                "label": tool.label,
+                "icon": tool.icon,
+                "group": tool.group.id(),
+                "kind": tool.kind.id(),
+                "shortcut": tool
+                    .keymap_action
+                    .and_then(|action| self.state.ui.keybinds.format_shortcut(action)),
+            }))
+            .collect::<Vec<_>>()
+        );
+        v["material_recipe"] = crate::material_recipe_view::snapshot(
+            &self.state.project.project,
+            self.controller.active_material_id(),
+        );
+        v["palettes"] = crate::palette_view::snapshot(&self.state.project.project);
+        v["tool_preview"] = match self.controller.tool_preview_frame() {
+            Some(frame) => json!({
+                "tool": frame.tool,
+                "title": frame.title,
+                "anchor": frame.anchor,
+                "tip": frame.tip,
+                "value": frame.value,
+                "unit": frame.unit,
+                "typed": frame.typed,
+            }),
+            None => Value::Null,
+        };
+        let locks = self
+            .state
+            .project
+            .active()
+            .map(|asset| asset.transform_locks)
+            .unwrap_or_default();
+        v["transform_locks"] = json!({
+            "position": locks.position,
+            "rotation": locks.rotation,
+            "scale": locks.scale,
+        });
+        let [gizmo_move, gizmo_rotate, gizmo_scale] = self.state.ui.select_gizmo_handles;
+        v["select_gizmo_move"] = json!(gizmo_move);
+        v["select_gizmo_rotate"] = json!(gizmo_rotate);
+        v["select_gizmo_scale"] = json!(gizmo_scale);
+        v["transform_orientation"] = json!(self.state.session.transform_orientation.id());
+        v["select_policy"] = json!({
+            "id": self.state.session.select_policy.id(),
+            "through_now": self.state.session.selects_through(),
+        });
+        let grid = &self.state.session.grid_settings;
+        v["viewport_grid"] = json!({
+            "visible": self.state.session.show_grid,
+            "axes_enabled": self.state.session.show_axes,
+            "axes": grid.axes,
+            "size": grid.size,
+            "spacing": grid.spacing,
+            "opacity": grid.opacity,
+        });
+        v["op_graph"] = crate::op_graph_view::snapshot(
+            &self.state.project.project,
+            self.state.project.active().map(|asset| asset.id),
+        );
+        v["context_actions"] = json!(
+            petunia_editor::context_actions::context_actions(
+                self.state.workspace,
+                self.controller.modeling_mode,
+                self.state.selection_domain()
+            )
+            .iter()
+            .map(|action| json!({
+                "id": action.id,
+                "label": action.label,
+                "icon": action.icon,
+                "kind": action.kind.id(),
+                "target": action.target,
+                "primary": action.primary,
+                "group": petunia_editor::context_actions::group_of(action.id),
+                "shortcut": action
+                    .keymap_action
+                    .and_then(|name| self.state.ui.keybinds.format_shortcut(name)),
+            }))
+            .collect::<Vec<_>>()
+        );
         v["primitive_parameters"] = json!(match vm.primitive_kind.as_str() {
             "box" | "cube" => vec!["width", "height", "depth"],
             "plane" => vec!["width", "height"],
@@ -366,7 +482,22 @@ impl QtEditor {
                 } else {
                     None
                 };
+                self.brush_texture_point = self.controller.brush_texture_point_at(x, y);
                 return Ok(self.brush_footprint.is_some());
+            }
+            // Cursor do canvas 2D espelhado na vista 3D (B2).
+            "brush_texture_hover" => {
+                let x = number(request, "x")?;
+                let y = number(request, "y")?;
+                self.brush_ghost_view = self.controller.texture_point_to_viewport(x, y);
+                return Ok(self.brush_ghost_view.is_some());
+            }
+            "brush_mirror_clear" => {
+                let had = self.brush_texture_point.is_some() || self.brush_ghost_view.is_some();
+                self.brush_texture_point = None;
+                self.brush_ghost_view = None;
+                self.brush_footprint = None;
+                return Ok(had);
             }
             // Alça do decalque sob o ponteiro, para o realce do gizmo.
             "decal_hover" => {
@@ -447,6 +578,38 @@ impl QtEditor {
             "command" => {
                 self.execute_registered_command(string(request, "id")?)
                     .map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            action if action.starts_with("material_recipe_") => {
+                let material = self.controller.active_material_id();
+                let command = crate::material_recipe_view::command_for(action, request, material)?
+                    .ok_or_else(|| format!("Ação desconhecida: {action}"))?;
+                self.execute_command(&command).map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            "transform_lock" => {
+                let channel = petunia_project::TransformChannel::from_id(string(request, "kind")?)
+                    .ok_or_else(|| "Canal inválido (position, rotation ou scale)".to_string())?;
+                let command = petunia_core::SetTransformLockCmd {
+                    channel,
+                    axis: index(request, "axis")?,
+                    locked: boolean(request, "locked")?,
+                };
+                self.execute_command(&command).map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            "palette" => {
+                let command = crate::palette_view::command_for(request)?;
+                self.execute_command(&command).map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            action if action.starts_with("graph_") => {
+                let active = self.state.project.active().map(|asset| asset.id);
+                let selected: Vec<uuid::Uuid> = self.state.session.selection.assets.clone();
+                let command =
+                    crate::op_graph_view::command_for(action, request, active, &selected)?
+                        .ok_or_else(|| format!("Ação desconhecida: {action}"))?;
+                self.execute_command(&command).map_err(|e| e.to_string())?;
                 return Ok(true);
             }
             _ => {}
@@ -626,6 +789,53 @@ impl QtEditor {
                 b.begin_rename();
                 return Ok(b.commit_rename(string(request, "name")?));
             }
+            "scene_group" => return Ok(b.group_selection()),
+            "scene_ungroup" => return Ok(b.ungroup(request["name"].as_str())),
+            "group_select" => return Ok(b.select_group(string(request, "name")?)),
+            "group_visibility" => return Ok(b.toggle_group_visibility(string(request, "name")?)),
+            "group_lock" => return Ok(b.toggle_group_lock(string(request, "name")?)),
+            "group_rename" => {
+                return Ok(b.rename_group(string(request, "from")?, string(request, "to")?));
+            }
+            "group_color" => {
+                // `color` nulo remove a cor; só componentes 0..=255 inteiros valem.
+                let color = match request.get("color") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::Array(parts)) if parts.len() == 3 => {
+                        let mut rgb = [0u8; 3];
+                        for (slot, part) in rgb.iter_mut().zip(parts) {
+                            *slot = part
+                                .as_u64()
+                                .and_then(|value| u8::try_from(value).ok())
+                                .ok_or("Cor inválida")?;
+                        }
+                        Some(rgb)
+                    }
+                    Some(_) => return Err("Cor inválida".into()),
+                };
+                let force = request
+                    .get("force")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                return Ok(b.set_group_color(string(request, "name")?, color, force));
+            }
+            "scene_drop" => {
+                let ids: Vec<String> = request["ids"]
+                    .as_array()
+                    .ok_or("Lista de objetos inválida")?
+                    .iter()
+                    .filter_map(|id| id.as_str().map(str::to_string))
+                    .take(10_000)
+                    .collect();
+                // `collection` ausente mantém o grupo; `null` tira do grupo.
+                let collection = match request.get("collection") {
+                    None => None,
+                    Some(value) if value.is_null() => Some(None),
+                    Some(value) => Some(Some(value.as_str().ok_or("Grupo inválido")?.to_string())),
+                };
+                return Ok(b.drop_scene_items(&ids, request["before"].as_str(), collection));
+            }
+            "isolate_part" => return Ok(b.isolate_part(string(request, "id")?)),
             "scene_move" => {
                 b.apply(UiIntent::MoveSceneAsset {
                     id: string(request, "id")?.into(),
@@ -657,7 +867,7 @@ impl QtEditor {
                 );
                 let intent = if request["lasso"].as_bool().unwrap_or(false) {
                     I::Lasso {
-                        polygon: ViewportLassoPolygon::from_slint_path(string(request, "path")?)
+                        polygon: ViewportLassoPolygon::from_polygon_path(string(request, "path")?)
                             .ok_or("Laço inválido")?,
                         mode,
                     }
@@ -689,6 +899,10 @@ impl QtEditor {
                 p.multiselection_measure_tag = state.ui.multiselection_measure_tag;
                 p.selection_rgb = state.ui.selection_rgb;
                 p.selection_thickness = state.ui.selection_thickness;
+                p.gizmo_size = state.ui.gizmo_size;
+                p.gizmo_thickness = state.ui.gizmo_thickness;
+                p.select_gizmo_handles = state.ui.select_gizmo_handles;
+                p.nav_cube_opacity = state.ui.nav_cube_opacity;
                 p.model_quick_actions = state.ui.model_quick_actions.clone();
                 p.active_keymap_id = state.ui.active_keymap_id.clone();
                 p.theme_id = state.ui.active_theme_id.clone();
@@ -862,6 +1076,16 @@ impl QtEditor {
                 return Ok(true);
             }
             _ => {}
+        }
+        if action == "workspace" {
+            // DRAW e POLY são presets do mesmo workspace: o editor é dono do
+            // modo, então a troca de workspace nunca depende de um segundo
+            // request da UI para publicar `modeling_mode` coerente.
+            match string(request, "id")? {
+                "DRAW" => b.apply(UiIntent::SetModelingMode(ModelingMode::Draw)),
+                "POLY" => b.apply(UiIntent::SetModelingMode(ModelingMode::Poly)),
+                _ => {}
+            }
         }
         let intent = match action {
             "workspace" => UiIntent::SetWorkspace(match string(request, "id")? {
@@ -1044,7 +1268,7 @@ impl QtEditor {
                             if b.is_shape_tool() {
                                 b.begin_paint_shape_at(x, y)
                             } else {
-                                b.begin_paint_stroke_with_modifiers(x, y, shift, ctrl)
+                                b.begin_paint_stroke_with_modifiers(x, y, shift, ctrl, alt)
                             }
                         }
                         1 => b.paint_stroke_to_with_modifiers(x, y, shift, ctrl),
@@ -1079,6 +1303,7 @@ impl QtEditor {
                 } else {
                     false
                 };
+                changed |= b.state.advance_camera_frame(dt);
                 changed |= b.decal_playback_tick(dt);
                 changed |= with_tablet(b, tablet, |b| b.airbrush_tick());
                 if owns_session {
@@ -1109,6 +1334,13 @@ fn string<'a>(v: &'a Value, key: &str) -> Result<&'a str, String> {
         .filter(|s| s.len() <= 1024 * 1024)
         .ok_or_else(|| format!("Texto inválido: {key}"))
 }
+/// Argumento opcional de texto: ausente = vazio (ex.: máscara da camada).
+fn text_or_empty<'a>(v: &'a Value, key: &str) -> &'a str {
+    v.get(key)
+        .and_then(Value::as_str)
+        .filter(|s| s.len() <= 1024 * 1024)
+        .unwrap_or("")
+}
 fn number(v: &Value, key: &str) -> Result<f32, String> {
     v[key]
         .as_f64()
@@ -1128,6 +1360,10 @@ fn integer(v: &Value, key: &str) -> Result<i64, String> {
         .or_else(|| v[key].as_str().and_then(|s| s.parse().ok()))
         .filter(|v| (-1_000_000..=1_000_000).contains(v))
         .ok_or_else(|| format!("Inteiro inválido: {key}"))
+}
+/// Índice não negativo (linhas de lista publicadas pelo snapshot).
+fn index(v: &Value, key: &str) -> Result<usize, String> {
+    usize::try_from(integer(v, key)?).map_err(|_| format!("Índice inválido: {key}"))
 }
 fn boolean(v: &Value, key: &str) -> Result<bool, String> {
     v[key]
@@ -1212,10 +1448,14 @@ fn dispatch_controller(
     Ok(match action {
         "activate_keymap_profile" => b.activate_keymap_profile(string(v, "id")?),
         "add_decal_layer" => b.add_decal_layer(),
+        "add_gradient_layer" => b.add_gradient_layer(string(v, "kind")?),
+        "add_gradient_stop" => b.add_gradient_stop(number(v, "position")?),
+        "add_layer_effect" => b.add_layer_effect(string(v, "kind")?),
         "add_modifier" => b.add_modifier(string(v, "kind")?),
         "add_paint_effect_layer" => b.add_paint_effect_layer(string(v, "kind")?),
         "add_paint_group" => b.add_paint_group(),
         "add_paint_layer" => b.add_paint_layer(),
+        "add_paint_mask" => b.add_paint_mask(text_or_empty(v, "effect")),
         "add_profile_circle" => b.add_profile_circle(
             number(v, "radius")?,
             integer(v, "segments")?.max(0) as usize,
@@ -1235,6 +1475,36 @@ fn dispatch_controller(
         "adjust_proportional_radius" => b.adjust_proportional_radius(number(v, "delta")?),
         "airbrush_tick" => b.airbrush_tick(),
         "align_reference_view" => b.align_reference_view(string(v, "axis_str")?),
+        "align_objects" => {
+            let axis_str = string(v, "axis").unwrap_or("X");
+            let mode_str = string(v, "mode").unwrap_or("center");
+            let ref_str = string(v, "reference").unwrap_or("active");
+            let axis = match axis_str {
+                "y" | "Y" => petunia_project::AlignAxis::Y,
+                "z" | "Z" => petunia_project::AlignAxis::Z,
+                _ => petunia_project::AlignAxis::X,
+            };
+            let mode = match mode_str {
+                "min" | "Min" => petunia_project::AlignMode::Min,
+                "max" | "Max" => petunia_project::AlignMode::Max,
+                _ => petunia_project::AlignMode::Center,
+            };
+            let reference = match ref_str {
+                "bounds" | "selection" => petunia_project::AlignReference::SelectionBounds,
+                "origin" | "world" => petunia_project::AlignReference::WorldOrigin,
+                _ => petunia_project::AlignReference::ActiveObject,
+            };
+            b.align_objects(axis, mode, reference)
+        }
+        "distribute_objects" => {
+            let axis_str = string(v, "axis").unwrap_or("X");
+            let axis = match axis_str {
+                "y" | "Y" => petunia_project::AlignAxis::Y,
+                "z" | "Z" => petunia_project::AlignAxis::Z,
+                _ => petunia_project::AlignAxis::X,
+            };
+            b.distribute_objects(axis)
+        }
         "apply_brush_preset" => b.apply_brush_preset(integer(v, "index")?.max(0) as usize),
         "apply_modifier" => b.apply_modifier(string(v, "id")?),
         "assign_material_slot" => b.assign_material_slot(integer(v, "slot")?.max(0) as usize),
@@ -1250,10 +1520,10 @@ fn dispatch_controller(
             number(v, "y")?,
             boolean(v, "is_shift")?,
             boolean(v, "is_ctrl")?,
+            v["is_alt"].as_bool().unwrap_or(false),
         ),
         "begin_rename" => b.begin_rename(),
         "begin_slice" => b.begin_slice(number(v, "x")?, number(v, "y")?),
-        "boolean_op" => b.boolean_op(string(v, "id")?),
         "cancel_decal_drag" => b.cancel_decal_drag(),
         "cancel_keymap_capture" => b.cancel_keymap_capture(),
         "cancel_knife" => b.cancel_knife(),
@@ -1277,7 +1547,6 @@ fn dispatch_controller(
         "clear_all_references" => b.clear_all_references(),
         "clear_all_uv_pins" => b.clear_all_uv_pins(),
         "clear_all_uv_seams" => b.clear_all_uv_seams(),
-        "clear_boolean_operand" => b.clear_boolean_operand(),
         "clear_hover" => b.clear_hover(),
         "clear_keymap_binding" => b.clear_keymap_binding(string(v, "target")?),
         "close_context_menu" => b.close_context_menu(),
@@ -1331,6 +1600,8 @@ fn dispatch_controller(
         "execute_quick_action" => b.execute_quick_action(string(v, "id")?),
         "frame_camera_on_uv" => b.frame_camera_on_uv(number(v, "u")?, number(v, "v")?),
         "frame_cursor" => b.frame_cursor(),
+        "cursor_to_selection" => b.cursor_to_selection(),
+        "cursor_to_active" => b.cursor_to_active(),
         "freeze_active_primitive" => b.freeze_active_primitive(),
         "generate_profile_extrude" => b.generate_profile_extrude(),
         "generate_profile_revolve" => b.generate_profile_revolve(),
@@ -1342,7 +1613,7 @@ fn dispatch_controller(
         }
         "hover_gizmo" => b.hover_gizmo(number(v, "x")?, number(v, "y")?),
         "import_decal_image" => b.import_decal_image(Path::new(string(v, "path")?)),
-        "join_operand" => b.join_operand(),
+        "join_selected" => b.join_selected(),
         "keep_saved_project" => b.keep_saved_project(),
         "knife_click" => b.knife_click(number(v, "normalized_x")?, number(v, "normalized_y")?),
         "menu_item_invoked" => b.menu_item_invoked(string(v, "id")?),
@@ -1388,8 +1659,11 @@ fn dispatch_controller(
         "project_from_reference" => b.project_from_reference(),
         "recover_pending" => b.recover_pending(),
         "remove_material" => b.remove_material(integer(v, "slot")? as i32),
+        "remove_gradient_stop" => b.remove_gradient_stop(index(v, "index")?),
+        "remove_layer_effect" => b.remove_layer_effect(string(v, "id")?),
         "remove_modifier" => b.remove_modifier(string(v, "id")?),
         "remove_paint_layer" => b.remove_paint_layer(string(v, "id")?),
+        "remove_paint_mask" => b.remove_paint_mask(text_or_empty(v, "effect")),
         "remove_reference_slot" => b.remove_reference_slot(string(v, "axis_str")?),
         "reset_cursor_3d" => b.reset_cursor_3d(),
         "reset_keymap_binding" => b.reset_keymap_binding(string(v, "target")?),
@@ -1456,9 +1730,6 @@ fn dispatch_controller(
         "set_asset_query" => b.set_asset_query(string(v, "query")?),
         "set_asset_sort_by_name" => b.set_asset_sort_by_name(boolean(v, "sort_by_name")?),
         "set_asset_thumbnail_size" => b.set_asset_thumbnail_size(number(v, "size")?),
-        "set_boolean_cleanup" => b.set_boolean_cleanup(boolean(v, "cleanup")?),
-        "set_boolean_keep_parts" => b.set_boolean_keep_parts(boolean(v, "keep")?),
-        "set_boolean_operand" => b.set_boolean_operand(string(v, "id")?),
         "set_brush_blend" => b.set_brush_blend(string(v, "blend")?),
         "set_brush_hardness" => b.set_brush_hardness(number(v, "val")?),
         "set_brush_lock" => b.set_brush_lock(string(v, "lock")?),
@@ -1498,6 +1769,37 @@ fn dispatch_controller(
         "set_origin_cursor" => b.set_origin_cursor(),
         "set_origin_geometry" => b.set_origin_geometry(),
         "set_origin_selection" => b.set_origin_selection(),
+        "set_origin_world" => b.set_origin_world(),
+        "set_origin_at_point" => {
+            b.set_origin_at_screen_point(number(v, "norm_x")?, number(v, "norm_y")?)
+        }
+        "set_gradient_geometry" => b.set_gradient_geometry(
+            [number(v, "sx")?, number(v, "sy")?],
+            [number(v, "ex")?, number(v, "ey")?],
+        ),
+        "set_gradient_kind" => b.set_gradient_kind(string(v, "kind")?),
+        "set_gradient_repeat" => b.set_gradient_repeat(boolean(v, "value")?),
+        "set_gradient_end_axis" => {
+            b.set_gradient_end_axis(integer(v, "axis")?.max(0) as usize, number(v, "value")?)
+        }
+        "set_gradient_start_axis" => {
+            b.set_gradient_start_axis(integer(v, "axis")?.max(0) as usize, number(v, "value")?)
+        }
+        "set_gradient_stop_color" => {
+            b.set_gradient_stop_color(index(v, "index")?, string(v, "color")?)
+        }
+        "set_gradient_stop_position" => {
+            b.set_gradient_stop_position(index(v, "index")?, number(v, "position")?)
+        }
+        "set_layer_effect_enabled" => {
+            b.set_layer_effect_enabled(string(v, "id")?, boolean(v, "value")?)
+        }
+        "set_layer_effect_opacity" => {
+            b.set_layer_effect_opacity(string(v, "id")?, number(v, "opacity")?)
+        }
+        "set_layer_effect_param" => {
+            b.set_layer_effect_param(string(v, "id")?, string(v, "key")?, number(v, "value")?)
+        }
         "set_paint_effect_param" => {
             b.set_paint_effect_param(string(v, "key")?, number(v, "value")?)
         }
@@ -1508,6 +1810,13 @@ fn dispatch_controller(
         "set_paint_layer_opacity" => {
             b.set_paint_layer_opacity(string(v, "id")?, number(v, "opacity")?)
         }
+        "set_paint_mask_enabled" => {
+            b.set_paint_mask_enabled(text_or_empty(v, "effect"), boolean(v, "value")?)
+        }
+        "set_paint_mask_inverted" => {
+            b.set_paint_mask_inverted(text_or_empty(v, "effect"), boolean(v, "value")?)
+        }
+        "set_paint_target" => b.set_paint_target(string(v, "target")?, text_or_empty(v, "id")),
         "set_paint_symmetry_x" => {
             b.set_paint_symmetry_x(boolean(v, "val")?);
             true
@@ -1546,6 +1855,11 @@ fn dispatch_controller(
         ),
         "set_selection_color_hex" => b.set_selection_color_hex(string(v, "value")?),
         "set_selection_thickness" => b.set_selection_thickness(number(v, "thickness")?),
+        "set_gizmo_size" => b.set_gizmo_size(number(v, "size")?),
+        "measure_click" => b.measure_click(number(v, "norm_x")?, number(v, "norm_y")?),
+        "measure_hover" => b.measure_hover(number(v, "norm_x")?, number(v, "norm_y")?),
+        "set_gizmo_thickness" => b.set_gizmo_thickness(number(v, "thickness")?),
+        "set_nav_cube_opacity" => b.set_nav_cube_opacity(number(v, "opacity")?),
         "set_shading_mode" => b.set_shading_mode(string(v, "id")?),
         "set_show_home_on_start" => b.set_show_home_on_start(boolean(v, "enabled")?),
         "set_show_tool_labels" => b.set_show_tool_labels(boolean(v, "enabled")?),
@@ -1574,12 +1888,45 @@ fn dispatch_controller(
         "toggle_bevel_clamp_overlap" => b.toggle_bevel_clamp_overlap(),
         "toggle_edit_pivot" => b.toggle_edit_pivot(),
         "toggle_face_orientation" => b.toggle_face_orientation(),
+        "toggle_grid" => b.toggle_grid(),
+        "set_select_gizmo_move" => b.set_select_gizmo_handle(0, boolean(v, "enabled")?),
+        "set_select_gizmo_rotate" => b.set_select_gizmo_handle(1, boolean(v, "enabled")?),
+        "set_select_gizmo_scale" => b.set_select_gizmo_handle(2, boolean(v, "enabled")?),
+        "set_transform_orientation" => {
+            let orientation = petunia_core::TransformOrientation::from_offered_id(string(v, "id")?)
+                .ok_or_else(|| "Orientação inválida (global, local, normal, view)".to_string())?;
+            if b.state.session.transform_orientation == orientation {
+                false
+            } else {
+                b.state.set_transform_orientation(orientation);
+                b.state.mark_dirty();
+                true
+            }
+        }
+        "select_policy" => {
+            let policy =
+                petunia_core::SelectPolicy::from_id(string(v, "id")?).ok_or_else(|| {
+                    "Política de seleção inválida (auto, visible, through)".to_string()
+                })?;
+            b.state.set_select_policy(policy);
+            b.clear_hover();
+            b.state.mark_dirty();
+            true
+        }
+        "toggle_world_axis" => b.toggle_world_axis(index(v, "axis")?),
+        "set_viewport_grid" => b.set_viewport_grid(
+            number(v, "size")?,
+            number(v, "spacing")?,
+            number(v, "opacity")?,
+        ),
         "toggle_loop_cut_balanced" => b.toggle_loop_cut_balanced(),
         "toggle_menu" => b.toggle_menu(string(v, "id")?),
         "toggle_micro_inspector" => b.toggle_micro_inspector(),
         "toggle_paint_layer_lock" => b.toggle_paint_layer_lock(string(v, "id")?),
         "toggle_paint_layer_visibility" => b.toggle_paint_layer_visibility(string(v, "id")?),
         "toggle_paint_pip" => b.toggle_paint_pip(),
+        "toggle_paint_isolate" => b.toggle_paint_isolate(),
+        "set_operation_mode" => b.set_operation_mode(string(v, "mode")?),
         "toggle_paint_symmetry_x" => b.toggle_paint_symmetry_x(),
         "toggle_paint_symmetry_y" => b.toggle_paint_symmetry_y(),
         "toggle_paint_symmetry_z" => b.toggle_paint_symmetry_z(),
@@ -1619,10 +1966,22 @@ fn dispatch_controller(
             boolean(v, "fine")?,
             boolean(v, "snap")?,
         ),
+        "uv_editor_press" => {
+            b.uv_editor_press(number(v, "u")?, number(v, "v")?, boolean(v, "extend")?)
+        }
+        "uv_box_select" => b.uv_box_select(
+            number(v, "x0")?,
+            number(v, "y0")?,
+            number(v, "x1")?,
+            number(v, "y1")?,
+            boolean(v, "extend")?,
+            boolean(v, "subtract")?,
+        ),
         "uv_editor_click" => {
             b.uv_editor_click(number(v, "u")?, number(v, "v")?, boolean(v, "extend")?)
         }
         "uv_equalize_texel_density" => b.uv_equalize_texel_density(),
+        "uv_select_island" => b.uv_select_island(index(v, "index")?, boolean(v, "extend")?),
         "uv_move_selected" => b.uv_move_selected(number(v, "du")?, number(v, "dv")?),
         "uv_rotate_selected" => b.uv_rotate_selected(number(v, "degrees")?),
         "uv_scale_selected" => b.uv_scale_selected(number(v, "factor")?),

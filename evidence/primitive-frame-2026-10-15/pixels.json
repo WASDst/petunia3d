@@ -1,0 +1,11 @@
+{
+  "backend": "Software3dViewport",
+  "boundary": "UiIntent::AddPrimitive -> model.add_cube; numeric re-edit adapter -> Core",
+  "native_qt": "not run",
+  "reference_changed_pixels": 0,
+  "resized_changed_pixels": 18721,
+  "size": [
+    800,
+    600
+  ]
+}

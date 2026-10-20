@@ -218,6 +218,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.gizmo_drag = None;
         self.tool_session.clear_numeric();
         self.instant_transform = false;
+        self.last_tool_press = None;
         cancelled
     }
 
@@ -232,6 +233,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if let Some(entry) = self.overlays.esc() {
                 self.hide_overlay(entry.id);
             }
+            return true;
+        }
+        if self.state.cancel_uv_transform() {
             return true;
         }
         if self.close_context_menu() {
@@ -335,14 +339,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.cancel_transform() {
             return true;
         }
-        if self.state.session.edit_pivot {
-            self.state.session.edit_pivot = false;
-            self.state.mark_dirty();
-            self.state.set_status(
-                self.state
-                    .t_id(petunia_config::text_id::STATUS_EDIT_PIVOT_EXITED),
-            );
+        if self.cancel_measure() {
             return true;
+        }
+        if self.state.session.edit_pivot {
+            return self.cancel_edit_pivot();
         }
         if let Some(entry) = self.overlays.esc() {
             self.hide_overlay(entry.id);
@@ -402,6 +403,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub(crate) fn confirm_active_operation(&mut self) -> bool {
+        if self.state.session.tools.uv_transform.is_some() {
+            if let Err(error) = self.state.commit_uv_transform() {
+                self.state.set_status(error.to_string());
+            }
+            return true;
+        }
         if self.decal_gesture.is_some() {
             let effect = self.tool_session.key(petunia_core::ToolKey::Confirm);
             if effect == petunia_core::ToolEffect::Nothing {
@@ -445,6 +452,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.drag.is_some() {
             return self.end_viewport_transform();
         }
-        self.commit_transform()
+        if self.commit_transform() {
+            return true;
+        }
+        // Nenhum gesto aberto: Enter confirma a sessão de Editar pivô.
+        self.state.session.edit_pivot && self.confirm_edit_pivot()
     }
 }

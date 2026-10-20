@@ -8,6 +8,16 @@ use petunia_core::{BRUSH_PX_PER_UNIT, BrushBlend, BrushPreset, BrushTip, BrushTy
 
 use crate::{PetuniaViewport, SlintUiBridge, UiIntent};
 
+/// Miniatura/informação de um preset para a prateleira de pincéis (C2).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct BrushPresetInfo {
+    pub name: String,
+    pub kind: String,
+    pub size_px: f32,
+    pub hardness: f32,
+    pub active: bool,
+}
+
 /// Valores do painel de pincel para o shell.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BrushPanelModel {
@@ -23,6 +33,7 @@ pub struct BrushPanelModel {
     pub tip: String,
     pub blend: String,
     pub presets: Vec<String>,
+    pub presets_info: Vec<BrushPresetInfo>,
     pub active_preset: i32,
     pub clone_source_set: bool,
 }
@@ -93,8 +104,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn brush_panel_model(&self) -> BrushPanelModel {
         let tools = &self.state.session.tools;
         let style = tools.brush_style;
-        let mut names: Vec<String> = BrushPreset::builtin().into_iter().map(|p| p.name).collect();
-        names.extend(self.brush_presets.iter().map(|p| p.name.clone()));
+        let builtin = BrushPreset::builtin();
+        let all: Vec<&BrushPreset> = builtin.iter().chain(self.brush_presets.iter()).collect();
+        let names: Vec<String> = all.iter().map(|preset| preset.name.clone()).collect();
+        let active = self.active_brush_preset.map_or(-1, |index| index as i32);
+        let presets_info = all
+            .iter()
+            .enumerate()
+            .map(|(index, preset)| BrushPresetInfo {
+                name: preset.name.clone(),
+                kind: tool_id_for_brush(preset.settings.kind).to_string(),
+                size_px: preset.settings.size_px,
+                hardness: preset.settings.hardness,
+                active: index as i32 == active,
+            })
+            .collect();
         BrushPanelModel {
             flow: tools.brush_flow,
             spacing: tools.brush_spacing,
@@ -108,7 +132,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             tip: tip_id(style.tip).to_string(),
             blend: blend_id(style.blend).to_string(),
             presets: names,
-            active_preset: self.active_brush_preset.map_or(-1, |i| i as i32),
+            presets_info,
+            active_preset: active,
             clone_source_set: tools.clone_source.is_some(),
         }
     }

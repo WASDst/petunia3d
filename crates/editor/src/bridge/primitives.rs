@@ -30,7 +30,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn active_primitive_descriptor_or_session(
         &self,
     ) -> Option<petunia_core::PrimitiveDescriptor> {
-        if let Some(session) = &self.state.session.primitive_session {
+        if self.state.primitive_session_valid()
+            && let Some(session) = &self.state.session.primitive_session
+        {
             Some(session.descriptor)
         } else {
             self.state.active_primitive_descriptor()
@@ -46,6 +48,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn update_primitive_param_float(&mut self, param: &str, value: f32) -> bool {
+        if !value.is_finite() {
+            self.state.set_status("Primitive parameters must be finite");
+            return false;
+        }
         let Some(desc) = self.active_primitive_descriptor_or_session() else {
             return false;
         };

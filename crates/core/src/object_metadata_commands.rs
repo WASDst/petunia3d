@@ -1,7 +1,7 @@
 //! Authored object presentation metadata uses the shared transactional writer.
 use crate::{Command, CommandContext, CommandError};
 use petunia_project::ProjectChanges;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct SetAssetSelectionColorCmd {
     pub object: uuid::Uuid,
     pub color: Option<[u8; 3]>,
@@ -12,6 +12,18 @@ impl Command for SetAssetSelectionColorCmd {
     }
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::SELECTION
+    }
+    fn can_execute(&self, state: &crate::EditorView<'_>) -> Result<(), &'static str> {
+        let asset = state
+            .document
+            .assets
+            .iter()
+            .find(|a| a.id == self.object)
+            .ok_or("object not found")?;
+        if asset.locked {
+            return Err("object is locked");
+        }
+        Ok(())
     }
     fn execute(&self, ctx: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let asset = ctx

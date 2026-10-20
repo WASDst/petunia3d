@@ -30,6 +30,25 @@ pub enum InsetMode {
     Individual,
 }
 
+impl InsetMode {
+    /// Identificador estável (snapshot, comandos e interface).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Region => "region",
+            Self::Individual => "individual",
+        }
+    }
+
+    /// Converte o identificador publicado pela interface.
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "region" => Some(Self::Region),
+            "individual" => Some(Self::Individual),
+            _ => None,
+        }
+    }
+}
+
 /// Resultado do inset.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct InsetReport {

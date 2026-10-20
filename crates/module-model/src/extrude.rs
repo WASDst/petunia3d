@@ -30,7 +30,11 @@ impl Tool for ExtrudeTool {
 impl ExtrudeTool {
     pub fn apply(state: &mut AppState) {
         let d = state.extrude_dist;
-        let cmd = petunia_core::ExtrudeSelectedCmd { dist: d };
+        let cmd = petunia_core::ExtrudeSelectedCmd {
+            dist: d,
+            // `None`: usa o modo escolhido na ferramenta (C8).
+            mode: None,
+        };
         if let Err(err) = state.dispatch(&cmd) {
             state.set_status(format!("extrude: {err}"));
         }

@@ -4,7 +4,7 @@
 
 DRAW deixa de ser um motor geométrico separado.
 
-DRAW e POLY passam a ser **perfis de interação sobre o mesmo Modeling Engine**.
+DRAW e POLY são **presets de apresentação e navegação do mesmo Modeling Engine**, com ferramentas e representações compartilhadas. Ativar o preset planar é explícito; retornar à vista livre preserva documento e seleção.
 
 ## Princípio
 
@@ -23,7 +23,7 @@ Modeling Engine
 └── topology operations
 ```
 
-Os workspaces determinam:
+Os presets podem priorizar a apresentação, sem restringir capacidades:
 - ferramentas priorizadas;
 - navegação;
 - projeção;
@@ -90,6 +90,6 @@ O `ProfileState` transitório duplicado deve desaparecer gradualmente em favor d
 
 Não haverá segunda taxonomia global exclusiva de DRAW.
 
-Mesh continua usando Object / Vertex / Edge / Face.
+Mesh mantém Object / Vertex / Edge / Face como identidades de alvo e filtros. O fluxo contextual aprovado dispensa trocar obrigatoriamente entre modos globais; sua implementação é rastreada em H22.
 
 Spline e outros objetos podem oferecer componentes contextuais próprios sem criar outro modo global concorrente.

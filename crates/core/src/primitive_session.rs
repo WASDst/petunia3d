@@ -115,6 +115,117 @@ impl PrimitiveDescriptorExt for PrimitiveDescriptor {
     }
 }
 
+/// Build only bounded, finite authoring data. The descriptor builders retain
+/// their existing numeric clamps; non-finite inputs must never be persisted.
+pub(crate) fn build_primitive(
+    descriptor: PrimitiveDescriptor,
+) -> Result<petunia_mesh::Mesh, &'static str> {
+    use PrimitiveDescriptor::*;
+    let finite = match descriptor {
+        Box {
+            width,
+            height,
+            depth,
+        }
+        | Wedge {
+            width,
+            height,
+            depth,
+        } => [width, height, depth].into_iter().all(f32::is_finite),
+        Plane { width, height } => width.is_finite() && height.is_finite(),
+        Cylinder { radius, height, .. } | Capsule { radius, height, .. } => {
+            radius.is_finite() && height.is_finite()
+        }
+        Cone {
+            bottom_radius,
+            top_radius,
+            height,
+            ..
+        } => [bottom_radius, top_radius, height]
+            .into_iter()
+            .all(f32::is_finite),
+        Torus {
+            major_radius,
+            minor_radius,
+            ..
+        } => major_radius.is_finite() && minor_radius.is_finite(),
+        Circle { radius, .. } | LowSphere { radius, .. } | Icosphere { radius, .. } => {
+            radius.is_finite()
+        }
+    };
+    if !finite {
+        return Err("Primitive parameters must be finite");
+    }
+    let mesh = descriptor.build();
+    if mesh.verts.is_empty() || mesh.validate_invariants().is_err() {
+        return Err("Invalid primitive geometry");
+    }
+    Ok(mesh)
+}
+
+/// Prepare before checkpoint/publication. New primitives regenerate in their
+/// object frame. Legacy translation-only sources keep their old representation;
+/// an untracked baked rotation/scale cannot be inferred from accumulated Euler
+/// metadata, so refuse rather than silently erase it.
+pub(crate) fn regenerate_primitive(
+    asset: &petunia_project::Asset,
+    descriptor: PrimitiveDescriptor,
+) -> Result<petunia_mesh::Mesh, &'static str> {
+    let source = asset.parametric.ok_or("Object is no longer parametric")?;
+    if asset.locked {
+        return Err("Primitive is locked");
+    }
+    if asset.skeleton_id.is_some() || asset.skin_data.is_some() {
+        return Err("Rigged primitive regeneration requires bind compensation");
+    }
+    let mut mesh = build_primitive(descriptor)?;
+    let legacy = asset.has_legacy_baked_transform();
+    let offset = if legacy {
+        asset
+            .origin
+            .map(glam::Vec3::from)
+            .unwrap_or_else(|| asset.mesh.center())
+    } else {
+        glam::Vec3::ZERO
+    };
+    let original = build_primitive(source)?;
+    if !offset.is_finite()
+        || original.verts.len() != asset.mesh.verts.len()
+        || original.faces.len() != asset.mesh.faces.len()
+        || original
+            .verts
+            .iter()
+            .zip(&asset.mesh.verts)
+            .any(|(a, b)| !b.vec().is_finite() || (a.vec() + offset).distance(b.vec()) > 1.0e-4)
+        || original
+            .faces
+            .iter()
+            .zip(&asset.mesh.faces)
+            .any(|(a, b)| a.verts != b.verts)
+    {
+        return Err(
+            "Primitive has baked or free geometry edits; Make Editable preserves its surface",
+        );
+    }
+    if legacy {
+        for vertex in &mut mesh.verts {
+            vertex.pos = (vertex.vec() + offset).to_array();
+        }
+    }
+    let matrix = asset.world_matrix();
+    if !asset.transform.is_finite()
+        || !matrix.is_finite()
+        || !matrix.inverse().is_finite()
+        || mesh
+            .verts
+            .iter()
+            .any(|v| !v.vec().is_finite() || !matrix.transform_point3(v.vec()).is_finite())
+    {
+        return Err("Primitive object frame must be finite and invertible");
+    }
+    Ok(mesh)
+}
+
 /// Criação em andamento: alvo + parâmetros + contexto de reversão.
 #[derive(Debug, Clone)]
 pub struct PrimitiveCreationSession {
@@ -122,8 +233,6 @@ pub struct PrimitiveCreationSession {
     pub asset_id: Uuid,
     /// Parâmetros vivos (cada edição regenera a malha).
     pub descriptor: PrimitiveDescriptor,
-    /// Offset do cursor capturado no `begin` (reaplicado a cada regeneração).
-    pub cursor_offset: [f32; 3],
     /// Rótulo do checkpoint de inserção (validade = ainda no topo do undo).
     pub undo_label: String,
     /// Seleção da sessão antes do `begin` (restauração do `cancel`).

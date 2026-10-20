@@ -43,8 +43,22 @@ impl ApplicationState {
         self.application.execute_command(command)
     }
 
+    pub fn dispatch_detailed(
+        &mut self,
+        command: &dyn petunia_core::Command,
+    ) -> Result<petunia_core::CommandExecutionReport, petunia_core::CommandError> {
+        self.application.execute_command_detailed(command)
+    }
+
     pub fn dispatch_command(&mut self, id: &str) -> Result<(), petunia_core::CommandError> {
         self.application.execute_registered_command(id)
+    }
+
+    pub fn dispatch_command_detailed(
+        &mut self,
+        id: &str,
+    ) -> Result<petunia_core::CommandExecutionReport, petunia_core::CommandError> {
+        self.application.execute_registered_command_detailed(id)
     }
 
     pub fn undo(&mut self) -> bool {
@@ -120,6 +134,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             parametric_tool: None,
             tool_gesture: None,
             tool_press_extend: false,
+            tool_press_subtract: false,
             tool_pointer_alt: false,
             tool_press_alternate: false,
             poly_pen_points: Vec::new(),
@@ -308,6 +323,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.inspector_visible = !self.inspector_visible;
                 self.state.mark_dirty();
             }
+            UiIntent::SetNavigationAnchor(anchor) => {
+                self.state.session.navigation_anchor = anchor;
+                self.state.mark_dirty();
+            }
+            UiIntent::BeginUvTransform(kind) => {
+                if let Err(error) = self.state.begin_uv_transform(kind) {
+                    self.state.set_status(error.to_string());
+                }
+            }
+            UiIntent::UpdateUvTransform(transform) => {
+                if let Err(error) = self.state.update_uv_transform(transform) {
+                    self.state.set_status(error.to_string());
+                }
+            }
+            UiIntent::CommitUvTransform => {
+                if let Err(error) = self.state.commit_uv_transform() {
+                    self.state.set_status(error.to_string());
+                }
+            }
+            UiIntent::CancelUvTransform => {
+                self.state.cancel_uv_transform();
+            }
+            UiIntent::SetSelectThrough(enabled) => {
+                self.state.set_select_through(enabled);
+                self.clear_hover();
+                self.state.mark_dirty();
+            }
             UiIntent::TogglePlanarNavigation => {
                 // A transição (guardar/alinhar ou restaurar a câmera) acontece
                 // em `sync_viewport_context`, ao fim deste `apply`.
@@ -348,6 +390,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 fine,
             } => {
                 self.scrub_transform(kind, axis, delta, fine);
+            }
+            UiIntent::SetAssetTransform {
+                asset_index,
+                translation,
+                rotation_euler_deg,
+                scale,
+            } => {
+                let cmd = petunia_core::SetAssetTransformCmd {
+                    asset_index,
+                    translation,
+                    rotation_euler_deg,
+                    scale,
+                };
+                if let Err(error) = self.state.dispatch(&cmd) {
+                    self.state.set_status(error.to_string());
+                } else {
+                    self.reset_transform_fields();
+                    self.state.mark_dirty();
+                }
             }
             UiIntent::ViewportSelection(intent) => self.apply_viewport_selection(intent),
             UiIntent::ViewportGesture(gesture) => {
@@ -411,6 +472,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &path,
                     &petunia_project::pipeline::ImportOptions::default(),
                 ) {
+                    Ok(names) if names.is_empty() => {
+                        // Arquivo lido, mas sem malha: não é sucesso.
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_NO_MESH_IMPORTED),
+                            &[("0", format!("{}", path.display()))],
+                        ));
+                    }
                     Ok(names) => self.state.set_status(crate::tr::fill(
                         &self
                             .state
@@ -696,6 +766,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection = val;
             }
             UiIntent::SetActiveTool(tool) => {
+                // Escolher outra ferramenta durante o Editar pivô confirma o pivô
+                // (só o Mover sabe deslocar a origem).
+                if self.state.session.edit_pivot && tool != "move" {
+                    self.state.session.edit_pivot_session = None;
+                    self.state.session.edit_pivot = false;
+                    self.state.set_status("Pivot confirmed.");
+                }
                 if self.state.session.tools.active_tool != tool {
                     self.previous_tool = self.state.session.tools.active_tool.clone();
                 }
@@ -1171,6 +1248,51 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             UiIntent::ProfileLookAtPlane => {
                 petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                 self.state.mark_dirty();
+            }
+            UiIntent::SetVisualAssistanceProfile(profile) => {
+                self.state.set_visual_assistance_profile(profile);
+                self.state.mark_dirty();
+            }
+            UiIntent::SetClayMode(mode) => {
+                self.state.set_clay_mode(mode);
+                self.state.mark_dirty();
+            }
+            UiIntent::SetClayLighting(lighting) => {
+                self.state.set_clay_lighting(lighting);
+                self.state.mark_dirty();
+            }
+            UiIntent::ToggleCompanionView => {
+                self.state.toggle_companion_view();
+                self.state.mark_dirty();
+            }
+            UiIntent::SetCompanionViewTrigger(trigger) => {
+                self.state.set_companion_view_trigger(trigger);
+                self.state.mark_dirty();
+            }
+            UiIntent::BeginModalTransform(kind) => {
+                self.begin_keyboard_transform(kind);
+            }
+            UiIntent::CommitModalTransform => {
+                self.confirm_active_operation();
+            }
+            UiIntent::CancelModalTransform => {
+                self.cancel_active_operation();
+            }
+            UiIntent::SetModalConstraint(constraint) => {
+                let _ = self.state.set_modal_constraint(constraint);
+                if let Some(drag) = self.drag.as_mut() {
+                    drag.rotation_angle = 0.0;
+                    drag.last_angle = 0.0;
+                }
+                if !self.tool_session.numeric_text().is_empty() {
+                    self.preview_modal_text();
+                } else {
+                    let [x, y] = self.pointer_position;
+                    self.update_viewport_transform(x, y);
+                }
+            }
+            UiIntent::SetToolActivation(activation) => {
+                self.state.session.tools.tool_activation = activation;
             }
         }
         self.sync_viewport_context();

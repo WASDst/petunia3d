@@ -45,6 +45,7 @@ impl RegionPlane {
 }
 
 /// Perfis coplanares e suas polilinhas no espaço do plano.
+#[derive(Clone)]
 pub(crate) struct ProfileGroup {
     pub plane: RegionPlane,
     pub profiles: Vec<uuid::Uuid>,
@@ -53,6 +54,29 @@ pub(crate) struct ProfileGroup {
 }
 
 impl ProfileGroup {
+    pub(crate) fn filter_by_operands(&self, operands: &[uuid::Uuid]) -> Self {
+        let mut profiles = Vec::new();
+        let mut lines = Vec::new();
+        let mut shapes = Vec::new();
+        for (i, id) in self.profiles.iter().enumerate() {
+            if operands.contains(id) {
+                profiles.push(*id);
+                if let Some(line) = self.lines.get(i) {
+                    lines.push(line.clone());
+                }
+                if let Some(shape) = self.shapes.get(i) {
+                    shapes.push(shape.clone());
+                }
+            }
+        }
+        Self {
+            plane: self.plane,
+            profiles,
+            lines,
+            shapes,
+        }
+    }
+
     pub(crate) fn regions(&self) -> Vec<Region2> {
         let mut boundaries = self.lines.clone();
         for shape in self.shapes.iter().flatten() {
@@ -542,5 +566,43 @@ mod tests {
         assert_eq!(mesh.faces.len(), faces, "sem imprint duplicado");
         assert!(mesh.verts.iter().any(|v| (v.pos[2] - 1.6).abs() < 1e-4));
         assert!((adjusted.value - 0.6).abs() < 1e-6);
+    }
+
+    const OUTER_SQUARE: [[f64; 2]; 4] = [[-0.8, -0.8], [0.8, -0.8], [0.8, 0.8], [-0.8, 0.8]];
+    const INNER_SQUARE: [[f64; 2]; 4] = [[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]];
+
+    #[test]
+    fn region_with_hole_on_a_face_is_imprinted_and_extruded_as_one_undo() {
+        let mut state = state_with_profiles(&[
+            (&OUTER_SQUARE, front_face_plane()),
+            (&INNER_SQUARE, front_face_plane()),
+        ]);
+        let faces_before = state.project.active_mesh().unwrap().faces.len();
+        let depth_before = state.project.undo.depth();
+        let (origin, direction) = ray_at(&state, 0.5, 0.5);
+        let hit = state.profile_region_at_ray(origin, direction).unwrap();
+        assert!(!hit.region.holes.is_empty(), "Região deve ter furo interno");
+        assert!(state.region_host_face(&hit).is_some());
+
+        state.begin_region_push_pull(&hit).unwrap();
+        state.update_modal(Vec3::ZERO, 0.4).unwrap();
+        assert!(state.commit_modal());
+        let mesh = state.project.active_mesh().unwrap();
+        assert!(
+            mesh.faces.len() > faces_before,
+            "Malha dividida e extrudada"
+        );
+        assert_eq!(
+            state.project.undo.depth().0,
+            depth_before.0 + 1,
+            "Operação atômica em um único Undo"
+        );
+
+        assert!(state.undo());
+        assert_eq!(
+            state.project.active_mesh().unwrap().faces.len(),
+            faces_before,
+            "Undo restaura exatamente o cubo original"
+        );
     }
 }

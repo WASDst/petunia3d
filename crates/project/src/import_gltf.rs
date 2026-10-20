@@ -78,7 +78,6 @@ const MAX_VERTICES: usize = 1_000_000;
 const MAX_FACES: usize = 1_000_000;
 const MAX_BUFFER_BYTES: usize = 256 * 1024 * 1024;
 const MAX_IMAGES: usize = 64;
-const MAX_CANVAS_DIM: u32 = crate::Canvas::MAX_SIDE;
 
 /// Imports a GLB (or glTF with embedded buffers) into meshes.
 ///
@@ -335,6 +334,20 @@ pub fn import_scene_bytes(
                     repair.faces_dropped
                 ));
             }
+            if repair.vertices_sanitized > 0 {
+                warnings.push(format!(
+                    "malha '{}': {} vértice(s) não-finito(s) sanitizado(s)",
+                    mesh.name().unwrap_or("?"),
+                    repair.vertices_sanitized
+                ));
+            }
+            if repair.uv_defaults_generated > 0 {
+                warnings.push(format!(
+                    "malha '{}': {} UV(s) padrão gerada(s)",
+                    mesh.name().unwrap_or("?"),
+                    repair.uv_defaults_generated
+                ));
+            }
             if out.verts.is_empty() || out.faces.is_empty() {
                 continue;
             }
@@ -502,26 +515,29 @@ fn resolve_buffer_uri(
             GltfImportError::Validation(format!("buffer {} com data URI inválido", buffer.index()))
         });
     }
-    if uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with("file://") {
-        return Err(GltfImportError::Validation(format!(
-            "buffer {} com URI remota (sem rede no import)",
-            buffer.index()
-        )));
-    }
     let Some(base) = base_dir else {
         return Err(GltfImportError::Validation(format!(
             "buffer {} externo ('{uri}') exige diretório base",
             buffer.index()
         )));
     };
-    let rel = percent_decode(uri);
-    let path = base.join(&rel);
+    let path = resolve_safe_path(base, uri)?;
     let bytes =
         std::fs::read(&path).map_err(|e| GltfImportError::Parse(format!("buffer '{uri}': {e}")))?;
     if bytes.len() > MAX_BUFFER_BYTES {
         return Err(GltfImportError::TooLarge);
     }
     Ok(bytes)
+}
+
+/// Resolve caminhos de URIs externas garantindo confinamento estrito no diretório base (I02).
+///
+/// Rejeita path traversal (`..`), caminhos absolutos (`/`, `C:\`, `\\`) e esquemas de rede.
+fn resolve_safe_path(base_dir: &Path, uri: &str) -> Result<std::path::PathBuf, GltfImportError> {
+    // Mesma regra do OBJ: caminho relativo, sem `..` e dentro do diretório base.
+    let rel_str = percent_decode(uri);
+    crate::external_path::resolve_external_path(base_dir, &rel_str)
+        .map_err(GltfImportError::Validation)
 }
 
 fn import_materials_list(
@@ -626,27 +642,7 @@ fn decode_texture_image(
     base_dir: Option<&Path>,
 ) -> Result<crate::Canvas, String> {
     let bytes = image_bytes(image, buffers, base_dir)?;
-    if bytes.len() > 64 * 1024 * 1024 {
-        return Err("imagem excede 64 MiB".to_string());
-    }
-    let dyn_img = image::load_from_memory(&bytes).map_err(|e| format!("decode: {e}"))?;
-    let mut rgba = dyn_img.to_rgba8();
-    let (w, h) = (rgba.width(), rgba.height());
-    if w == 0 || h == 0 {
-        return Err("imagem vazia".to_string());
-    }
-    if w > MAX_CANVAS_DIM || h > MAX_CANVAS_DIM {
-        let s = (MAX_CANVAS_DIM as f32 / w.max(h) as f32).min(1.0);
-        let nw = ((w as f32 * s) as u32).max(1);
-        let nh = ((h as f32 * s) as u32).max(1);
-        rgba = image::imageops::resize(&rgba, nw, nh, image::imageops::FilterType::Triangle);
-    }
-    let (w, h) = (rgba.width(), rgba.height());
-    Ok(crate::Canvas {
-        w,
-        h,
-        pixels: rgba.into_raw().into(),
-    })
+    crate::image_decode::decode_image_bytes(&bytes)
 }
 
 fn image_bytes(
@@ -670,17 +666,10 @@ fn image_bytes(
             if let Some(b64) = strip_data_uri(uri, None) {
                 return decode_b64(&b64).ok_or_else(|| "data URI de imagem inválido".to_string());
             }
-            if uri.starts_with("http://")
-                || uri.starts_with("https://")
-                || uri.starts_with("file://")
-            {
-                return Err("imagem remota (sem rede no import)".to_string());
-            }
             let Some(base) = base_dir else {
                 return Err(format!("imagem externa ('{uri}') exige diretório base"));
             };
-            let rel = percent_decode(uri);
-            let path = base.join(&rel);
+            let path = resolve_safe_path(base, uri).map_err(|e| e.to_string())?;
             std::fs::read(&path).map_err(|e| format!("imagem '{uri}': {e}"))
         }
     }

@@ -363,6 +363,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let color = [color[0], color[1], color[2]].map(|channel| channel as f32 / 255.0);
         self.state.paint_color = color;
         self.state.session.tools.paint_color = color;
+        self.state.finish_picker_sampling();
         self.state.mark_dirty();
         self.state.set_status(
             self.state

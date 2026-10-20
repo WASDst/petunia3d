@@ -44,7 +44,6 @@ pub(crate) const DRAW_ACTIONS: &[(&str, &str)] = &[
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn execute_draw_extension(&mut self, id: &str) -> bool {
         if !DRAW_ACTIONS.iter().any(|(key, _)| *key == id)
-            || self.modeling_mode != ModelingMode::Draw
             || self.state.workspace != Workspace::Model
             || self.profile_volume_mode.is_some()
             || self.state.modal.is_some()

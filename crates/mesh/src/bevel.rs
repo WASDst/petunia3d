@@ -91,17 +91,20 @@ pub(crate) fn bevel_edge_segments_clamped(
     let mut result = mesh.clone();
     let mut clamped = false;
     // Cada offset fica em uma aresta já existente; preserva os planos incidentes.
-    let mut offsets: HashMap<(u32, u32), (u32, f32)> = HashMap::new();
+    // offsets: (endpoint, neighbor) -> (id, t, uv_interpolada)
+    let mut offsets: HashMap<(u32, u32), (u32, f32, [f32; 2])> = HashMap::new();
     for &fi in &adjacent {
         let face = &mesh.faces[fi];
         for (endpoint, other) in [(a, b), (b, a)] {
             let k = face.verts.iter().position(|&v| v == endpoint)?;
-            let prev = face.verts[(k + face.verts.len() - 1) % face.verts.len()];
-            let next = face.verts[(k + 1) % face.verts.len()];
-            let neighbor = if prev == other {
-                next
+            let prev_k = (k + face.verts.len() - 1) % face.verts.len();
+            let next_k = (k + 1) % face.verts.len();
+            let prev = face.verts[prev_k];
+            let next = face.verts[next_k];
+            let (neighbor_k, neighbor) = if prev == other {
+                (next_k, next)
             } else if next == other {
-                prev
+                (prev_k, prev)
             } else {
                 return None;
             };
@@ -124,33 +127,44 @@ pub(crate) fn bevel_edge_segments_clamped(
             vertex.selected = true;
             let id = u32::try_from(result.verts.len()).ok()?;
             result.verts.push(vertex);
-            offsets.insert((endpoint, neighbor), (id, t));
+            let uv_offset = [
+                face.uv[k][0] + (face.uv[neighbor_k][0] - face.uv[k][0]) * t,
+                face.uv[k][1] + (face.uv[neighbor_k][1] - face.uv[k][1]) * t,
+            ];
+            offsets.insert((endpoint, neighbor), (id, t, uv_offset));
         }
     }
     if offsets.len() != 4 {
         return None;
     }
 
-    let edge_offsets = |fi: usize| -> Option<(u32, u32)> {
+    type OffsetEndpoint = (u32, [f32; 2]);
+    type EdgeOffsetPair = (OffsetEndpoint, OffsetEndpoint);
+
+    let edge_offsets = |fi: usize| -> Option<EdgeOffsetPair> {
         let face = &mesh.faces[fi];
-        let endpoint_offset = |endpoint, other| -> Option<u32> {
+        let endpoint_offset = |endpoint, other| -> Option<OffsetEndpoint> {
             let k = face.verts.iter().position(|&v| v == endpoint)?;
             let prev = face.verts[(k + face.verts.len() - 1) % face.verts.len()];
             let next = face.verts[(k + 1) % face.verts.len()];
             let neighbor = if prev == other { next } else { prev };
-            offsets.get(&(endpoint, neighbor)).map(|&(id, _)| id)
+            offsets
+                .get(&(endpoint, neighbor))
+                .map(|&(id, _, uv)| (id, uv))
         };
         Some((endpoint_offset(a, b)?, endpoint_offset(b, a)?))
     };
-    let (a1, b1) = edge_offsets(adjacent[0])?;
-    let (a2, b2) = edge_offsets(adjacent[1])?;
+    let ((a1, uv_a1), (b1, uv_b1)) = edge_offsets(adjacent[0])?;
+    let ((a2, uv_a2), (b2, uv_b2)) = edge_offsets(adjacent[1])?;
     let face = &mesh.faces[adjacent[0]];
     let k = face.verts.iter().position(|&v| v == a)?;
     let winding_reversed = face.verts[(k + 1) % face.verts.len()] == b;
 
     let segs = segments.clamp(1, MAX_BEVEL_SEGMENTS) as usize;
     let mut rings: Vec<(u32, u32)> = Vec::with_capacity(segs + 1);
+    let mut uv_rings: Vec<([f32; 2], [f32; 2])> = Vec::with_capacity(segs + 1);
     rings.push((a1, b1));
+    uv_rings.push((uv_a1, uv_b1));
 
     if segs > 1 {
         let p_a = mesh.verts[a as usize].vec();
@@ -181,9 +195,19 @@ pub(crate) fn bevel_edge_segments_clamped(
             result.verts.push(vb);
 
             rings.push((idx_a, idx_b));
+            let uv_a = [
+                uv_a1[0] + (uv_a2[0] - uv_a1[0]) * t,
+                uv_a1[1] + (uv_a2[1] - uv_a1[1]) * t,
+            ];
+            let uv_b = [
+                uv_b1[0] + (uv_b2[0] - uv_b1[0]) * t,
+                uv_b1[1] + (uv_b2[1] - uv_b1[1]) * t,
+            ];
+            uv_rings.push((uv_a, uv_b));
         }
     }
     rings.push((a2, b2));
+    uv_rings.push((uv_a2, uv_b2));
 
     for (fi, face) in mesh.faces.iter().enumerate() {
         if face.uv.len() != face.verts.len() {
@@ -208,7 +232,7 @@ pub(crate) fn bevel_edge_segments_clamped(
                     if neighbor == a || neighbor == b {
                         continue;
                     }
-                    let &(offset, t) = offsets.get(&(vertex, neighbor))?;
+                    let &(offset, t, _) = offsets.get(&(vertex, neighbor))?;
                     vertices.push(offset);
                     uvs.push([
                         face.uv[k][0] + (face.uv[neighbor_k][0] - face.uv[k][0]) * t,
@@ -216,8 +240,8 @@ pub(crate) fn bevel_edge_segments_clamped(
                     ]);
                 }
             } else {
-                let &(offset_prev, t_prev) = offsets.get(&(vertex, prev_neighbor))?;
-                let &(offset_next, t_next) = offsets.get(&(vertex, next_neighbor))?;
+                let &(offset_prev, t_prev, _) = offsets.get(&(vertex, prev_neighbor))?;
+                let &(offset_next, t_next, _) = offsets.get(&(vertex, next_neighbor))?;
                 let uv_prev = [
                     face.uv[k][0] + (face.uv[prev][0] - face.uv[k][0]) * t_prev,
                     face.uv[k][1] + (face.uv[prev][1] - face.uv[k][1]) * t_prev,
@@ -258,22 +282,25 @@ pub(crate) fn bevel_edge_segments_clamped(
                 uvs.push(uv_next);
             }
         }
-        result.faces[fi] = Face::with_uv(vertices, uvs);
+        let mut updated_face = Face::with_uv(vertices, uvs);
+        updated_face.material_slot = mesh.faces[fi].material_slot;
+        result.faces[fi] = updated_face;
     }
 
+    let ribbon_material_slot = mesh.faces[adjacent[0]].material_slot;
     for s in 0..segs {
         let (ra0, rb0) = rings[s];
         let (ra1, rb1) = rings[s + 1];
-        let indices = if winding_reversed {
-            vec![rb0, ra0, ra1, rb1]
+        let (uva0, uvb0) = uv_rings[s];
+        let (uva1, uvb1) = uv_rings[s + 1];
+        let (indices, uvs) = if winding_reversed {
+            (vec![rb0, ra0, ra1, rb1], vec![uvb0, uva0, uva1, uvb1])
         } else {
-            vec![ra0, rb0, rb1, ra1]
+            (vec![ra0, rb0, rb1, ra1], vec![uva0, uvb0, uvb1, uva1])
         };
-        let mut ribbon = Face::with_uv(
-            indices,
-            vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-        );
+        let mut ribbon = Face::with_uv(indices, uvs);
         ribbon.selected = true;
+        ribbon.material_slot = ribbon_material_slot;
         result.faces.push(ribbon);
     }
 
@@ -434,30 +461,36 @@ pub(crate) fn bevel_vertex(mesh: &Mesh, v: u32, amount: f32, clamp_overlap: bool
                 new_uvs.push(uv);
             }
         }
-        result.faces[fi] = Face::with_uv(new_verts, new_uvs);
+        let mut updated_face = Face::with_uv(new_verts, new_uvs);
+        updated_face.material_slot = mesh.faces[fi].material_slot;
+        result.faces[fi] = updated_face;
         // O corte na face fi vai de new_prev para new_next.
         // A face de fechamento (cap) deve percorrer o segmento no sentido oposto: new_next -> new_prev.
-        cut_segments.push((new_next, new_prev));
+        cut_segments.push((new_next, new_prev, uv_new_next, uv_new_prev));
     }
 
     // Encadeia os cut_segments para formar o polígono da face de fechamento (cap face)
     let mut cap_verts = Vec::new();
-    let current = cut_segments[0].0;
+    let mut cap_uvs = Vec::new();
+    let (current, mut target, current_uv, mut target_uv) = cut_segments[0];
     cap_verts.push(current);
-    let mut target = cut_segments[0].1;
+    cap_uvs.push(current_uv);
 
     for _ in 1..cut_segments.len() {
         cap_verts.push(target);
+        cap_uvs.push(target_uv);
         let next_seg = cut_segments.iter().find(|seg| seg.0 == target)?;
         target = next_seg.1;
+        target_uv = next_seg.3;
     }
     if target != cap_verts[0] {
         return None;
     }
 
-    let mut cap_face = Face::new(cap_verts);
+    let mut cap_face = Face::with_uv(cap_verts, cap_uvs);
     cap_face.selected = true;
-    cap_face.fix_uv();
+    let cap_material_slot = mesh.faces[incident_faces[0]].material_slot;
+    cap_face.material_slot = cap_material_slot;
     result.faces.push(cap_face);
 
     result.selected_edges.clear();

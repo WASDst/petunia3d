@@ -1,5 +1,5 @@
-//! Contorno de seleção de objetos em largura constante: máscara dos
-//! selecionados num FBO próprio → dilatação em tela cheia → composição.
+//! Contorno de objetos em largura constante, com a cor de cada parte: máscara
+//! colorida num FBO próprio → dilatação em tela cheia → composição.
 //! (Não usa mesh escalada: falha em côncavos e escala não uniforme.)
 
 use glow::HasContext;
@@ -10,20 +10,21 @@ use super::target::{AuxFormat, ensure_target};
 use crate::frame::RenderFrameInput;
 
 impl GlRenderer {
-    /// Grava a máscara (R = selecionado, G = ativo). `false` sem seleção.
+    /// Grava a máscara (RGB = cor do contorno, A = coberto). `false` sem entradas.
     pub(super) unsafe fn draw_outline_mask(&mut self, frame: &RenderFrameInput<'_>) -> bool {
         let outline = frame.outline;
-        if outline.selected.is_empty()
-            || !frame
+        if !outline.entries.iter().any(|entry| {
+            frame
                 .objects
                 .iter()
-                .any(|object| outline.selected.contains(&object.object_id))
-        {
+                .any(|object| object.object_id == entry.object_id)
+        }) {
             return false;
         }
         let gl = std::sync::Arc::clone(&self.gl);
         let (width, height) = (frame.viewport.width, frame.viewport.height);
-        let Some(mask) = ensure_target(&gl, &mut self.outline_mask, width, height, AuxFormat::Rg8)
+        let Some(mask) =
+            ensure_target(&gl, &mut self.outline_mask, width, height, AuxFormat::Rgba8)
         else {
             return false;
         };
@@ -38,13 +39,11 @@ impl GlRenderer {
         program.bind(&gl);
         program.mat4(&gl, "uViewProj", &frame.camera.view_proj);
         let mut drew = false;
-        // O ativo por último: sua marca G vence onde se sobrepõe.
-        for active_pass in [false, true] {
-            program.vec2(&gl, "uValue", [1.0, if active_pass { 1.0 } else { 0.0 }]);
-            drew |= self.draw_positions(frame, program, |object| {
-                outline.selected.contains(&object.object_id)
-                    && (outline.active == Some(object.object_id)) == active_pass
-            });
+        // Ordem das entradas: a última vence onde as silhuetas se sobrepõem.
+        for entry in &outline.entries {
+            program.vec4(&gl, "uColor", entry.color);
+            drew |=
+                self.draw_positions(frame, program, |object| object.object_id == entry.object_id);
         }
         gl.enable(glow::DEPTH_TEST);
         drew
@@ -60,8 +59,6 @@ impl GlRenderer {
         let program = &self.programs.outline;
         program.bind(gl);
         program.i32(gl, "uMask", 0);
-        program.vec4(gl, "uColor", outline.color);
-        program.vec4(gl, "uActiveColor", outline.active_color);
         program.f32(
             gl,
             "uRadius",

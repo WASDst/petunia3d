@@ -127,6 +127,10 @@ impl LegacyProjectWithSplines {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
         }
     }
@@ -203,6 +207,10 @@ impl LegacyProjectBeforeSplines {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
         }
     }
@@ -294,6 +302,16 @@ fn finish_load(
     format_version: u32,
     mode: LoadMode,
 ) -> Result<(Project, LoadReport), ProjectError> {
+    if mode == LoadMode::Strict {
+        for a in &project.assets {
+            if let Err(e) = petunia_mesh::validate_invariants(&a.mesh) {
+                return Err(ProjectError::RepairRequired(format!(
+                    "malha '{}' com invariantes violados: {e}",
+                    a.name
+                )));
+            }
+        }
+    }
     let before = repair_census(&project);
     project.validate();
     let after = repair_census(&project);
@@ -305,6 +323,15 @@ fn finish_load(
         .collect();
     if mode == LoadMode::Strict && !repairs.is_empty() {
         return Err(ProjectError::RepairRequired(repairs.join(", ")));
+    }
+    // Migração de schema (não é reparo): pilha legada de modifiers → Operation Graph.
+    let mut project = project;
+    let migrated = project.migrate_legacy_modifiers();
+    let mut repairs = repairs;
+    if migrated > 0 {
+        repairs.push(format!(
+            "modifiers legados migrados para o Operation Graph: {migrated}"
+        ));
     }
     Ok((
         project,
@@ -436,7 +463,10 @@ fn load_zip(bytes: &[u8]) -> Result<(Project, LoadSource, u32), ProjectError> {
         let mut entry = archive
             .by_index(i)
             .map_err(|e| ProjectError::Format(e.to_string()))?;
-        let name = entry.name().to_string();
+        let name = entry
+            .name()
+            .map_err(|e| ProjectError::Format(format!("invalid zip entry name: {e}")))?
+            .into_owned();
         if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
             return Err(ProjectError::Format(format!("path traversal: {name}")));
         }
@@ -813,6 +843,8 @@ mod tests {
                 material_id: None,
                 skeleton_id: None,
                 skin_data: None,
+                skinning_enabled: true,
+                live_rig: None,
                 favorite: false,
                 tags: vec![],
                 modifiers: vec![],
@@ -820,12 +852,15 @@ mod tests {
                 paint_stack: None,
                 surface_shading: Default::default(),
                 transform: Default::default(),
+                transform_locks: Default::default(),
                 eval_cache: None,
+                graph_cache: None,
                 parametric: None,
                 selection_overlay_color: None,
                 position: [0.0, 0.0, 0.0],
                 rotation: [0.0, 0.0, 0.0],
                 scale: [1.0, 1.0, 1.0],
+                composition: None,
             }],
             active: 42,
             palette: vec![],

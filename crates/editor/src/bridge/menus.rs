@@ -427,18 +427,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "mark_seam" => self.toggle_selected_uv_seams(),
                 "shade_smooth" => self.execute_core_command("model.shade_smooth").is_ok(),
                 "shade_flat" => self.execute_core_command("model.shade_flat").is_ok(),
-                "boolean_operand" => {
-                    if let Some(active) = self.state.project.active() {
-                        self.state.session.tools.boolean_operand = Some(active.id);
-                        self.state.set_status(
-                            self.state
-                                .t_id(petunia_config::text_id::STATUS_SET_AS_BOOLEAN_OPERAND),
-                        );
-                        true
-                    } else {
-                        false
-                    }
-                }
                 "origin_to_geometry" => self.set_origin_geometry(),
                 "origin_to_bottom" => self.set_origin_bottom(),
                 "origin_to_cursor" => self.set_origin_cursor(),
@@ -522,7 +510,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let _ = self.state.dispatch_command("view.frame_selection");
                 true
             }
-            "boolean_operand" => self.set_boolean_operand(&id),
             "origin_to_geometry" => {
                 self.select_asset_by_id(menu.asset);
                 self.set_origin_geometry()

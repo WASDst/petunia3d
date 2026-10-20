@@ -14,6 +14,8 @@ petunia_module_paint = { workspace = true }
 petunia_module_uv = { workspace = true }
 petunia_module_assets = { workspace = true }
 petunia_project = { workspace = true }
+petunia_config = { workspace = true }
+postcard = { version = "1", features = ["alloc"] }
 glam = { workspace = true }
 anyhow = { workspace = true }
 # Plugins Lua (E01). Fora do build padrão: compila Lua 5.4 em C (mlua vendored).
@@ -23,3 +25,7 @@ serde_json = { workspace = true, optional = true }
 [features]
 default = []
 lua-plugins = ["dep:petunia_plugins", "dep:serde_json"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+

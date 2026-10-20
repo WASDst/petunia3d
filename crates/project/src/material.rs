@@ -99,6 +99,9 @@ pub struct Material {
     pub metallic_texture: Option<Canvas>,
     pub emission_texture: Option<Canvas>,
     pub height_texture: Option<Canvas>,
+    /// Receita de nós que gera os mapas acima (O05); ausente em arquivos antigos.
+    #[serde(default)]
+    pub recipe: Option<crate::material_recipe::MaterialRecipe>,
 }
 
 impl Default for Material {
@@ -128,6 +131,7 @@ impl Material {
             metallic_texture: None,
             emission_texture: None,
             height_texture: None,
+            recipe: None,
         }
     }
 
@@ -285,6 +289,9 @@ impl Material {
         }
         if let Some(cv) = &mut self.height_texture {
             cv.validate();
+        }
+        if let Some(recipe) = &mut self.recipe {
+            recipe.repair();
         }
     }
 }

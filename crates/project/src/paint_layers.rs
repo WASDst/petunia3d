@@ -63,6 +63,63 @@ pub enum PaintEffect {
     HueSaturation { hue_shift_deg: f32, saturation: f32 },
 }
 
+impl PaintEffect {
+    /// Normaliza parâmetros hostis vindos do arquivo: valores não finitos
+    /// voltam ao padrão e os demais entram na faixa útil do efeito.
+    pub fn repair(&mut self) {
+        fn finite(value: &mut f32, fallback: f32) {
+            if !value.is_finite() {
+                *value = fallback;
+            }
+        }
+        match self {
+            Self::Pixelate { cell_size } => *cell_size = (*cell_size).clamp(1, 512),
+            Self::Posterize { levels } => *levels = (*levels).clamp(2, 64),
+            Self::Invert => {}
+            Self::Grain { intensity, .. } => {
+                finite(intensity, 0.15);
+                *intensity = intensity.clamp(0.0, 1.0);
+            }
+            Self::Levels {
+                in_min,
+                in_max,
+                gamma,
+                out_min,
+                out_max,
+            } => {
+                finite(in_min, 0.0);
+                finite(in_max, 1.0);
+                finite(gamma, 1.0);
+                finite(out_min, 0.0);
+                finite(out_max, 1.0);
+                *in_min = in_min.clamp(0.0, 1.0);
+                *in_max = in_max.clamp(0.0, 1.0).max(*in_min + 1.0e-3);
+                *gamma = gamma.clamp(0.1, 10.0);
+                *out_min = out_min.clamp(0.0, 1.0);
+                *out_max = out_max.clamp(0.0, 1.0);
+            }
+            Self::BrightnessContrast {
+                brightness,
+                contrast,
+            } => {
+                finite(brightness, 0.0);
+                finite(contrast, 0.0);
+                *brightness = brightness.clamp(-1.0, 1.0);
+                *contrast = contrast.clamp(-1.0, 1.0);
+            }
+            Self::HueSaturation {
+                hue_shift_deg,
+                saturation,
+            } => {
+                finite(hue_shift_deg, 0.0);
+                finite(saturation, 0.0);
+                *saturation = saturation.clamp(-1.0, 1.0);
+                *hue_shift_deg = hue_shift_deg.rem_euclid(360.0);
+            }
+        }
+    }
+}
+
 /// Fixação do decalque na superfície (cap. 39, "surface attachment"): um
 /// projetor ortogonal no espaço do objeto. Cada texel recebe a cor pela sua
 /// posição 3D projetada no plano do decalque, então o decalque fica onde foi
@@ -664,7 +721,8 @@ impl DecalLayer {
     }
 }
 
-/// Conteúdo específico da camada (Raster, Decal ou Efeito).
+/// Conteúdo específico da camada (Raster, Decal, Efeito ou Gradiente).
+/// Variantes **append-only** (valores serializados).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum LayerKind {
     /// Camada de pintura raster comum com canvas próprio (P3D-061).
@@ -673,6 +731,262 @@ pub enum LayerKind {
     Decal(DecalLayer),
     /// Camada de efeito não-destrutivo aplicada sobre a composição inferior (P3D-134, pós-V1).
     Effect(PaintEffect),
+    /// Preenchimento de gradiente editável, calculado por texel (ADR-C16, C3).
+    Gradient(GradientFill),
+}
+
+/// Limites de dados hostis das camadas (C1/C3).
+pub const MAX_LAYER_EFFECTS: usize = 16;
+pub const MAX_GRADIENT_STOPS: usize = 16;
+
+/// Máscara de camada ou de efeito (ADR-C16, C1): o quanto aparece em cada texel
+/// é a luminância × alfa do canvas (branco = mostra, preto = esconde). Pinta-se
+/// com as mesmas ferramentas da camada quando ela é o alvo de pintura.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LayerMask {
+    pub canvas: Canvas,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub inverted: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_one() -> f32 {
+    1.0
+}
+
+impl LayerMask {
+    /// Máscara branca (tudo aparece) do tamanho da textura.
+    pub fn new(w: u32, h: u32) -> Self {
+        Self {
+            canvas: Canvas::new(w.max(1), h.max(1), [255, 255, 255, 255]),
+            enabled: true,
+            inverted: false,
+        }
+    }
+
+    /// Cobertura `0..=1` no texel `(x, y)` de uma textura `w × h` (a máscara pode
+    /// ter outro tamanho: amostra pelo vizinho mais próximo). Desligada = 1.
+    pub fn coverage(&self, x: u32, y: u32, w: u32, h: u32) -> f32 {
+        if !self.enabled {
+            return 1.0;
+        }
+        let (mw, mh) = (self.canvas.w.max(1), self.canvas.h.max(1));
+        let mx = (u64::from(x) * u64::from(mw) / u64::from(w.max(1))).min(u64::from(mw - 1)) as u32;
+        let my = (u64::from(y) * u64::from(mh) / u64::from(h.max(1))).min(u64::from(mh - 1)) as u32;
+        let value = self.canvas.get(mx, my).map_or(1.0, |c| {
+            let luma =
+                (0.299 * f32::from(c[0]) + 0.587 * f32::from(c[1]) + 0.114 * f32::from(c[2]))
+                    / 255.0;
+            luma * f32::from(c[3]) / 255.0
+        });
+        if self.inverted { 1.0 - value } else { value }
+    }
+}
+
+/// Efeito aplicado só ao conteúdo de uma camada, antes da mescla dela (sub-camada,
+/// ADR-C16 item 7 / C1). Tem opacidade e máscara próprias.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LayerEffect {
+    pub id: uuid::Uuid,
+    pub effect: PaintEffect,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_one")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub mask: Option<LayerMask>,
+}
+
+impl LayerEffect {
+    pub fn new(effect: PaintEffect) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+            effect,
+            enabled: true,
+            opacity: 1.0,
+            mask: None,
+        }
+    }
+}
+
+/// Onde o pincel pinta na camada ativa (C1): o conteúdo, a máscara da camada ou
+/// a máscara de um dos seus efeitos.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PaintTarget {
+    #[default]
+    Content,
+    LayerMask,
+    EffectMask(uuid::Uuid),
+}
+
+/// Forma do gradiente (C3): é opção da camada, não ferramenta separada.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GradientKind {
+    #[default]
+    Linear,
+    Radial,
+    Angular,
+    Reflected,
+    Diamond,
+}
+
+impl GradientKind {
+    pub const ALL: [Self; 5] = [
+        Self::Linear,
+        Self::Radial,
+        Self::Angular,
+        Self::Reflected,
+        Self::Diamond,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Linear => "linear",
+            Self::Radial => "radial",
+            Self::Angular => "angular",
+            Self::Reflected => "reflected",
+            Self::Diamond => "diamond",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.id() == id)
+    }
+}
+
+/// Parada de cor do gradiente (`position` em `0..=1`).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GradientStop {
+    pub position: f32,
+    pub color: [u8; 4],
+}
+
+/// Preenchimento de gradiente editável (C3). `start`/`end` em UV da textura
+/// (origem no topo-esquerdo, como o canvas 2D). Nada é rasterizado no documento:
+/// o texel é calculado na composição, então editar não perde qualidade.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GradientFill {
+    pub kind: GradientKind,
+    pub stops: Vec<GradientStop>,
+    pub start: [f32; 2],
+    pub end: [f32; 2],
+    /// Repete além das pontas (senão mantém a cor da ponta).
+    #[serde(default)]
+    pub repeat: bool,
+}
+
+impl GradientFill {
+    pub fn new(from: [u8; 4], to: [u8; 4]) -> Self {
+        Self {
+            kind: GradientKind::Linear,
+            stops: vec![
+                GradientStop {
+                    position: 0.0,
+                    color: from,
+                },
+                GradientStop {
+                    position: 1.0,
+                    color: to,
+                },
+            ],
+            start: [0.0, 0.5],
+            end: [1.0, 0.5],
+            repeat: false,
+        }
+    }
+
+    /// Repara dado hostil: pontos finitos, 2..=16 paradas ordenadas em `0..=1`.
+    pub fn repair(&mut self) {
+        let finite = |p: [f32; 2], fallback: [f32; 2]| {
+            if p.iter().all(|v| v.is_finite()) {
+                p
+            } else {
+                fallback
+            }
+        };
+        self.start = finite(self.start, [0.0, 0.5]);
+        self.end = finite(self.end, [1.0, 0.5]);
+        self.stops.retain(|stop| stop.position.is_finite());
+        for stop in &mut self.stops {
+            stop.position = stop.position.clamp(0.0, 1.0);
+        }
+        self.stops.truncate(MAX_GRADIENT_STOPS);
+        if self.stops.len() < 2 {
+            *self = Self::new([0, 0, 0, 255], [255, 255, 255, 255]);
+        }
+        self.stops.sort_by(|a, b| a.position.total_cmp(&b.position));
+    }
+
+    /// Parâmetro `t` do texel no gradiente (antes de grampear/repetir).
+    fn parameter(&self, u: f32, v: f32) -> f32 {
+        let (sx, sy) = (self.start[0], self.start[1]);
+        let (dx, dy) = (self.end[0] - sx, self.end[1] - sy);
+        let length_sq = dx * dx + dy * dy;
+        // Eixo degenerado (ou não finito): sem direção, o gradiente é constante.
+        let usable = length_sq.is_finite() && length_sq > 1.0e-12;
+        if !usable {
+            return 0.0;
+        }
+        let length = length_sq.sqrt();
+        let (px, py) = (u - sx, v - sy);
+        // Coordenadas no frame do gradiente: ao longo e através do eixo.
+        let along = (px * dx + py * dy) / length_sq;
+        let across = (px * -dy + py * dx) / length_sq;
+        match self.kind {
+            GradientKind::Linear => along,
+            GradientKind::Reflected => along.abs(),
+            GradientKind::Radial => (px * px + py * py).sqrt() / length,
+            GradientKind::Diamond => along.abs() + across.abs(),
+            GradientKind::Angular => {
+                let angle = py.atan2(px) - dy.atan2(dx);
+                angle.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU
+            }
+        }
+    }
+
+    /// Cor do texel `(x, y)` de uma textura `w × h`.
+    pub fn sample(&self, x: u32, y: u32, w: u32, h: u32) -> [u8; 4] {
+        let u = (x as f32 + 0.5) / w.max(1) as f32;
+        let v = (y as f32 + 0.5) / h.max(1) as f32;
+        let mut t = self.parameter(u, v);
+        if !t.is_finite() {
+            t = 0.0;
+        }
+        t = if self.repeat {
+            t.rem_euclid(1.0)
+        } else {
+            t.clamp(0.0, 1.0)
+        };
+        self.color_at(t)
+    }
+
+    /// Cor no parâmetro `t` (paradas ordenadas; fora delas, a cor da ponta).
+    pub fn color_at(&self, t: f32) -> [u8; 4] {
+        let Some(first) = self.stops.first() else {
+            return [0, 0, 0, 0];
+        };
+        if t <= first.position {
+            return first.color;
+        }
+        for pair in self.stops.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            if t <= b.position {
+                let span = (b.position - a.position).max(1.0e-6);
+                let k = ((t - a.position) / span).clamp(0.0, 1.0);
+                let mix = |i: usize| {
+                    (f32::from(a.color[i]) + (f32::from(b.color[i]) - f32::from(a.color[i])) * k)
+                        .round() as u8
+                };
+                return [mix(0), mix(1), mix(2), mix(3)];
+            }
+        }
+        self.stops.last().map_or(first.color, |stop| stop.color)
+    }
 }
 
 /// Camada de pintura unificada com suporte a raster, decalques e efeitos (P3D-061, P3D-133, P3D-134).
@@ -691,6 +1005,15 @@ pub struct PaintLayer {
     pub group_id: Option<uuid::Uuid>,
     #[serde(default)]
     pub is_group: bool,
+    /// Efeitos só desta camada, aplicados ao conteúdo antes da mescla (C1).
+    #[serde(default)]
+    pub effects: Vec<LayerEffect>,
+    /// Máscara da camada (C1).
+    #[serde(default)]
+    pub mask: Option<LayerMask>,
+    /// Onde o pincel pinta nesta camada (conteúdo ou uma das máscaras).
+    #[serde(default)]
+    pub paint_target: PaintTarget,
 }
 
 impl PaintLayer {
@@ -705,6 +1028,9 @@ impl PaintLayer {
             locked: false,
             group_id: None,
             is_group: false,
+            effects: Vec::new(),
+            mask: None,
+            paint_target: PaintTarget::Content,
         }
     }
 
@@ -719,6 +1045,9 @@ impl PaintLayer {
             locked: false,
             group_id: None,
             is_group: false,
+            effects: Vec::new(),
+            mask: None,
+            paint_target: PaintTarget::Content,
         }
     }
 
@@ -733,6 +1062,9 @@ impl PaintLayer {
             locked: false,
             group_id: None,
             is_group: false,
+            effects: Vec::new(),
+            mask: None,
+            paint_target: PaintTarget::Content,
         }
     }
 
@@ -747,6 +1079,9 @@ impl PaintLayer {
             locked: false,
             group_id: None,
             is_group: false,
+            effects: Vec::new(),
+            mask: None,
+            paint_target: PaintTarget::Content,
         }
     }
 
@@ -761,14 +1096,23 @@ impl PaintLayer {
             locked: false,
             group_id: None,
             is_group: true,
+            effects: Vec::new(),
+            mask: None,
+            paint_target: PaintTarget::Content,
         }
+    }
+
+    pub fn new_gradient(name: impl Into<String>, fill: GradientFill) -> Self {
+        let mut layer = Self::new_effect(name, PaintEffect::Invert);
+        layer.kind = LayerKind::Gradient(fill);
+        layer
     }
 
     pub fn canvas(&self) -> Option<&Canvas> {
         match &self.kind {
             LayerKind::Raster(c) => Some(c),
             LayerKind::Decal(d) => Some(&d.image),
-            LayerKind::Effect(_) => None,
+            LayerKind::Effect(_) | LayerKind::Gradient(_) => None,
         }
     }
 
@@ -776,13 +1120,97 @@ impl PaintLayer {
         match &mut self.kind {
             LayerKind::Raster(c) => Some(c),
             LayerKind::Decal(d) => Some(&mut d.image),
-            LayerKind::Effect(_) => None,
+            LayerKind::Effect(_) | LayerKind::Gradient(_) => None,
         }
     }
 
-    /// Só camadas Raster aceitam pinceladas (decal/efeito são pós-V1).
+    /// O canvas que o pincel edita agora (C1): o conteúdo, a máscara da camada ou
+    /// a de um efeito, conforme `paint_target`. Toda ferramenta de pintura passa
+    /// por aqui; nenhuma precisa saber qual é o alvo.
+    pub fn paint_canvas(&self) -> Option<&Canvas> {
+        match self.paint_target {
+            PaintTarget::Content => match &self.kind {
+                LayerKind::Raster(canvas) => Some(canvas),
+                _ => None,
+            },
+            PaintTarget::LayerMask => self.mask.as_ref().map(|mask| &mask.canvas),
+            PaintTarget::EffectMask(id) => self
+                .effects
+                .iter()
+                .find(|effect| effect.id == id)
+                .and_then(|effect| effect.mask.as_ref())
+                .map(|mask| &mask.canvas),
+        }
+    }
+
+    pub fn paint_canvas_mut(&mut self) -> Option<&mut Canvas> {
+        match self.paint_target {
+            PaintTarget::Content => match &mut self.kind {
+                LayerKind::Raster(c) => Some(c),
+                _ => None,
+            },
+            PaintTarget::LayerMask => self.mask.as_mut().map(|mask| &mut mask.canvas),
+            PaintTarget::EffectMask(id) => self
+                .effects
+                .iter_mut()
+                .find(|effect| effect.id == id)
+                .and_then(|effect| effect.mask.as_mut())
+                .map(|mask| &mut mask.canvas),
+        }
+    }
+
+    /// Chave do alvo para o buffer de traço: trocar de alvo nunca reaproveita os
+    /// pixels de outro canvas.
+    pub fn paint_target_key(&self) -> uuid::Uuid {
+        match self.paint_target {
+            PaintTarget::Content => self.id,
+            PaintTarget::LayerMask => uuid::Uuid::from_u128(self.id.as_u128() ^ 0x6d61_736b),
+            PaintTarget::EffectMask(id) => uuid::Uuid::from_u128(self.id.as_u128() ^ id.as_u128()),
+        }
+    }
+
+    /// Aceita pinceladas agora? Raster no conteúdo, ou qualquer camada com uma
+    /// máscara como alvo.
     pub fn is_paintable(&self) -> bool {
-        matches!(&self.kind, LayerKind::Raster(_))
+        match self.paint_target {
+            PaintTarget::Content => matches!(&self.kind, LayerKind::Raster(_)),
+            PaintTarget::LayerMask => self.mask.is_some(),
+            PaintTarget::EffectMask(id) => self
+                .effects
+                .iter()
+                .any(|effect| effect.id == id && effect.mask.is_some()),
+        }
+    }
+
+    /// Repara dados hostis vindos do arquivo (limites, finitos, alvo órfão).
+    pub fn repair(&mut self) {
+        if !self.opacity.is_finite() {
+            self.opacity = 1.0;
+        }
+        self.opacity = self.opacity.clamp(0.0, 1.0);
+        if let LayerKind::Effect(effect) = &mut self.kind {
+            effect.repair();
+        }
+        self.effects.truncate(MAX_LAYER_EFFECTS);
+        for effect in &mut self.effects {
+            effect.effect.repair();
+            if !effect.opacity.is_finite() {
+                effect.opacity = 1.0;
+            }
+            effect.opacity = effect.opacity.clamp(0.0, 1.0);
+            if let Some(mask) = &mut effect.mask {
+                mask.canvas.validate();
+            }
+        }
+        if let Some(mask) = &mut self.mask {
+            mask.canvas.validate();
+        }
+        if let LayerKind::Gradient(fill) = &mut self.kind {
+            fill.repair();
+        }
+        if !self.is_paintable() && self.paint_target != PaintTarget::Content {
+            self.paint_target = PaintTarget::Content;
+        }
     }
 }
 
@@ -821,6 +1249,175 @@ pub fn blend_pixels(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: LayerBlendMo
     [out_r, out_g, out_b, out_a]
 }
 
+/// Cor do texel do conteúdo próprio da camada, antes de efeitos/máscara.
+///
+/// Decalques fixados na malha não têm amostra por texel de UV: a projeção é
+/// feita uma vez por camada (`content_canvas`/composição por tile).
+fn content_pixel(
+    layer: &PaintLayer,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    time: Option<f32>,
+) -> Option<[u8; 4]> {
+    match &layer.kind {
+        LayerKind::Raster(canvas) => canvas.get(x, y),
+        LayerKind::Gradient(fill) => Some(fill.sample(x, y, w, h)),
+        LayerKind::Decal(decal) if decal.anchor.is_none() => {
+            decal.uv_sample_of(decal.image_at(time), x, y, w, h)
+        }
+        LayerKind::Decal(_) | LayerKind::Effect(_) => None,
+    }
+}
+
+/// Aplica os efeitos de sub-camada a um pixel (mesma aritmética do canvas).
+fn effects_pixel(
+    effects: &[LayerEffect],
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    mut color: [u8; 4],
+) -> [u8; 4] {
+    for effect in effects {
+        if !effect.enabled || effect.opacity <= 0.0 {
+            continue;
+        }
+        let coverage = effect
+            .mask
+            .as_ref()
+            .map_or(1.0, |mask| mask.coverage(x, y, w, h));
+        let amount = effect.opacity.clamp(0.0, 1.0) * coverage;
+        if amount <= 0.0 {
+            continue;
+        }
+        let changed = effect_pixel(&effect.effect, x, y, color);
+        color = blend_pixels(color, changed, amount, LayerBlendMode::Normal);
+    }
+    color
+}
+
+/// Modula o alfa pela máscara da camada. Máscara desligada = sem efeito.
+fn mask_pixel(
+    mut color: [u8; 4],
+    mask: Option<&LayerMask>,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> [u8; 4] {
+    if let Some(mask) = mask {
+        let coverage = mask.coverage(x, y, w, h).clamp(0.0, 1.0);
+        color[3] = (f32::from(color[3]) * coverage).round().clamp(0.0, 255.0) as u8;
+    }
+    color
+}
+
+/// Rasteriza o conteúdo próprio da camada num canvas `w × h`.
+fn content_canvas(
+    layer: &PaintLayer,
+    w: u32,
+    h: u32,
+    mesh: Option<&Mesh>,
+    time: Option<f32>,
+) -> Canvas {
+    let mut out = Canvas::new(w.max(1), h.max(1), [0, 0, 0, 0]);
+    match &layer.kind {
+        LayerKind::Raster(canvas) => {
+            let bw = w.min(canvas.w);
+            let bh = h.min(canvas.h);
+            for y in 0..bh {
+                for x in 0..bw {
+                    if let Some(src) = canvas.get(x, y) {
+                        out.set(x, y, src);
+                    }
+                }
+            }
+        }
+        LayerKind::Gradient(fill) => {
+            for y in 0..h {
+                for x in 0..w {
+                    out.set(x, y, fill.sample(x, y, w, h));
+                }
+            }
+        }
+        LayerKind::Decal(decal) => {
+            let image = decal.image_at(time);
+            if decal.anchor.is_some() {
+                if let Some(mesh) = mesh {
+                    for (x, y, src) in decal.surface_samples_of(image, mesh, w, h) {
+                        out.set(x, y, src);
+                    }
+                }
+            } else {
+                for y in 0..h {
+                    for x in 0..w {
+                        if let Some(src) = decal.uv_sample_of(image, x, y, w, h) {
+                            out.set(x, y, src);
+                        }
+                    }
+                }
+            }
+        }
+        LayerKind::Effect(_) => {}
+    }
+    out
+}
+
+/// Aplica efeitos de sub-camada sobre um canvas, com opacidade e máscara.
+fn apply_layer_effects_canvas(canvas: &mut Canvas, effects: &[LayerEffect]) {
+    for effect in effects {
+        if !effect.enabled || effect.opacity <= 0.0 {
+            continue;
+        }
+        if effect.opacity >= 1.0 && effect.mask.is_none() {
+            apply_effect(canvas, &effect.effect);
+            continue;
+        }
+        let before = canvas.clone();
+        apply_effect(canvas, &effect.effect);
+        let (w, h) = (canvas.w, canvas.h);
+        let amount = effect.opacity.clamp(0.0, 1.0);
+        for y in 0..h {
+            for x in 0..w {
+                let Some(orig) = before.get(x, y) else {
+                    continue;
+                };
+                let Some(current) = canvas.get(x, y) else {
+                    continue;
+                };
+                let coverage = effect
+                    .mask
+                    .as_ref()
+                    .map_or(1.0, |mask| mask.coverage(x, y, w, h));
+                let k = amount * coverage;
+                canvas.set(x, y, blend_pixels(orig, current, k, LayerBlendMode::Normal));
+            }
+        }
+    }
+}
+
+/// Modula o alfa de um canvas inteiro pela máscara da camada.
+fn apply_layer_mask_canvas(canvas: &mut Canvas, mask: Option<&LayerMask>) {
+    let Some(mask) = mask else {
+        return;
+    };
+    if !mask.enabled {
+        return;
+    }
+    let (w, h) = (canvas.w, canvas.h);
+    for y in 0..h {
+        for x in 0..w {
+            if let Some(color) = canvas.get(x, y) {
+                let coverage = mask.coverage(x, y, w, h).clamp(0.0, 1.0);
+                let alpha = (f32::from(color[3]) * coverage).round() as u8;
+                canvas.set(x, y, [color[0], color[1], color[2], alpha]);
+            }
+        }
+    }
+}
+
 /// Pilha unificada de camadas de pintura, decalques e efeitos (P3D-061, P3D-133, P3D-134).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct PaintLayerStack {
@@ -838,6 +1435,63 @@ impl PaintLayerStack {
         let mut stack = Self::new();
         stack.add_layer(PaintLayer::new_raster(name, canvas));
         stack
+    }
+
+    /// Normaliza uma pilha vinda de arquivo: camada ativa dentro dos limites,
+    /// parâmetros finitos, máscaras com dimensões consistentes, alvo de pintura
+    /// válido e grupos sem referências órfãs ou ciclos. Devolve quantos defeitos
+    /// foram corrigidos (0 = dado já íntegro).
+    pub fn repair(&mut self) -> usize {
+        let mut fixed = 0;
+        if self.layers.is_empty() {
+            if self.active_layer != 0 {
+                fixed += 1;
+            }
+            self.active_layer = 0;
+            return fixed;
+        }
+        if self.active_layer >= self.layers.len() {
+            self.active_layer = self.layers.len() - 1;
+            fixed += 1;
+        }
+        for layer in &mut self.layers {
+            let before = layer.clone();
+            layer.repair();
+            if *layer != before {
+                fixed += 1;
+            }
+        }
+        let ids: std::collections::HashSet<uuid::Uuid> =
+            self.layers.iter().map(|layer| layer.id).collect();
+        for index in 0..self.layers.len() {
+            let parent = self.layers[index].group_id;
+            let valid = parent.is_none_or(|id| {
+                id != self.layers[index].id && ids.contains(&id) && {
+                    // Sobe no máximo 64 níveis; se voltar ao dono, é ciclo.
+                    let mut cursor = Some(id);
+                    let mut depth = 0usize;
+                    let mut ok = true;
+                    while let Some(parent) = cursor {
+                        if parent == self.layers[index].id || depth > 64 {
+                            ok = false;
+                            break;
+                        }
+                        depth += 1;
+                        cursor = self
+                            .layers
+                            .iter()
+                            .find(|layer| layer.id == parent)
+                            .and_then(|layer| layer.group_id);
+                    }
+                    ok
+                }
+            });
+            if !valid {
+                self.layers[index].group_id = None;
+                fixed += 1;
+            }
+        }
+        fixed
     }
 
     pub fn add_layer(&mut self, layer: PaintLayer) -> uuid::Uuid {
@@ -909,6 +1563,10 @@ impl PaintLayerStack {
         if self.layers[lower_idx].locked {
             return false;
         }
+        // Uma camada de ajuste não tem conteúdo próprio: não há onde mesclar.
+        if matches!(self.layers[lower_idx].kind, LayerKind::Effect(_)) {
+            return false;
+        }
         let (w, h) = if let Some(cv) = self.layers[lower_idx].canvas() {
             (cv.w, cv.h)
         } else if let Some(cv) = self.layers[pos].canvas() {
@@ -917,7 +1575,15 @@ impl PaintLayerStack {
             (256, 256)
         };
         if self.layers[lower_idx].canvas().is_none() {
-            self.layers[lower_idx].kind = LayerKind::Raster(Canvas::new(w, h, [0, 0, 0, 0]));
+            let mut canvas = Canvas::new(w, h, [0, 0, 0, 0]);
+            if let LayerKind::Gradient(fill) = &self.layers[lower_idx].kind {
+                for y in 0..h {
+                    for x in 0..w {
+                        canvas.set(x, y, fill.sample(x, y, w, h));
+                    }
+                }
+            }
+            self.layers[lower_idx].kind = LayerKind::Raster(canvas);
         }
 
         let upper = self.layers.remove(pos);
@@ -927,69 +1593,47 @@ impl PaintLayerStack {
             && upper.opacity > 0.0
         {
             match &upper.kind {
-                LayerKind::Raster(upper_cv) => {
-                    let blend_w = lower_cv.w.min(upper_cv.w);
-                    let blend_h = lower_cv.h.min(upper_cv.h);
-                    for y in 0..blend_h {
-                        for x in 0..blend_w {
-                            if let (Some(dst), Some(src)) = (lower_cv.get(x, y), upper_cv.get(x, y))
-                            {
-                                let blended = blend_pixels(dst, src, upper.opacity, upper.blend);
-                                lower_cv.set(x, y, blended);
+                LayerKind::Effect(effect) => {
+                    let mask = upper.mask.as_ref();
+                    if upper.opacity >= 1.0 && mask.is_none() {
+                        apply_effect(lower_cv, effect);
+                    } else {
+                        let before = lower_cv.clone();
+                        apply_effect(lower_cv, effect);
+                        let (w, h) = (lower_cv.w, lower_cv.h);
+                        for y in 0..h {
+                            for x in 0..w {
+                                let coverage = mask.map_or(1.0, |mask| mask.coverage(x, y, w, h));
+                                let amount = upper.opacity.clamp(0.0, 1.0) * coverage;
+                                if let (Some(dst), Some(src)) =
+                                    (before.get(x, y), lower_cv.get(x, y))
+                                {
+                                    lower_cv.set(
+                                        x,
+                                        y,
+                                        blend_pixels(dst, src, amount, LayerBlendMode::Normal),
+                                    );
+                                }
                             }
                         }
                     }
                 }
-                LayerKind::Decal(decal) => {
+                LayerKind::Raster(_) | LayerKind::Decal(_) | LayerKind::Gradient(_) => {
                     let (w, h) = (lower_cv.w, lower_cv.h);
-                    if decal.anchor.is_some() {
-                        for (x, y, src) in mesh
-                            .map(|mesh| decal.surface_samples(mesh, w, h))
-                            .unwrap_or_default()
-                        {
-                            if let Some(dst) = lower_cv.get(x, y) {
+                    let mut content = content_canvas(&upper, w, h, mesh, None);
+                    apply_layer_effects_canvas(&mut content, &upper.effects);
+                    apply_layer_mask_canvas(&mut content, upper.mask.as_ref());
+                    let bw = w.min(content.w);
+                    let bh = h.min(content.h);
+                    for y in 0..bh {
+                        for x in 0..bw {
+                            if let (Some(dst), Some(src)) = (lower_cv.get(x, y), content.get(x, y))
+                            {
                                 lower_cv.set(
                                     x,
                                     y,
                                     blend_pixels(dst, src, upper.opacity, upper.blend),
                                 );
-                            }
-                        }
-                    } else {
-                        for y in 0..h {
-                            for x in 0..w {
-                                if let (Some(dst), Some(src)) =
-                                    (lower_cv.get(x, y), decal.uv_sample(x, y, w, h))
-                                {
-                                    lower_cv.set(
-                                        x,
-                                        y,
-                                        blend_pixels(dst, src, upper.opacity, upper.blend),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-                LayerKind::Effect(effect) => {
-                    if upper.opacity >= 1.0 {
-                        apply_effect(lower_cv, effect);
-                    } else {
-                        let before = lower_cv.clone();
-                        apply_effect(lower_cv, effect);
-                        for y in 0..lower_cv.h {
-                            for x in 0..lower_cv.w {
-                                if let (Some(dst), Some(src)) =
-                                    (before.get(x, y), lower_cv.get(x, y))
-                                {
-                                    let blended = blend_pixels(
-                                        dst,
-                                        src,
-                                        upper.opacity,
-                                        LayerBlendMode::Normal,
-                                    );
-                                    lower_cv.set(x, y, blended);
-                                }
                             }
                         }
                     }
@@ -1109,70 +1753,152 @@ impl PaintLayerStack {
     /// texels pela posição 3D (sem malha, são ignorados). `time` (segundos)
     /// escolhe a variante dos decalques com trilha; `None` = estado parado.
     pub fn composite_on(&self, base: &mut Canvas, mesh: Option<&Mesh>, time: Option<f32>) {
+        let (w, h) = (base.w, base.h);
         for layer in &self.layers {
             if !layer.visible || layer.opacity <= 0.0 {
                 continue;
             }
 
             match &layer.kind {
-                LayerKind::Raster(canvas) => {
-                    let w = base.w.min(canvas.w);
-                    let h = base.h.min(canvas.h);
-                    for y in 0..h {
-                        for x in 0..w {
-                            if let (Some(dst), Some(src)) = (base.get(x, y), canvas.get(x, y)) {
-                                let blended = blend_pixels(dst, src, layer.opacity, layer.blend);
-                                base.set(x, y, blended);
-                            }
-                        }
-                    }
-                }
-                LayerKind::Decal(decal) => {
-                    let (w, h) = (base.w, base.h);
-                    let image = decal.image_at(time);
-                    if decal.anchor.is_some() {
-                        if let Some(mesh) = mesh {
-                            for (x, y, src) in decal.surface_samples_of(image, mesh, w, h) {
-                                if let Some(dst) = base.get(x, y) {
-                                    base.set(
-                                        x,
-                                        y,
-                                        blend_pixels(dst, src, layer.opacity, layer.blend),
-                                    );
+                LayerKind::Raster(_) | LayerKind::Decal(_) | LayerKind::Gradient(_) => {
+                    if layer.effects.is_empty() {
+                        match &layer.kind {
+                            LayerKind::Raster(canvas) => {
+                                let bw = w.min(canvas.w);
+                                let bh = h.min(canvas.h);
+                                for y in 0..bh {
+                                    for x in 0..bw {
+                                        if let Some(src) = canvas.get(x, y) {
+                                            let src =
+                                                mask_pixel(src, layer.mask.as_ref(), x, y, w, h);
+                                            if let Some(dst) = base.get(x, y) {
+                                                base.set(
+                                                    x,
+                                                    y,
+                                                    blend_pixels(
+                                                        dst,
+                                                        src,
+                                                        layer.opacity,
+                                                        layer.blend,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                            LayerKind::Gradient(fill) => {
+                                for y in 0..h {
+                                    for x in 0..w {
+                                        let src = mask_pixel(
+                                            fill.sample(x, y, w, h),
+                                            layer.mask.as_ref(),
+                                            x,
+                                            y,
+                                            w,
+                                            h,
+                                        );
+                                        if let Some(dst) = base.get(x, y) {
+                                            base.set(
+                                                x,
+                                                y,
+                                                blend_pixels(dst, src, layer.opacity, layer.blend),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            LayerKind::Decal(decal) => {
+                                let image = decal.image_at(time);
+                                if decal.anchor.is_some() {
+                                    if let Some(mesh) = mesh {
+                                        for (x, y, src) in
+                                            decal.surface_samples_of(image, mesh, w, h)
+                                        {
+                                            let src =
+                                                mask_pixel(src, layer.mask.as_ref(), x, y, w, h);
+                                            if let Some(dst) = base.get(x, y) {
+                                                base.set(
+                                                    x,
+                                                    y,
+                                                    blend_pixels(
+                                                        dst,
+                                                        src,
+                                                        layer.opacity,
+                                                        layer.blend,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    for y in 0..h {
+                                        for x in 0..w {
+                                            if let Some(src) = decal.uv_sample_of(image, x, y, w, h)
+                                            {
+                                                let src = mask_pixel(
+                                                    src,
+                                                    layer.mask.as_ref(),
+                                                    x,
+                                                    y,
+                                                    w,
+                                                    h,
+                                                );
+                                                if let Some(dst) = base.get(x, y) {
+                                                    base.set(
+                                                        x,
+                                                        y,
+                                                        blend_pixels(
+                                                            dst,
+                                                            src,
+                                                            layer.opacity,
+                                                            layer.blend,
+                                                        ),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            LayerKind::Effect(_) => {}
                         }
                         continue;
                     }
-                    for y in 0..h {
-                        for x in 0..w {
-                            if let (Some(dst), Some(src)) =
-                                (base.get(x, y), decal.uv_sample_of(image, x, y, w, h))
-                            {
+
+                    // Efeitos de sub-camada mudam o conteúdo antes da mescla:
+                    // rasteriza uma vez por camada (não por pixel).
+                    let mut content = content_canvas(layer, w, h, mesh, time);
+                    apply_layer_effects_canvas(&mut content, &layer.effects);
+                    apply_layer_mask_canvas(&mut content, layer.mask.as_ref());
+                    let cw = w.min(content.w);
+                    let ch = h.min(content.h);
+                    for y in 0..ch {
+                        for x in 0..cw {
+                            if let (Some(dst), Some(src)) = (base.get(x, y), content.get(x, y)) {
                                 base.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
                             }
                         }
                     }
                 }
                 LayerKind::Effect(effect) => {
-                    // Efeito a 100%: aplica direto. Com opacidade parcial:
-                    // aplica numa cópia e re-mescla antes/depois (idempotente).
-                    if layer.opacity >= 1.0 {
+                    // Efeito a 100% sem máscara: aplica direto. Com opacidade
+                    // parcial ou máscara: aplica numa cópia e re-mescla antes/depois.
+                    let mask = layer.mask.as_ref();
+                    if layer.opacity >= 1.0 && mask.is_none() {
                         apply_effect(&mut *base, effect);
                     } else {
                         let before = base.clone();
                         apply_effect(&mut *base, effect);
-                        for y in 0..base.h {
-                            for x in 0..base.w {
+                        for y in 0..h {
+                            for x in 0..w {
+                                let coverage = mask.map_or(1.0, |mask| mask.coverage(x, y, w, h));
+                                let amount = layer.opacity.clamp(0.0, 1.0) * coverage;
                                 if let (Some(orig), Some(current)) =
                                     (before.get(x, y), base.get(x, y))
                                 {
-                                    let blended = blend_pixels(
-                                        orig,
-                                        current,
-                                        layer.opacity,
-                                        LayerBlendMode::Normal,
-                                    );
+                                    let blended =
+                                        blend_pixels(orig, current, amount, LayerBlendMode::Normal);
                                     base.set(x, y, blended);
                                 }
                             }
@@ -1190,10 +1916,13 @@ impl PaintLayerStack {
     /// tiling seguro; os per-pixel (Grain/Levels/BrightnessContrast/
     /// HueSaturation/Invert/Posterize) são locais e permanecem tileáveis.
     pub fn is_tileable(&self) -> bool {
-        !self
-            .layers
-            .iter()
-            .any(|l| matches!(l.kind, LayerKind::Effect(PaintEffect::Pixelate { .. })))
+        !self.layers.iter().any(|layer| {
+            matches!(layer.kind, LayerKind::Effect(PaintEffect::Pixelate { .. }))
+                || layer
+                    .effects
+                    .iter()
+                    .any(|effect| matches!(effect.effect, PaintEffect::Pixelate { .. }))
+        })
     }
 
     /// Ajusta a resolução das variantes SVG do decalque `id` à área que ele
@@ -1283,9 +2012,9 @@ impl PaintLayerStack {
         }
     }
 
-    /// Recompõe a região de um tile: reset da base (primeiro layer) sobre
-    /// transparente, depois os layers restantes com blend — a mesma
-    /// aritmética do `composite` completo sobre scratch transparente.
+    /// Recompõe a região de um tile do zero (transparente) e reaplica a pilha
+    /// inteira: a mesma aritmética do `composite` completo, inclusive máscaras,
+    /// efeitos de sub-camada e gradientes.
     fn composite_tile_region(
         &self,
         out: &mut Canvas,
@@ -1296,26 +2025,27 @@ impl PaintLayerStack {
         if x0 >= x1 || y0 >= y1 {
             return;
         }
+        for y in y0..y1 {
+            for x in x0..x1 {
+                out.set(x, y, [0, 0, 0, 0]);
+            }
+        }
+        let (w, h) = (out.w, out.h);
         for (li, layer) in self.layers.iter().enumerate() {
             if !layer.visible || layer.opacity <= 0.0 {
                 continue;
             }
             match &layer.kind {
-                LayerKind::Raster(canvas) => {
+                LayerKind::Raster(_) | LayerKind::Gradient(_) => {
                     for y in y0..y1 {
                         for x in x0..x1 {
-                            let Some(src) = canvas.get(x, y) else {
+                            let Some(src) = content_pixel(layer, x, y, w, h, time) else {
                                 continue;
                             };
-                            let v = if li == 0 {
-                                blend_pixels([0, 0, 0, 0], src, layer.opacity, layer.blend)
-                            } else {
-                                let Some(dst) = out.get(x, y) else {
-                                    continue;
-                                };
-                                blend_pixels(dst, src, layer.opacity, layer.blend)
-                            };
-                            out.set(x, y, v);
+                            let src = effects_pixel(&layer.effects, x, y, w, h, src);
+                            let src = mask_pixel(src, layer.mask.as_ref(), x, y, w, h);
+                            let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
+                            out.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
                         }
                     }
                 }
@@ -1323,21 +2053,24 @@ impl PaintLayerStack {
                     if decal.anchor.is_some() {
                         for &(x, y, src) in surface.get(li).map_or(&[][..], Vec::as_slice) {
                             if (x0..x1).contains(&x) && (y0..y1).contains(&y) {
+                                let src = effects_pixel(&layer.effects, x, y, w, h, src);
+                                let src = mask_pixel(src, layer.mask.as_ref(), x, y, w, h);
                                 let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
                                 out.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
                             }
                         }
-                        continue;
-                    }
-                    let (w, h) = (out.w, out.h);
-                    let image = decal.image_at(time);
-                    for y in y0..y1 {
-                        for x in x0..x1 {
-                            let Some(src) = decal.uv_sample_of(image, x, y, w, h) else {
-                                continue;
-                            };
-                            let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
-                            out.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
+                    } else {
+                        let image = decal.image_at(time);
+                        for y in y0..y1 {
+                            for x in x0..x1 {
+                                let Some(src) = decal.uv_sample_of(image, x, y, w, h) else {
+                                    continue;
+                                };
+                                let src = effects_pixel(&layer.effects, x, y, w, h, src);
+                                let src = mask_pixel(src, layer.mask.as_ref(), x, y, w, h);
+                                let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
+                                out.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
+                            }
                         }
                     }
                 }
@@ -1347,10 +2080,15 @@ impl PaintLayerStack {
                         for x in x0..x1 {
                             if let Some(c) = out.get(x, y) {
                                 let value = effect_pixel(effect, x, y, c);
+                                let coverage = layer
+                                    .mask
+                                    .as_ref()
+                                    .map_or(1.0, |mask| mask.coverage(x, y, w, h));
+                                let amount = layer.opacity.clamp(0.0, 1.0) * coverage;
                                 out.set(
                                     x,
                                     y,
-                                    blend_pixels(c, value, layer.opacity, LayerBlendMode::Normal),
+                                    blend_pixels(c, value, amount, LayerBlendMode::Normal),
                                 );
                             }
                         }
@@ -2339,6 +3077,287 @@ mod tests {
         let json = serde_json::to_string(&decal).unwrap();
         let back: DecalLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(back, decal);
+    }
+
+    // ── C1/C3: máscaras, efeitos de sub-camada e gradiente ──────────────────
+
+    #[test]
+    fn layer_mask_modulates_alpha_and_invert_flips_it() {
+        // Conteúdo branco opaco; máscara preta em cima, branca embaixo.
+        let mut layer = PaintLayer::new_raster("Masked", Canvas::new(1, 2, [255, 255, 255, 255]));
+        let mut mask = LayerMask::new(1, 2);
+        mask.canvas.set(0, 0, [0, 0, 0, 255]);
+        layer.mask = Some(mask);
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(layer);
+
+        let mut out = Canvas::new(1, 2, [0, 0, 0, 0]);
+        stack.composite(&mut out);
+        assert_eq!(out.get(0, 0), Some([0, 0, 0, 0]), "máscara preta esconde");
+        assert_eq!(
+            out.get(0, 1),
+            Some([255, 255, 255, 255]),
+            "máscara branca mostra"
+        );
+
+        stack.layers[0].mask.as_mut().unwrap().inverted = true;
+        let mut inverted = Canvas::new(1, 2, [0, 0, 0, 0]);
+        stack.composite(&mut inverted);
+        assert_eq!(inverted.get(0, 0), Some([255, 255, 255, 255]));
+        assert_eq!(inverted.get(0, 1), Some([0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn layer_effects_run_in_order_before_the_blend() {
+        let base = [100, 100, 100, 255];
+        let mut layer = PaintLayer::new_raster("Fx", Canvas::new(1, 1, base));
+        layer.effects = vec![
+            LayerEffect::new(PaintEffect::Grain {
+                intensity: 0.5,
+                seed: 3,
+            }),
+            LayerEffect::new(PaintEffect::Invert),
+        ];
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(layer);
+
+        let mut out = Canvas::new(1, 1, [0, 0, 0, 0]);
+        stack.composite(&mut out);
+        let noise = (hash_noise(0, 0, 3) * 0.5 * 255.0) as i32;
+        let expected = 255 - (100 + noise).clamp(0, 255);
+        assert_eq!(out.get(0, 0).unwrap()[0] as i32, expected);
+
+        // A ordem importa: inverter primeiro dá outro resultado.
+        stack.layers[0].effects.reverse();
+        let mut reversed = Canvas::new(1, 1, [0, 0, 0, 0]);
+        stack.composite(&mut reversed);
+        let expected_reversed = (255 - 100 + noise).clamp(0, 255);
+        assert_eq!(reversed.get(0, 0).unwrap()[0] as i32, expected_reversed);
+        assert_ne!(out.pixels, reversed.pixels);
+
+        // A opacidade do efeito modula o quanto ele muda o conteúdo.
+        let mut half = LayerEffect::new(PaintEffect::Invert);
+        half.opacity = 0.5;
+        stack.layers[0].effects = vec![half];
+        let mut blended = Canvas::new(1, 1, [0, 0, 0, 0]);
+        stack.composite(&mut blended);
+        let value = blended.get(0, 0).unwrap()[0] as i32;
+        assert!((value - 128).abs() <= 1, "100↔155 a 50% ≈ 128: {value}");
+    }
+
+    #[test]
+    fn gradient_fill_samples_stops_and_repairs_hostile_data() {
+        let mut fill = GradientFill::new([255, 0, 0, 255], [0, 0, 255, 255]);
+        let left = fill.sample(0, 0, 16, 1);
+        let right = fill.sample(15, 0, 16, 1);
+        assert!(left[0] > 200 && left[2] < 60, "pontas do linear: {left:?}");
+        assert!(
+            right[2] > 200 && right[0] < 60,
+            "pontas do linear: {right:?}"
+        );
+
+        // Dados hostis: posições não finitas saem, fora de faixa entram, ordem volta.
+        fill.stops.push(GradientStop {
+            position: f32::NAN,
+            color: [0, 255, 0, 255],
+        });
+        fill.stops.push(GradientStop {
+            position: 5.0,
+            color: [0, 255, 0, 255],
+        });
+        fill.stops.insert(
+            0,
+            GradientStop {
+                position: -3.0,
+                color: [0, 255, 0, 255],
+            },
+        );
+        fill.start = [f32::NAN, 0.5];
+        fill.repair();
+        assert!(fill.stops.iter().all(|stop| stop.position.is_finite()));
+        assert_eq!(fill.stops.first().unwrap().position, 0.0);
+        assert_eq!(fill.stops.last().unwrap().position, 1.0);
+        assert!(fill.start.iter().all(|value| value.is_finite()));
+
+        // Menos de duas paradas volta ao gradiente padrão preto → branco.
+        let mut empty = GradientFill::new([1, 1, 1, 255], [2, 2, 2, 255]);
+        empty.stops.clear();
+        empty.repair();
+        assert_eq!(empty.stops.len(), 2);
+        assert_eq!(empty.stops[0].color, [0, 0, 0, 255]);
+        assert_eq!(empty.stops[1].color, [255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn gradient_with_effects_and_mask_matches_between_full_and_tiled() {
+        let mut stack = PaintLayerStack::with_base("Base", Canvas::new(64, 64, [10, 10, 10, 255]));
+        let mut fill = GradientFill::new([255, 0, 0, 255], [0, 0, 255, 255]);
+        fill.kind = GradientKind::Radial;
+        let mut gradient = PaintLayer::new_gradient("Grad", fill);
+        gradient.opacity = 0.8;
+        gradient.effects = vec![LayerEffect::new(PaintEffect::Posterize { levels: 4 })];
+        let mut mask = LayerMask::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                if (x + y) % 7 == 0 {
+                    mask.canvas.set(x, y, [40, 40, 40, 255]);
+                }
+            }
+        }
+        gradient.mask = Some(mask);
+        stack.add_layer(gradient);
+        assert!(stack.is_tileable());
+
+        let mut full = Canvas::new(64, 64, [0, 0, 0, 0]);
+        stack.composite(&mut full);
+        let mut tiled = Canvas::new(64, 64, [0, 0, 0, 0]);
+        stack.composite_tiles(&mut tiled, &[0, 1, 2, 3]);
+        assert_eq!(
+            tiled.pixels, full.pixels,
+            "tiled == full com máscara/efeitos"
+        );
+
+        // A máscara desligada realmente muda o resultado (o teste acima não é vazio).
+        let mut off = stack.clone();
+        off.layers.last_mut().unwrap().mask = None;
+        let mut without = Canvas::new(64, 64, [0, 0, 0, 0]);
+        off.composite(&mut without);
+        assert_ne!(full.pixels, without.pixels);
+    }
+
+    #[test]
+    fn repair_normalizes_hostile_stack_data() {
+        let mut layer = PaintLayer::new_raster("Hostil", Canvas::new(4, 4, [255, 255, 255, 255]));
+        layer.opacity = f32::NAN;
+        layer.effects = (0..MAX_LAYER_EFFECTS + 4)
+            .map(|_| {
+                let mut effect = LayerEffect::new(PaintEffect::Levels {
+                    in_min: f32::NAN,
+                    in_max: f32::INFINITY,
+                    gamma: -5.0,
+                    out_min: 2.0,
+                    out_max: f32::NAN,
+                });
+                effect.opacity = f32::NAN;
+                effect
+            })
+            .collect();
+        let effect_id = layer.effects[0].id;
+        layer.paint_target = PaintTarget::EffectMask(effect_id);
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(layer);
+        stack.active_layer = 99;
+        // Grupo órfão e ciclo entre grupos.
+        let mut orphan = PaintLayer::new_group("Órfão");
+        orphan.group_id = Some(uuid::Uuid::new_v4());
+        let orphan_index = stack.layers.len();
+        stack.layers.push(orphan);
+        let mut cycled = PaintLayer::new_group("Ciclo");
+        cycled.group_id = Some(uuid::Uuid::new_v4());
+        let cycled_id = cycled.id;
+        let cycled_index = stack.layers.len();
+        stack.layers.push(cycled);
+        stack.layers[cycled_index].group_id = Some(cycled_id);
+
+        let fixed = stack.repair();
+        assert!(fixed > 0);
+        assert_eq!(stack.active_layer, stack.layers.len() - 1);
+        assert!(stack.layers[0].opacity.is_finite());
+        assert_eq!(stack.layers[0].effects.len(), MAX_LAYER_EFFECTS);
+        assert!(
+            stack.layers[0]
+                .effects
+                .iter()
+                .all(|effect| effect.opacity.is_finite() && effect.opacity <= 1.0)
+        );
+        assert!(matches!(
+            stack.layers[0].effects[0].effect,
+            PaintEffect::Levels {
+                in_min,
+                gamma,
+                out_min,
+                out_max,
+                ..
+            } if in_min.is_finite() && gamma > 0.0 && out_min.is_finite() && out_max.is_finite()
+        ));
+        assert_eq!(
+            stack.layers[0].paint_target,
+            PaintTarget::Content,
+            "alvo de máscara órfão volta ao conteúdo"
+        );
+        assert_eq!(stack.layers[orphan_index].group_id, None);
+        assert_eq!(stack.layers[cycled_index].group_id, None);
+
+        // Já íntegro: o reparo não mexe em nada.
+        assert_eq!(stack.repair(), 0);
+    }
+
+    #[test]
+    fn merge_down_flattens_gradient_and_refuses_effect_below() {
+        let mut stack = PaintLayerStack::with_base("Base", Canvas::new(8, 8, [0, 0, 0, 255]));
+        let fill = GradientFill::new([255, 0, 0, 255], [0, 0, 255, 255]);
+        stack.add_layer(PaintLayer::new_gradient("Grad", fill));
+        assert!(stack.merge_down(1));
+        assert_eq!(stack.layers.len(), 1);
+        assert!(matches!(stack.layers[0].kind, LayerKind::Raster(_)));
+        let pixel = stack.layers[0].canvas().unwrap().get(4, 4).unwrap();
+        assert!(pixel[0] > 0 || pixel[2] > 0, "gradiente assado: {pixel:?}");
+
+        // Uma camada de ajuste embaixo não tem conteúdo: mesclar é recusado.
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(PaintLayer::new_effect("Ajuste", PaintEffect::Invert));
+        stack.add_layer(PaintLayer::new("Topo", 4, 4, [255, 255, 255, 255]));
+        assert!(!stack.merge_down(1));
+        assert_eq!(stack.layers.len(), 2);
+    }
+
+    #[test]
+    fn paint_target_selects_the_canvas_and_isolates_the_stroke_buffer_key() {
+        let mut layer = PaintLayer::new_raster("Alvo", Canvas::new(4, 4, [255, 255, 255, 255]));
+        let effect = LayerEffect::new(PaintEffect::Invert);
+        let effect_id = effect.id;
+        layer.effects.push(effect);
+        let content_key = layer.paint_target_key();
+        assert!(layer.paint_canvas().is_some());
+        assert!(layer.is_paintable());
+        assert!(layer.paint_canvas_mut().is_some(), "conteúdo raster pinta");
+
+        // Máscara da camada ainda não criada: alvo inválido, sem canvas.
+        layer.paint_target = PaintTarget::LayerMask;
+        assert!(layer.paint_canvas().is_none());
+        assert!(!layer.is_paintable());
+        layer.mask = Some(LayerMask::new(4, 4));
+        assert!(layer.paint_canvas().is_some());
+        assert!(layer.is_paintable());
+
+        // Máscara de efeito: só existe após criada; a chave do traço é outra.
+        layer.paint_target = PaintTarget::EffectMask(effect_id);
+        assert!(layer.paint_canvas().is_none());
+        layer.effects[0].mask = Some(LayerMask::new(4, 4));
+        assert!(layer.paint_canvas().is_some());
+        assert_ne!(layer.paint_target_key(), content_key);
+        layer.paint_target = PaintTarget::Content;
+        assert_eq!(layer.paint_target_key(), content_key);
+
+        // Camada de gradiente não aceita pincel no conteúdo (só em máscara).
+        let gradient = PaintLayer::new_gradient("Grad", GradientFill::new([0; 4], [255; 4]));
+        assert!(!gradient.is_paintable());
+        assert!(gradient.paint_canvas().is_none());
+    }
+
+    #[test]
+    fn old_layer_json_without_c1_fields_still_deserializes() {
+        // Arquivo anterior a máscaras/efeitos/target: JSON sem os campos novos.
+        let layer = PaintLayer::new_raster("Antiga", Canvas::new(2, 2, [1, 2, 3, 255]));
+        let mut value = serde_json::to_value(&layer).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("effects");
+        object.remove("mask");
+        object.remove("paint_target");
+        let back: PaintLayer = serde_json::from_value(value).unwrap();
+        assert!(back.effects.is_empty());
+        assert!(back.mask.is_none());
+        assert_eq!(back.paint_target, PaintTarget::Content);
     }
 }
 

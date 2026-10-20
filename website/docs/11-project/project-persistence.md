@@ -99,3 +99,25 @@ Salvar projeto de versão superior em versão antiga nunca é automático. Pacot
 ## Decisões fechadas
 
 Document autoral único; EditorSession separado; serialização e recovery pertencem à Infrastructure; staged load; atomic save; IDs estáveis e migrações explícitas; cache nunca é autoridade; recovery nunca sobrescreve o projeto silenciosamente.
+
+### Status da bateria e evidências de Autosave/Recovery (P03, 2026-10-17)
+
+Todos os gates de Autosave e Crash Recovery foram formalizados e validados:
+- **Separação de política, infraestrutura e locks**: `AutosaveService` atua como política pura sem tocar relógio ou UI; `create_session_lock` e `remove_session_lock` gravam e limpam `session.lock` de forma atômica no encerramento limpo.
+- **Coalescimento e Retenção de 5 gerações**: `AutosaveService::decide` coalesce ciclos sem alteração de revisão (`last_snapshot_revision == revision`); `perform_snapshot` aplica rotação atômica mantendo as 5 gerações mais recentes e expurgando as excedentes. Testado em `crates/core/tests/recovery_autosave_p03_gates_tests.rs::test_p03_gate_five_generations_retention_and_coalescing`.
+- **Isolamento de documentos sem arquivo**: `autosave_dir_for` isola snapshots por `project_id`, garantindo que múltiplos documentos untitled não conflitem nem removam gerações uns dos outros. Testado em `test_p03_gate_untitled_documents_isolated_by_project_id`.
+- **Recover / Inspect / Discard e Preservação do Arquivo Oficial**:
+  - `ProjectService::inspect_recovery` lê a geração sem tocar na sessão aberta nem no documento atual.
+  - `ProjectService::recover_generation` carrega o snapshot como documento sujo (`dirty == true`), mantendo o caminho do arquivo oficial.
+  - O arquivo original em disco nunca é sobrescrito automaticamente pelo Recover; a gravação do estado recuperado exige Save explícito (`ProjectService::save_project`).
+  - `AutosaveService::discard_generation` remove gerações individualmente e `discard_recovery` limpa snapshots e locks.
+  - Testado em `crates/core/tests/recovery_autosave_p03_gates_tests.rs::test_p03_gate_recover_inspect_discard_lifecycle`.
+
+### Status da bateria e evidências de Persistência (P02, 2026-10-17)
+
+Todos os gates de Persistência, Staged Load e Integridade Atômica foram formalizados e validados:
+- **DocumentSnapshot e Staged Load Desacoplado**: Introduzido `DocumentSnapshot` em `crates/project/src/snapshot.rs`, permitindo deserialização, validação de invariantes e migrações determinísticas em staging sem tocar no documento mutável publicado nem na sessão ativa (`DocumentSnapshot::load_atomic` / `ProjectService::staged_load`).
+- **Roundtrip Integral de Todos os Subsistemas com Preservação de IDs**: Validação completa de roundtrip preservando IDs estáveis, malhas (vértices, faces, sharp edges, UVs por corner), canvas de texturas, materiais PBR, luzes, esqueletos, ossos, splines, perfis 2D, geradores de caminho sweep, anotações, medições, referências e animações sob `LoadMode::Strict` com zero reparos necessários. Testado em `crates/core/tests/persistence_p02_gates_tests.rs::test_p02_gate_authoring_roundtrip_all_subsystems_preserve_ids_and_data`.
+- **Migração Auditável e Unicidade de Autoridade**: Migração de campos legados (como `smooth_shaded_assets`) diretamente para cada asset individual com esvaziamento da lista legada e registro no `LoadReport`. Testado em `test_p02_gate_legacy_formats_migration_preserves_identities_and_audit_report`.
+- **Proteção contra Entradas Hostis, Truncadas e Traversal**: Recusa estrita e determinística com `ProjectError` tipado de arquivos corrompidos/truncados, zip traversal (`../../etc/passwd`), versões de manifest futuras incompatíveis e malhas com invariantes violados sob `LoadMode::Strict`. Testado em `test_p02_gate_hostile_corrupt_truncated_oversized_and_traversal_refusal`.
+- **Integridade Atômica e Fidelidade de Dirty com Histórico**: `save_atomic` via escrita atômica preserva o arquivo anterior caso ocorra falha de I/O no salvamento. Coexistência fiel de `save_point` com histórico de Undo/Redo: salvar revisão anterior durante edições concorrentes mantém o documento sujo (`dirty == true`); desfazer até o ponto salvo restaura o documento para limpo (`!dirty`). Testado em `test_p02_gate_atomic_save_failure_preserves_original_file_and_dirty_fidelity`.

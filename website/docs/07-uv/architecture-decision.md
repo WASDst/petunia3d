@@ -140,6 +140,14 @@ Scale
 
 Reutilizar modal transforms da Application, com numeric input e snapping. Um gesto = um Undo.
 
+### Ciclo de vida e garantias transacionais (V01)
+
+- **Pins tipados:** gerenciados por `UvPinCmd` com `FaceCornerIndex` e operações semânticas (`Pin`, `Unpin`, `Toggle`, `ClearAll`).
+- **Split UV:** implementado via `UvSplitCmd` e `Mesh::split_uv`, marcando seams na fronteira da seleção e garantindo invariante estrito de que nenhum vértice 3D (`mesh.verts`) é duplicado.
+- **Stitch UV:** implementado via `UvStitchCmd` e `Mesh::stitch_uv_to(stationary_face, filter)` alinhando bordas compartilhadas, fundindo cantos coincidentes, limpando a seam e recusando mover ilhas com pins ativos.
+- **Modal Preview:** ciclo `begin_uv_transform`, `update_uv_transform`, `commit_uv_transform` e `cancel_uv_transform`. Mutações contínuas de drag alteram apenas a prévia em memória; cancelamento via Esc descarta a prévia com 0 entradas de Undo; confirmação via Enter/Clique gera exatamente 1 entrada de Undo. Rejeição estrita de entradas não-finitas (`NaN`/`Inf`).
+- Suítes de regressão e gates automatizados: `crates/core/tests/uv_foundations_v01_tests.rs` e `crates/core/tests/uv_transform_session.rs`.
+
 ## UV Snapping
 
 Snap 2D pequeno e próprio do UV editor:
@@ -339,6 +347,14 @@ Cada item pode oferecer `Select` e somente oferece `Fix` quando a correção for
 
 UV fora de 0..1 é diagnostic, não validation error.
 
+### Consolidação de Operações e UV Health (V02)
+
+- **Projeções canônicas completas:** expostas como comandos transacionais no `CommandDispatcher`: `UvProjectPlanarCmd` (`uv.project_planar`), `UvProjectCubeCmd` (`uv.project_cube`), `UvProjectCylindricalCmd` (`uv.project_cylindrical`), `UvProjectSphericalCmd` (`uv.project_spherical`), e `UvProjectFromViewCmd` (`uv.project_view`), atuando na seleção parcial de faces ou na malha inteira caso vazia.
+- **Auto Unwrap conservativo:** provider xatlas preserva quads e n-gons autorais sem qualquer triangulação destrutiva de geometria 3D, mapeando UVs geradas de volta aos FaceCorners autorais.
+- **Pack determinístico:** implementado com padding parametrizado em pixels (`UvPackIslandsCmd`), rotação condicional de 90° e confinamento estrito a `0..=1` sem sobreposição acidental de ilhas.
+- **UV Health & Diagnostics (`UvDiagnosticsDto`):** consolidado no `AppState` e `EditorController` via `query_uv_diagnostics()`, computando ilhas conexas, contagem de overlaps, faces de área zero, cantos fora de `0..=1` (apenas telemetria, não erro), distorção de área média e máxima (Area Stretch) e densidade de texels real em px/world-unit (`UvSetTexelDensityCmd`, `UvEqualizeTexelDensityCmd`).
+- **Suíte sintética de gates V02:** `crates/core/tests/uv_health_v02_gates_tests.rs` (5/5 testes verdes cobrindo topologia autoral em unwrap, projeções parciais/totais, padding em pixels, métricas de health e integridade estrita de Undo/Redo).
+
 ## Multi-material
 
 O background/canal ativo vem do `MaterialSlotIndex` selecionado.
@@ -443,6 +459,18 @@ Somente overlays 3D de checker/diagnostics quando solicitados.
 - Paint coverage corresponde ao UV Editor;
 - glTF/OBJ UV roundtrip;
 - Undo/Redo completo.
+
+### Matriz de implementação — Auto Unwrap & UV Foundations (G01 / V01)
+
+| Requisito / Gate                                    | Status   | Evidência                                       | Detalhes da verificação                                                                      |
+|-----------------------------------------------------|----------|-------------------------------------------------|----------------------------------------------------------------------------------------------|
+| Topologia autoral intacta (preserva quads e n-gons) | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate1_auto_unwrap_preserves_topology_and_quads_and_ngons`: contagem e índices intactos |
+| Atualização de seams e preservação de costuras manuais | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate2_chart_boundaries_update_seams_and_preserve_manual_seams`: seams preservadas    |
+| Rejeição e rollback estrito em entradas hostis      | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate3_rollback_and_zero_mutation_on_hostile_or_empty_inputs`: zero mutação em NaN/vazio |
+| Pack determinístico e respeito ao padding em pixels | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate4_pack_determinism_and_pixel_padding`: determinismo bit-a-bit e sem sobreposição   |
+| Comando transacional Undo/Redo completo             | [x] DONE | `crates/core/tests/unwrap_g01_gates_tests.rs`   | `test_gate5_command_dispatch_and_undo_redo_fidelity`: 1 undo, restauração e redo perfeitos   |
+| Pins tipados e split/stitch UV                      | [x] DONE | `crates/core/tests/uv_foundations_v01_tests.rs` | `UvPinCmd`, `UvSplitCmd`, `UvStitchCmd` com integridade e restrições de solver                |
+
 
 ## Não objetivos V1
 

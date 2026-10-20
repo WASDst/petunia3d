@@ -20,7 +20,7 @@ use glam::Vec3;
 use petunia_core::Command;
 
 use crate::projection::project_world_point;
-use crate::{ModelingMode, PetuniaViewport, ProfileEditGesture, ProfileHitTarget, SlintUiBridge};
+use crate::{PetuniaViewport, ProfileEditGesture, ProfileHitTarget, SlintUiBridge};
 use petunia_core::Workspace;
 
 /// Raio (px) para acertar uma aresta ou o contorno de um perfil.
@@ -129,9 +129,9 @@ impl Command for TransformProfileCmd {
 }
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
-    /// Sólo o DRAW mostra as formas persistentes (POLY trabalha em componentes).
+    /// Persistent planar shapes are visible in both modeling presets.
     pub(crate) fn draw_shapes_visible(&self) -> bool {
-        self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw
+        self.state.workspace == Workspace::Model
     }
 
     /// Regiões e contornos em cache; recalcula só quando o documento muda.

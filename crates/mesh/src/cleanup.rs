@@ -130,10 +130,10 @@ impl Mesh {
         apply_compaction(self, &vertex_map, &face_map);
         TopologyResult {
             faces_removed: faces_before - self.faces.len(),
-            remap: ElementRemap {
-                vertices: Vec::new(),
-                faces: face_map.iter().enumerate().map(|(i, m)| (i, *m)).collect(),
-            },
+            remap: ElementRemap::new(
+                Vec::new(),
+                face_map.iter().enumerate().map(|(i, m)| (i, *m)).collect(),
+            ),
             invalidated: DirtyDomains::topology_edit(),
             ..TopologyResult::none()
         }
@@ -172,14 +172,14 @@ impl Mesh {
         apply_compaction(self, &vertex_map, &face_map);
         TopologyResult {
             verts_removed: removed,
-            remap: ElementRemap {
-                vertices: vertex_map
+            remap: ElementRemap::new(
+                vertex_map
                     .iter()
                     .enumerate()
                     .map(|(i, m)| (i as u32, *m))
                     .collect(),
-                faces: Vec::new(),
-            },
+                Vec::new(),
+            ),
             invalidated: DirtyDomains::topology_edit(),
             ..TopologyResult::none()
         }
@@ -222,10 +222,10 @@ impl Mesh {
         apply_compaction(self, &vertex_map, &face_map);
         TopologyResult {
             faces_removed: faces_before - self.faces.len(),
-            remap: ElementRemap {
-                vertices: Vec::new(),
-                faces: face_map.iter().enumerate().map(|(i, m)| (i, *m)).collect(),
-            },
+            remap: ElementRemap::new(
+                Vec::new(),
+                face_map.iter().enumerate().map(|(i, m)| (i, *m)).collect(),
+            ),
             uv_faces_touched: (0..self.faces.len()).collect(),
             invalidated: DirtyDomains::topology_edit(),
             ..TopologyResult::none()

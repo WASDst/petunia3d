@@ -220,6 +220,10 @@ pub fn imprint_region_general(
         .map(|p| p[0].abs().max(p[1].abs()))
         .fold(1.0e-6, f64::max);
     let plane_tolerance = (size as f32 * 1.0e-5).max(1.0e-5);
+    let off_plane = |p: &Vec3| (*p - plane_point).dot(normal).abs() > plane_tolerance;
+    if outer.iter().any(off_plane) || holes.iter().flatten().any(off_plane) {
+        return Err(ImprintError::NotPlanar);
+    }
 
     // Faces coplanares com a região.
     let coplanar: Vec<usize> = (0..mesh.faces.len())
@@ -1007,5 +1011,47 @@ mod tests {
         assert!(mesh.faces.len() >= 2);
         assert!(mesh.faces[inner].selected);
         assert!((area_of(&mesh, inner) - 4.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn imprint_region_with_hole_splits_face_with_earcut() {
+        // Quad de [0,0] a [4,4] (área 16, normal +Z)
+        let q = quad();
+        // Região externa: quadrado de [0.5, 0.5] a [3.5, 3.5] (lado 3, área 9)
+        let outer = square(0.5, 0.5, 3.0);
+        // Furo interno: quadrado de [1.5, 1.5] a [2.5, 2.5] (lado 1, área 1)
+        let hole = square(1.5, 1.5, 1.0);
+        let (mesh, inside) =
+            imprint_region_general(&q, &outer, &[hole], Vec3::ZERO, Vec3::Z).unwrap();
+        assert!(!inside.is_empty(), "Deve haver faces internas selecionadas");
+        let inside_area: f32 = inside.iter().map(|&f| area_of(&mesh, f)).sum();
+        // Área esperada para a região com furo: 9.0 - 1.0 = 8.0
+        assert!(
+            (inside_area - 8.0).abs() < 1e-2,
+            "Área esperada 8.0, obtida: {inside_area}"
+        );
+        let total_area: f32 = (0..mesh.faces.len()).map(|f| area_of(&mesh, f)).sum();
+        // Área total deve continuar 16.0 (preservação de área coplanar)
+        assert!(
+            (total_area - 16.0).abs() < 1e-2,
+            "Área total esperada 16.0, obtida: {total_area}"
+        );
+    }
+
+    #[test]
+    fn imprint_region_general_rejects_non_planar_contours() {
+        let q = quad();
+        let outer = square(0.5, 0.5, 3.0);
+        let hole = square(1.5, 1.5, 1.0);
+        let mut tilted_hole = hole;
+        tilted_hole[0].z += 0.5; // Desvia do plano Z = 0
+        let err =
+            imprint_region_general(&q, &outer, &[tilted_hole], Vec3::ZERO, Vec3::Z).unwrap_err();
+        assert_eq!(err, ImprintError::NotPlanar);
+
+        let mut tilted_outer = outer;
+        tilted_outer[2].z += 0.5;
+        let err = imprint_region_general(&q, &tilted_outer, &[], Vec3::ZERO, Vec3::Z).unwrap_err();
+        assert_eq!(err, ImprintError::NotPlanar);
     }
 }

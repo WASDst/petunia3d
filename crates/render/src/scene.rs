@@ -47,9 +47,50 @@ pub fn grid_lines_custom(
     show_iso: bool,
     iso_angle_deg: f32,
 ) -> Vec<ColoredLine> {
+    let mut v = grid_plane_lines(size, spacing, opacity, show_iso, iso_angle_deg);
+    v.extend(grid_axis_lines(size, [true, false, true]));
+    v
+}
+
+/// Eixos com o peso do grid (mais fortes que as linhas, sem dominar o objeto),
+/// só os pedidos em `axes` (X, Y, Z). O Y é vertical e, por padrão, fica oculto.
+pub fn grid_axis_lines(size: f32, axes: [bool; 3]) -> Vec<ColoredLine> {
+    let extent = if size.is_finite() { size.max(1.0) } else { 1.0 };
+    let tone = |c: [f32; 3]| [c[0] * 0.62, c[1] * 0.62, c[2] * 0.62];
     let mut v = Vec::new();
+    if axes[0] {
+        v.push(([-extent, 0.0, 0.0], [extent, 0.0, 0.0], tone(AXIS_X)));
+    }
+    if axes[1] {
+        v.push(([0.0, -extent, 0.0], [0.0, extent, 0.0], tone(AXIS_Y)));
+    }
+    if axes[2] {
+        v.push(([0.0, 0.0, -extent], [0.0, 0.0, extent], tone(AXIS_Z)));
+    }
+    v
+}
+
+/// Linhas do plano da grade (sem os eixos). O número de linhas é limitado:
+/// um espaçamento minúsculo numa grade enorme não pode gerar milhões de linhas.
+pub fn grid_plane_lines(
+    size: f32,
+    spacing: f32,
+    opacity: f32,
+    show_iso: bool,
+    iso_angle_deg: f32,
+) -> Vec<ColoredLine> {
+    const MAX_STEPS_PER_SIDE: f32 = 2000.0;
+    let mut v = Vec::new();
+    let size = if size.is_finite() { size } else { 1.0 };
+    let spacing = if spacing.is_finite() && spacing > 0.0 {
+        spacing
+    } else {
+        1.0
+    };
+    let opacity = if opacity.is_finite() { opacity } else { 0.5 };
+    let spacing = spacing.max(size.max(1.0) / MAX_STEPS_PER_SIDE);
     let extent = size.max(1.0);
-    let step = spacing.clamp(0.1, extent);
+    let step = spacing.min(extent);
     let op = opacity.clamp(0.05, 1.0);
 
     // Hierarquia do grid: cada 10ª linha é "major" e recebe mais contraste. É
@@ -97,20 +138,6 @@ pub fn grid_lines_custom(
             }
         }
     }
-
-    // Eixos por último, com peso próprio: são a referência mais forte do grid
-    // e precisam vencer as linhas sem dominar o objeto.
-    let axis_extent = extent;
-    v.push((
-        [-axis_extent, 0.0, 0.0],
-        [axis_extent, 0.0, 0.0],
-        [AXIS_X[0] * 0.62, AXIS_X[1] * 0.62, AXIS_X[2] * 0.62],
-    ));
-    v.push((
-        [0.0, 0.0, -axis_extent],
-        [0.0, 0.0, axis_extent],
-        [AXIS_Z[0] * 0.62, AXIS_Z[1] * 0.62, AXIS_Z[2] * 0.62],
-    ));
 
     v
 }

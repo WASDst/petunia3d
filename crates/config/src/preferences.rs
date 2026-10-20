@@ -115,6 +115,60 @@ impl SectionLayout {
     }
 }
 
+/// Limites da grade da vista 3D (metros; opacidade 0..1).
+pub const VIEWPORT_GRID_SIZE_RANGE: (f32, f32) = (1.0, 1000.0);
+pub const VIEWPORT_GRID_SPACING_RANGE: (f32, f32) = (0.01, 100.0);
+pub const VIEWPORT_GRID_OPACITY_RANGE: (f32, f32) = (0.05, 1.0);
+/// Linhas por lado acima das quais o espaçamento é rejeitado (custo de desenho).
+pub const VIEWPORT_GRID_MAX_LINES_PER_SIDE: f32 = 2000.0;
+
+/// Grade e eixos da vista 3D: extensão, lado do ladrilho, opacidade e eixos visíveis.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewportGridPreferences {
+    /// Meia extensão em metros.
+    pub size: f32,
+    /// Lado do ladrilho em metros.
+    pub spacing: f32,
+    pub opacity: f32,
+    /// X, Y, Z. O Y nasce desligado (atravessa os objetos).
+    pub axes: [bool; 3],
+}
+
+impl Default for ViewportGridPreferences {
+    fn default() -> Self {
+        Self {
+            size: 20.0,
+            spacing: 1.0,
+            opacity: 0.5,
+            axes: [true, false, true],
+        }
+    }
+}
+
+impl ViewportGridPreferences {
+    /// Valores fora da faixa (ou não finitos) voltam ao padrão; um espaçamento que
+    /// geraria linhas demais é alargado até caber no orçamento.
+    pub fn sanitized(mut self) -> Self {
+        let defaults = Self::default();
+        let fix = |value: f32, (lo, hi): (f32, f32), fallback: f32| {
+            if value.is_finite() && (lo..=hi).contains(&value) {
+                value
+            } else {
+                fallback
+            }
+        };
+        self.size = fix(self.size, VIEWPORT_GRID_SIZE_RANGE, defaults.size);
+        self.spacing = fix(self.spacing, VIEWPORT_GRID_SPACING_RANGE, defaults.spacing);
+        self.opacity = fix(self.opacity, VIEWPORT_GRID_OPACITY_RANGE, defaults.opacity);
+        let min_spacing = self.size / VIEWPORT_GRID_MAX_LINES_PER_SIDE;
+        if self.spacing < min_spacing {
+            self.spacing = min_spacing;
+        }
+        self
+    }
+}
+
 fn default_theme_id() -> String {
     "petunia-dark".to_string()
 }
@@ -125,7 +179,23 @@ const fn default_drag_threshold_px() -> f32 {
 }
 
 /// Igual a `petunia_core::DEFAULT_SNAP_RADIUS_PIXELS`.
-const fn default_snap_radius_px() -> f32 {
+const fn default_gizmo_size() -> f32 {
+    72.0
+}
+
+fn default_gizmo_thickness() -> f32 {
+    2.0
+}
+
+const fn default_select_gizmo_handles() -> [bool; 3] {
+    [true; 3]
+}
+
+fn default_nav_cube_opacity() -> f32 {
+    1.0
+}
+
+fn default_snap_radius_px() -> f32 {
     12.0
 }
 
@@ -146,6 +216,16 @@ pub struct UserPreferences {
     pub selection_rgb: [u8; 3],
     /// Espessura visual em pixels lógicos (1..=6).
     pub selection_thickness: f32,
+    /// Comprimento das hastes dos gizmos de transformação, px lógicos (48..=160).
+    pub gizmo_size: f32,
+    /// Espessura do traço dos gizmos de transformação, px lógicos (1..=6).
+    pub gizmo_thickness: f32,
+    /// Alças do gizmo do Selecionar: mover, girar, escalar (qualquer combinação).
+    #[serde(default = "default_select_gizmo_handles")]
+    pub select_gizmo_handles: [bool; 3],
+    /// Opacidade do cubo de navegação da vista 3D (0,2..=1). Em uso (mouse sobre
+    /// ele ou arrastando) o cubo volta à opacidade total.
+    pub nav_cube_opacity: f32,
     /// Idioma escolhido explicitamente; None preserva o idioma do host/CLI.
     pub language: Option<String>,
     /// Escala da interface (1.0 = 100%, até 2.0 = 200%).
@@ -173,6 +253,9 @@ pub struct UserPreferences {
     /// Oclusão ambiente (GTAO) no Solid e no Material.
     #[serde(default = "default_true")]
     pub viewport_ambient_occlusion: bool,
+    /// Grade e eixos da vista 3D (ADR-C16, B6).
+    #[serde(default)]
+    pub viewport_grid: ViewportGridPreferences,
     /// Raio do snap em px lógicos (4–48). Maior ajuda quem tem tremor ou pouca
     /// precisão (Findlater et al., 2010: cursores de área).
     #[serde(default = "default_snap_radius_px")]
@@ -229,6 +312,10 @@ impl Default for UserPreferences {
             invert_vertical_drag: false,
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
+            gizmo_size: default_gizmo_size(),
+            gizmo_thickness: default_gizmo_thickness(),
+            select_gizmo_handles: default_select_gizmo_handles(),
+            nav_cube_opacity: default_nav_cube_opacity(),
             ui_scale: 1.0,
             language: None,
             model_quick_actions: Vec::new(),
@@ -240,6 +327,7 @@ impl Default for UserPreferences {
             viewport_matcap: false,
             viewport_ambient_occlusion: true,
             snap_radius_px: default_snap_radius_px(),
+            viewport_grid: ViewportGridPreferences::default(),
             colorblind_axes: false,
             reduced_motion: false,
             show_tool_labels: false,
@@ -279,11 +367,26 @@ impl UserPreferences {
         {
             preferences.selection_thickness = Self::default().selection_thickness;
         }
+        if !preferences.gizmo_size.is_finite() || !(48.0..=160.0).contains(&preferences.gizmo_size)
+        {
+            preferences.gizmo_size = default_gizmo_size();
+        }
+        if !preferences.gizmo_thickness.is_finite()
+            || !(1.0..=6.0).contains(&preferences.gizmo_thickness)
+        {
+            preferences.gizmo_thickness = default_gizmo_thickness();
+        }
+        if !preferences.nav_cube_opacity.is_finite()
+            || !(0.2..=1.0).contains(&preferences.nav_cube_opacity)
+        {
+            preferences.nav_cube_opacity = default_nav_cube_opacity();
+        }
         if !preferences.snap_radius_px.is_finite()
             || !(4.0..=48.0).contains(&preferences.snap_radius_px)
         {
             preferences.snap_radius_px = default_snap_radius_px();
         }
+        preferences.viewport_grid = preferences.viewport_grid.sanitized();
         if !preferences.ui_scale.is_finite() || !(0.9..=2.0).contains(&preferences.ui_scale) {
             preferences.ui_scale = 1.0;
         }
@@ -375,6 +478,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn viewport_grid_defaults_hide_the_vertical_axis_and_reject_hostile_values() {
+        let defaults = ViewportGridPreferences::default();
+        assert_eq!(defaults.axes, [true, false, true], "o eixo Y nasce oculto");
+        let hostile = ViewportGridPreferences {
+            size: f32::INFINITY,
+            spacing: f32::NAN,
+            opacity: -3.0,
+            axes: [false, true, false],
+        }
+        .sanitized();
+        assert_eq!(hostile.size, defaults.size);
+        assert_eq!(hostile.spacing, defaults.spacing);
+        assert_eq!(hostile.opacity, defaults.opacity);
+        assert_eq!(
+            hostile.axes,
+            [false, true, false],
+            "eixos são escolha da pessoa"
+        );
+        let dense = ViewportGridPreferences {
+            size: 1000.0,
+            spacing: 0.01,
+            ..defaults
+        }
+        .sanitized();
+        assert!(
+            dense.size / dense.spacing <= VIEWPORT_GRID_MAX_LINES_PER_SIDE + 0.5,
+            "orçamento de linhas: {dense:?}"
+        );
+    }
+
+    #[test]
     fn preference_round_trip_and_missing_field_default() {
         let path =
             std::env::temp_dir().join(format!("petunia-preferences-{}.toml", std::process::id()));
@@ -382,8 +516,12 @@ mod tests {
             invert_vertical_drag: true,
             selection_rgb: [32, 180, 240],
             selection_thickness: 3.5,
+            gizmo_size: 96.0,
+            gizmo_thickness: 3.0,
+            select_gizmo_handles: [true, false, true],
+            nav_cube_opacity: 0.5,
             ui_scale: 1.25,
-            model_quick_actions: vec!["model.fuse".to_string()],
+            model_quick_actions: vec!["model.join".to_string()],
             colorblind_axes: false,
             reduced_motion: false,
             show_tool_labels: true,
@@ -403,6 +541,12 @@ mod tests {
             viewport_matcap: true,
             viewport_ambient_occlusion: false,
             snap_radius_px: 20.0,
+            viewport_grid: ViewportGridPreferences {
+                size: 50.0,
+                spacing: 0.25,
+                opacity: 0.8,
+                axes: [true, true, false],
+            },
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),
                 SectionLayout {
@@ -425,12 +569,24 @@ mod tests {
         assert_eq!(UserPreferences::load_from_path(&path).unwrap(), updated);
         fs::write(
             &path,
-            "selection_thickness = nan\ninvert_vertical_drag = true\n",
+            "selection_thickness = nan\ninvert_vertical_drag = true\ngizmo_size = 5000.0\ngizmo_thickness = nan\nnav_cube_opacity = 7.5\n",
         )
         .unwrap();
         let sanitized = UserPreferences::load_from_path(&path).unwrap();
         assert_eq!(sanitized.selection_thickness, 2.0);
         assert!(sanitized.invert_vertical_drag);
+        assert_eq!(
+            sanitized.gizmo_size, 72.0,
+            "tamanho fora da faixa volta ao padrão"
+        );
+        assert_eq!(
+            sanitized.gizmo_thickness, 2.0,
+            "espessura não finita volta ao padrão"
+        );
+        assert_eq!(
+            sanitized.nav_cube_opacity, 1.0,
+            "opacidade fora da faixa volta ao padrão"
+        );
         fs::remove_file(&path).unwrap();
         assert_eq!(
             toml::from_str::<UserPreferences>("").unwrap(),

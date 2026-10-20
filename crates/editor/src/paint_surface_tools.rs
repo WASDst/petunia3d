@@ -67,7 +67,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.state.workspace == Workspace::Paint
                     } else {
                         self.state.workspace == Workspace::Model
-                            && self.modeling_mode == ModelingMode::Draw
                     };
                 Some(petunia_core::CommandPaletteItem {
                     id: (*id).into(),
@@ -662,7 +661,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .active_mut()
                 .and_then(|a| a.paint_stack.as_mut())
                 .and_then(|s| s.active_mut())
-                .and_then(|l| l.canvas_mut())
+                .and_then(|l| l.paint_canvas_mut())
         {
             for (x, y) in removed {
                 if x < 0 || y < 0 || x >= canvas.w as i32 || y >= canvas.h as i32 {
@@ -797,7 +796,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
     pub fn import_svg_profiles(&mut self, path: &std::path::Path) -> bool {
-        if self.state.workspace != Workspace::Model || self.modeling_mode != ModelingMode::Draw {
+        if self.state.workspace != Workspace::Model {
             return false;
         }
         let svg = match files::load_svg(path) {

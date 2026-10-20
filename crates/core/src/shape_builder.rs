@@ -105,16 +105,44 @@ fn same_region(a: &Region2, b: &Region2) -> bool {
 }
 
 /// Comando de edição de formas (Shape Builder e Pathfinder).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ShapeEditCmd {
     pub plane: Option<RegionPlane>,
+    pub operands: Option<Vec<uuid::Uuid>>,
     pub edit: ShapeEdit,
 }
 
 impl ShapeEditCmd {
+    pub fn new(edit: ShapeEdit) -> Self {
+        Self {
+            plane: None,
+            operands: None,
+            edit,
+        }
+    }
+
+    pub fn with_plane(mut self, plane: RegionPlane) -> Self {
+        self.plane = Some(plane);
+        self
+    }
+
+    pub fn with_operands(mut self, operands: Vec<uuid::Uuid>) -> Self {
+        self.operands = Some(operands);
+        self
+    }
+
     pub fn pathfinder(op: PathfinderOp) -> Self {
         Self {
             plane: None,
+            operands: None,
+            edit: ShapeEdit::Pathfinder(op),
+        }
+    }
+
+    pub fn pathfinder_with_operands(op: PathfinderOp, operands: Vec<uuid::Uuid>) -> Self {
+        Self {
+            plane: None,
+            operands: Some(operands),
             edit: ShapeEdit::Pathfinder(op),
         }
     }
@@ -151,11 +179,21 @@ impl Command for ShapeEditCmd {
         if state.document.project.profiles.is_empty() {
             return Err("Draw at least one closed shape first");
         }
+        if let Some(ref operands) = self.operands {
+            if operands.is_empty() {
+                return Err("No operands selected");
+            }
+            if let ShapeEdit::Pathfinder(_) = &self.edit
+                && operands.len() < 2
+            {
+                return Err("Pathfinder needs two or more closed shapes on the same plane");
+            }
+        }
         Ok(())
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        match state.apply_shape_edit(self.plane.as_ref(), &self.edit) {
+        match state.apply_shape_edit(self.plane.as_ref(), self.operands.as_deref(), &self.edit) {
             Ok(report) => {
                 state.set_status(format!(
                     "{}: {} faces → {} faces",
@@ -171,14 +209,15 @@ impl Command for ShapeEditCmd {
 }
 
 impl CommandContext<'_> {
-    /// Aplica `edit` ao plano `hint` (ou ao do perfil mais recente).
+    /// Aplica `edit` ao plano `hint` (ou ao do perfil mais recente), restrito opcionalmente a `operands`.
     pub fn apply_shape_edit(
         &mut self,
         hint: Option<&RegionPlane>,
+        operands: Option<&[uuid::Uuid]>,
         edit: &ShapeEdit,
     ) -> Result<ShapeEditReport, ShapeEditError> {
         let groups = self.profile_groups(true);
-        let group: &ProfileGroup = match hint {
+        let group_ref: &ProfileGroup = match hint {
             Some(plane) => groups
                 .iter()
                 .find(|g| AppState::same_plane(&g.plane, plane))
@@ -191,10 +230,28 @@ impl CommandContext<'_> {
                     .profiles
                     .iter()
                     .rev()
-                    .find_map(|profile| groups.iter().find(|g| g.profiles.contains(&profile.id)));
+                    .find_map(|profile| {
+                        if let Some(op_ids) = operands
+                            && !op_ids.contains(&profile.id)
+                        {
+                            return None;
+                        }
+                        groups.iter().find(|g| g.profiles.contains(&profile.id))
+                    });
                 latest.ok_or(ShapeEditError::NoShapes)?
             }
         };
+
+        let group: ProfileGroup = if let Some(op_ids) = operands {
+            let filtered = group_ref.filter_by_operands(op_ids);
+            if filtered.profiles.is_empty() {
+                return Err(ShapeEditError::NoShapes);
+            }
+            filtered
+        } else {
+            group_ref.clone()
+        };
+
         let plane = group.plane;
         let regions = group.regions();
         if regions.is_empty() {
@@ -446,6 +503,7 @@ mod tests {
         assert_eq!(face_areas(&state).len(), 3);
         let cmd = ShapeEditCmd {
             plane: None,
+            operands: None,
             edit: ShapeEdit::Merge {
                 samples: vec![sample(0.5, 0.5), sample(1.5, 1.5)],
             },
@@ -468,6 +526,7 @@ mod tests {
         let mut state = two_squares();
         let cmd = ShapeEditCmd {
             plane: None,
+            operands: None,
             edit: ShapeEdit::Merge {
                 samples: vec![sample(1.5, 1.5)],
             },
@@ -485,6 +544,7 @@ mod tests {
         // sobreposição e a parte só do segundo, que juntas são o segundo quadrado.
         let cmd = ShapeEditCmd {
             plane: None,
+            operands: None,
             edit: ShapeEdit::Delete {
                 samples: vec![sample(0.5, 0.5)],
             },
@@ -500,6 +560,7 @@ mod tests {
         let mut state = two_squares();
         let cmd = ShapeEditCmd {
             plane: None,
+            operands: None,
             edit: ShapeEdit::Delete {
                 samples: vec![sample(1.5, 1.5)],
             },
@@ -515,6 +576,7 @@ mod tests {
         let before = state.project.project.profiles.len();
         let cmd = ShapeEditCmd {
             plane: None,
+            operands: None,
             edit: ShapeEdit::Merge {
                 samples: vec![sample(10.0, 10.0)],
             },
@@ -600,6 +662,7 @@ mod tests {
         state
             .dispatch(&ShapeEditCmd {
                 plane: None,
+                operands: None,
                 edit: ShapeEdit::Merge {
                     samples: vec![sample(0.5, 0.5), sample(0.5, 1.5)],
                 },
@@ -611,6 +674,7 @@ mod tests {
             2
         );
     }
+
     #[test]
     fn untouched_profile_keeps_identity_and_name() {
         let mut state = two_squares();
@@ -619,11 +683,110 @@ mod tests {
         state
             .dispatch(&ShapeEditCmd {
                 plane: None,
+                operands: None,
                 edit: ShapeEdit::Delete {
                     samples: vec![sample(1.5, 1.5)],
                 },
             })
             .unwrap();
         assert_eq!(state.project.get_profile(original.id), Some(&original));
+    }
+
+    #[test]
+    fn pathfinder_with_explicit_operands_preserves_untouched_shapes() {
+        let mut state = two_squares();
+        add_square(&mut state, 10.0, 10.0, 2.0);
+        assert_eq!(state.project.project.profiles.len(), 3);
+        let sq1_id = state.project.project.profiles[0].id;
+        let sq2_id = state.project.project.profiles[1].id;
+        let sq3 = state.project.project.profiles[2].clone();
+
+        let initial_undo = state.project.undo.depth().0;
+        let cmd = ShapeEditCmd::pathfinder_with_operands(PathfinderOp::Unite, vec![sq1_id, sq2_id]);
+        state
+            .dispatch(&cmd)
+            .expect("pathfinder with operands should succeed");
+
+        let untouched = state
+            .project
+            .get_profile(sq3.id)
+            .expect("square 3 must be preserved");
+        assert_eq!(untouched.id, sq3.id);
+        assert_eq!(untouched.spline_id, sq3.spline_id);
+        assert_eq!(untouched.name, sq3.name);
+
+        assert_eq!(state.project.project.profiles.len(), 2);
+        let areas = face_areas(&state);
+        assert_eq!(areas.len(), 2);
+        assert!((areas[0] - 4.0).abs() < 1e-6);
+        assert!((areas[1] - 7.0).abs() < 1e-6);
+
+        assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+        state.undo();
+        assert_eq!(state.project.project.profiles.len(), 3);
+        assert_eq!(face_areas(&state).len(), 4);
+    }
+
+    #[test]
+    fn pathfinder_with_invalid_operands_is_rejected() {
+        let mut state = two_squares();
+        let cmd_empty = ShapeEditCmd {
+            plane: None,
+            operands: Some(vec![]),
+            edit: ShapeEdit::Pathfinder(PathfinderOp::Unite),
+        };
+        assert!(state.dispatch(&cmd_empty).is_err());
+
+        let sq1_id = state.project.project.profiles[0].id;
+        let cmd_single = ShapeEditCmd {
+            plane: None,
+            operands: Some(vec![sq1_id]),
+            edit: ShapeEdit::Pathfinder(PathfinderOp::Unite),
+        };
+        assert!(state.dispatch(&cmd_single).is_err());
+
+        let cmd_nonexistent = ShapeEditCmd::pathfinder_with_operands(
+            PathfinderOp::Unite,
+            vec![uuid::Uuid::new_v4(), uuid::Uuid::new_v4()],
+        );
+        assert!(state.dispatch(&cmd_nonexistent).is_err());
+    }
+
+    #[test]
+    fn shape_builder_preserves_holes_in_resulting_profile() {
+        let mut state = AppState::default();
+        let outer_points = [
+            [0.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0],
+            [0.0, 10.0, 0.0],
+        ];
+        let spline = SplineResource::from_polyline("outer", &outer_points, true);
+        let mut profile = ProfileResource::new("outer", spline.id, plane());
+        let hole = vec![[2.0, 2.0], [4.0, 2.0], [4.0, 4.0], [2.0, 4.0]];
+        profile.holes.push(hole);
+        state.project.splines.push(spline);
+        state.project.profiles.push(profile);
+
+        add_square(&mut state, 8.0, 0.0, 4.0);
+
+        let initial_undo = state.project.undo.depth().0;
+        let cmd = ShapeEditCmd::pathfinder(PathfinderOp::Unite);
+        state
+            .dispatch(&cmd)
+            .expect("Unite on shape with hole should succeed");
+
+        assert_eq!(state.project.profiles.len(), 1);
+        let res_profile = &state.project.profiles[0];
+        assert_eq!(
+            res_profile.holes.len(),
+            1,
+            "Hole must be preserved in profile.holes"
+        );
+
+        assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+        state.undo();
+        assert_eq!(state.project.profiles.len(), 2);
+        assert_eq!(state.project.profiles[0].holes.len(), 1);
     }
 }

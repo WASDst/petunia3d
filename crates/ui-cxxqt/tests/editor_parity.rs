@@ -382,6 +382,45 @@ fn idle_tick_does_not_request_redraw_and_motion_tick_advances() {
     assert!(!e.request(&json!({"action":"tick","dt":0.033})).unwrap());
 }
 
+/// Regressão: `view.frame_selection` só agendava `camera_frame`; nenhum caminho
+/// do shell Qt o avançava, então F / "Enquadrar seleção" não movia a câmera.
+#[test]
+fn frame_selection_reaches_goal_through_shell_tick() {
+    let mut e = editor();
+    e.state.camera.target.x = 40.0;
+    e.state.camera.distance = 90.0;
+    request(
+        &mut e,
+        json!({"action":"command","id":"view.frame_selection"}),
+    );
+    let goal = e.state.camera_frame.clone().expect("framing scheduled").1;
+    assert!(
+        e.request(&json!({"action":"tick","dt":0.033})).unwrap(),
+        "framing tick must request a redraw"
+    );
+    for _ in 0..30 {
+        e.request(&json!({"action":"tick","dt":0.033})).unwrap();
+    }
+    assert!(e.state.camera_frame.is_none(), "animation must finish");
+    assert!((e.state.camera.target - goal.target).length() < 1e-4);
+    assert!((e.state.camera.distance - goal.distance).abs() < 1e-4);
+    assert!(!e.request(&json!({"action":"tick","dt":0.033})).unwrap());
+}
+
+#[test]
+fn frame_selection_with_reduced_motion_jumps_on_first_tick() {
+    let mut e = editor();
+    e.state.ui.reduced_motion = true;
+    e.state.camera.target.x = 40.0;
+    e.state.camera.distance = 90.0;
+    request(&mut e, json!({"action":"command","id":"view.frame_all"}));
+    let goal = e.state.camera_frame.clone().expect("framing scheduled").1;
+    assert!(e.request(&json!({"action":"tick","dt":0.001})).unwrap());
+    assert!(e.state.camera_frame.is_none());
+    assert!((e.state.camera.target - goal.target).length() < 1e-4);
+    assert!((e.state.camera.distance - goal.distance).abs() < 1e-4);
+}
+
 #[test]
 fn imported_palette_is_saved_and_restored_by_native_project_open() {
     let mut e = editor();
@@ -444,23 +483,32 @@ fn tablet_pressure_tilt_and_eraser_do_not_overwrite_the_brush_preset() {
     request(&mut e, json!({"action":"tablet_reset"}));
 }
 
+/// Pedido pelo mesmo canal C que a GUI usa (`petunia_qt_editor_request`).
+fn ffi_request(input: &str) -> Value {
+    use petunia_ui_cxxqt::editor::{petunia_qt_editor_free, petunia_qt_editor_request};
+    let input = std::ffi::CString::new(input).unwrap();
+    // O canal devolve uma string C própria, liberada pelo par `free`.
+    unsafe {
+        let raw = petunia_qt_editor_request(input.as_ptr());
+        assert!(!raw.is_null());
+        let value = serde_json::from_str(std::ffi::CStr::from_ptr(raw).to_str().unwrap()).unwrap();
+        petunia_qt_editor_free(raw);
+        value
+    }
+}
+
 #[test]
 fn headless_threads_cannot_mutate_another_threads_editor() {
-    // FFI pointers reference owned fixture strings and writable buffers.
-    unsafe {
-        use petunia_ui_cxxqt::render::opengl_viewport::{
-            petunia_qt_app_execute_command, petunia_qt_app_get_asset_count,
-        };
-        let before = petunia_qt_app_get_asset_count();
-        let child = std::thread::spawn(|| {
-            let before = petunia_qt_app_get_asset_count();
-            let command = std::ffi::CString::new("edit.duplicate").unwrap();
-            assert!(petunia_qt_app_execute_command(command.as_ptr()));
-            assert_eq!(petunia_qt_app_get_asset_count(), before + 1);
-        });
-        child.join().unwrap();
-        assert_eq!(petunia_qt_app_get_asset_count(), before);
-    }
+    let count = |snapshot: &Value| snapshot["scene_items"].as_array().map_or(0, Vec::len);
+    let before = count(&ffi_request(r#"{"action":"snapshot"}"#));
+    let child = std::thread::spawn(move || {
+        let before = count(&ffi_request(r#"{"action":"snapshot"}"#));
+        let after = ffi_request(r#"{"action":"command","id":"edit.duplicate"}"#);
+        assert_eq!(after["ok"], true);
+        assert_eq!(count(&after), before + 1);
+    });
+    child.join().unwrap();
+    assert_eq!(count(&ffi_request(r#"{"action":"snapshot"}"#)), before);
 }
 
 #[test]
@@ -660,5 +708,112 @@ fn decal_gizmo_mode_drives_the_viewport_drag() {
     assert!(
         e.request(&json!({"action":"decal_gizmo_mode","id":"spin"}))
             .is_err()
+    );
+}
+
+/// V03: a Estrutura do workspace UV lista as ilhas publicadas pelo snapshot e
+/// seleciona uma ilha inteira (substituindo ou acrescentando) pelo transporte.
+#[test]
+fn uv_structure_lists_islands_and_selects_them_by_index() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"UV"}));
+    request(&mut e, json!({"action":"command","id":"uv.unwrap_auto"}));
+    let islands = |e: &QtEditor| {
+        e.snapshot()["uv_editor"]["islands"]
+            .as_array()
+            .cloned()
+            .unwrap()
+    };
+    let rows = islands(&e);
+    assert!(
+        rows.len() >= 2,
+        "desdobramento automático do cubo gera várias ilhas: {rows:?}"
+    );
+    assert_eq!(
+        rows.len() as u64,
+        e.snapshot()["uv_editor"]["island_count"].as_u64().unwrap(),
+        "lista e contador vêm da mesma derivação"
+    );
+
+    request(
+        &mut e,
+        json!({"action":"uv_select_island","index":0,"extend":false}),
+    );
+    let rows = islands(&e);
+    assert_eq!(rows[0]["selected"], json!(true));
+    assert!(rows[1..].iter().all(|row| row["selected"] == json!(false)));
+    assert_eq!(
+        e.snapshot()["uv_editor"]["uv_selected_count"],
+        rows[0]["face_count"],
+        "a ilha inteira entra na seleção UV"
+    );
+
+    request(
+        &mut e,
+        json!({"action":"uv_select_island","index":1,"extend":true}),
+    );
+    let rows = islands(&e);
+    assert_eq!(
+        (rows[0]["selected"].clone(), rows[1]["selected"].clone()),
+        (json!(true), json!(true))
+    );
+
+    request(
+        &mut e,
+        json!({"action":"uv_select_island","index":0,"extend":false}),
+    );
+    assert_eq!(
+        islands(&e)[1]["selected"],
+        json!(false),
+        "sem extend substitui"
+    );
+
+    // Entrada hostil: índice fora da malha ou negativo não altera a seleção nem entra em pânico.
+    let before = islands(&e);
+    let _ = e.request(&json!({"action":"uv_select_island","index":100000,"extend":false}));
+    assert!(
+        e.request(&json!({"action":"uv_select_island","index":-1,"extend":false}))
+            .is_err()
+    );
+    assert!(
+        e.request(&json!({"action":"uv_select_island","index":0}))
+            .is_err(),
+        "extend é obrigatório"
+    );
+    assert_eq!(islands(&e), before);
+}
+
+#[test]
+fn the_operation_mode_request_reaches_the_active_tool() {
+    let mut e = editor();
+    // Sem ferramenta de operação, o pedido é recusado (sem efeito silencioso).
+    request(
+        &mut e,
+        json!({"action": "set_operation_mode", "mode": "individual"}),
+    );
+    assert_eq!(
+        e.state.tools.extrude_mode,
+        petunia_mesh::ExtrudeMode::Region,
+        "sem ferramenta ativa nada muda"
+    );
+
+    request(&mut e, json!({"action": "tool", "id": "extrude"}));
+    request(
+        &mut e,
+        json!({"action": "set_operation_mode", "mode": "individual"}),
+    );
+    assert_eq!(
+        e.state.tools.extrude_mode,
+        petunia_mesh::ExtrudeMode::Individual
+    );
+
+    // Um modo inexistente não muda o estado.
+    request(
+        &mut e,
+        json!({"action": "set_operation_mode", "mode": "inexistente"}),
+    );
+    assert_eq!(
+        e.state.tools.extrude_mode,
+        petunia_mesh::ExtrudeMode::Individual
     );
 }

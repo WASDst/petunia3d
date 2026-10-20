@@ -48,6 +48,10 @@ impl ProjectChanges {
     pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
+
+    pub const fn difference(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
 }
 
 impl std::ops::BitOr for ProjectChanges {
@@ -64,23 +68,31 @@ impl std::ops::BitOrAssign for ProjectChanges {
     }
 }
 
+pub mod align;
 pub mod animation;
 pub mod shared;
 pub use shared::Shared;
+pub mod animatable;
 pub mod autosave;
 pub mod export;
+pub mod export_model;
+pub mod external_path;
 pub mod format;
 pub mod game_ready;
 pub mod gltf_rig;
 pub mod ik;
+pub mod image_decode;
 pub mod import_gltf;
 pub mod import_obj;
 pub mod io_atomic;
 pub mod material;
+pub mod material_recipe;
 pub mod model_library;
 pub mod motion;
 mod motion_gen;
 pub mod object_transform;
+pub mod op_graph;
+pub mod origin;
 pub mod package;
 pub mod paint_layers;
 pub mod palette;
@@ -93,11 +105,18 @@ pub mod profile;
 pub mod profile_tools;
 pub mod rig;
 pub mod rig_roles;
+pub mod snapshot;
+pub mod solid_composition;
 pub mod spline;
 pub mod surface_attachment;
 pub mod surface_recipe;
 pub mod svg;
+pub mod transform_locks;
 
+pub use align::{
+    AlignAxis, AlignError, AlignMode, AlignReference, BoundingBox3D, compute_alignment_deltas,
+    compute_distribution_deltas,
+};
 pub use animation::{
     AnimationAsset, AnimationClip, AnimationLibrary, BlendMode, BoneTrack, CurveChannel,
     CurvePoint, Interpolation, Keyframe, MotionLayer, RetargetProfile, RigPreset,
@@ -108,6 +127,8 @@ pub use autosave::{
     RecoveryInfo, SessionLockInfo,
 };
 pub use export::{ExportError, export_gltf, export_obj};
+pub use export_model::{ExportMaterial, ExportMesh, ExportMetadata, ExportModel};
+pub use gltf_rig::SkinBinding;
 pub use ik::{
     IkChain, IkError, IkOutcome, IkSolver, chain_end_position, solve_chain, solve_fabrik,
     solve_two_bone,
@@ -133,7 +154,9 @@ pub use paint_layers::{
     DecalLayer, LayerBlendMode, LayerKind, PaintEffect, PaintLayer, PaintLayerStack, apply_effect,
     blend_pixels,
 };
-pub use palette::{export_gpl, export_hex, import_gpl, import_hex, preset_gameboy, preset_pico8};
+pub use palette::{
+    NamedPalette, export_gpl, export_hex, import_gpl, import_hex, preset_gameboy, preset_pico8,
+};
 pub use path_generator::{
     MAX_GENERATED_VERTICES, PathGenerator, PathGeneratorDependencies, PathGeneratorDiagnostics,
     PathGeneratorError, PathGeneratorEvaluation, PathGeneratorEvaluationCache, PathGeneratorKind,
@@ -149,10 +172,20 @@ pub use posing::{
     fit_skeleton_to_bounds, mesh_bounds, mesh_to_draw, posed_meshes, skeleton_bounds, skin_mesh,
 };
 pub use profile::{ProfileError, ProfileResource, ProfileWorkplane};
-pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight};
+pub use rig::{
+    Bone, ConnectionId, ConnectionKind, JointId, LiveRigData, PartId, RigError, RigReviewStatus,
+    Skeleton, SkinBindMethod, SkinData, StructuralConnection, StructuralJoint, StructuralPart,
+    StructuralRigUpdateReport, StructuralShapeGraph, Transform3D, VertexSkinWeight,
+    compute_skin_weights, remap_skin_weights, update_structural_rig_localized,
+};
 pub use rig_roles::{
     ArmPart, LegChain, LimbPart, RigRequirement, RigRole, RigRoleMap, RoleAssignment,
     RoleContractError, RoleError,
+};
+pub use snapshot::DocumentSnapshot;
+pub use solid_composition::{
+    CompositionError, CompositionStatus, RecipeStatus, SOLID_COMPOSITION_SCHEMA_VERSION,
+    SolidCompositionError, SolidCompositionRecipe, SolidCompositionStep, SolidSource,
 };
 pub use spline::{
     ArcLengthTable, SplineError, SplineEvaluationCache, SplineFrame, SplineHandleMode,
@@ -174,6 +207,8 @@ pub use svg::{
     MAX_RASTER_PX, MAX_SVG_BYTES, MAX_SVG_NODES, SvgError, SvgInfo, SvgNode, SvgSubpath,
     rasterize_svg, svg_info, svg_subpaths, svg_to_splines,
 };
+pub use transform_locks::{TransformChannel, TransformLocks};
+pub use zip;
 
 /// Canvas de textura simples (albedo) por asset — workspace PAINT.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -453,12 +488,20 @@ pub struct Asset {
     pub skeleton_id: Option<Uuid>,
     #[serde(default)]
     pub skin_data: Option<SkinData>,
+    /// Habilita ou desabilita a avaliação de skinning sem apagar pesos ou ossos (RIG-012).
+    #[serde(default = "default_true")]
+    pub skinning_enabled: bool,
+    /// Configuração e estado de Smart Rig estrutural e Live (H32 / RIG-003/005/006/007/012).
+    #[serde(default)]
+    pub live_rig: Option<LiveRigData>,
     #[serde(default)]
     pub favorite: bool,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(default)]
     pub modifiers: Vec<ModifierInstance>,
+    /// Offset local legado, lido apenas por compatibilidade. Um rebase
+    /// explícito normaliza para None: a origem canônica é o zero local do TRS.
     #[serde(default)]
     pub origin: Option<[f32; 3]>,
     /// Especificação paramétrica viva da primitiva (None = malha estática B-Rep).
@@ -481,13 +524,24 @@ pub struct Asset {
     /// objeto, não do viewport.
     #[serde(default)]
     pub surface_shading: petunia_mesh::shading::SurfaceShading,
-    /// Transform autoritativo local → mundo (P01/G10). Fase 1 da migração:
-    /// identidade em todo objeto; consumidores em mundo já leem
-    /// [`Asset::world_matrix`] / [`Asset::world_mesh`].
+    /// Transform autoritativo local → mundo (P01/G10/H19). Object Mode escreve
+    /// este TRS; consumidores em mundo leem world_matrix/world_mesh.
     #[serde(default)]
     pub transform: object_transform::ObjectTransform,
+    /// Canais do transform travados (B7): gizmo, G/R/S, campos e atalhos respeitam.
+    /// Sempre serializado: `Asset` também passa pelo layout posicional (postcard)
+    /// do formato legado, onde omitir um campo desalinharia os seguintes.
+    #[serde(default)]
+    pub transform_locks: TransformLocks,
+    /// Receita persistente de composição sólida reeditável (H26).
+    #[serde(default)]
+    pub composition: Option<solid_composition::SolidCompositionRecipe>,
     #[serde(skip)]
     eval_cache: Option<(u64, u64, Mesh)>,
+    /// Resultado das operações do Operation Graph (ADR-C13) para este objeto, com a
+    /// chave de dependência que o gerou. A malha autoral (`mesh`) nunca é alterada.
+    #[serde(skip)]
+    graph_cache: Option<(u64, Mesh)>,
 }
 
 impl Asset {
@@ -512,6 +566,8 @@ impl Asset {
             material_id: None,
             skeleton_id: None,
             skin_data: None,
+            skinning_enabled: true,
+            live_rig: None,
             favorite: false,
             tags: Vec::new(),
             modifiers: Vec::new(),
@@ -524,7 +580,29 @@ impl Asset {
             scale: [1.0, 1.0, 1.0],
             surface_shading: petunia_mesh::shading::SurfaceShading::Flat,
             transform: object_transform::ObjectTransform::IDENTITY,
+            transform_locks: TransformLocks::default(),
+            composition: None,
             eval_cache: None,
+            graph_cache: None,
+        }
+    }
+
+    /// Retorna verdadeiro se este asset é uma composição sólida reeditável.
+    pub fn is_composition(&self) -> bool {
+        self.composition.is_some()
+    }
+
+    /// Converte explicitamente a composição sólida em malha estática editável (bake explícito).
+    /// Retorna `true` se havia composição e ela foi convertida em malha estática.
+    pub fn bake_composition(&mut self) -> bool {
+        if let Some(recipe) = self.composition.take() {
+            let baked = recipe.bake();
+            if !baked.faces.is_empty() {
+                self.mesh = baked.into();
+            }
+            true
+        } else {
+            false
         }
     }
 
@@ -590,7 +668,7 @@ impl Asset {
         h
     }
 
-    fn source_mesh_hash(&self) -> u64 {
+    pub fn source_mesh_hash(&self) -> u64 {
         let mut hash = 0xcbf29ce484222325_u64;
         let mix = |mut value: u64, next: u64| {
             value ^= next;
@@ -647,15 +725,39 @@ impl Asset {
         hash
     }
 
-    /// Há algum modifier habilitado que altere a malha avaliada?
+    /// A malha avaliada difere da autoral? (modifier habilitado **ou** operações do
+    /// Operation Graph ativas). Chamadores usam a malha avaliada quando é `true`.
     pub fn has_enabled_modifiers(&self) -> bool {
-        self.modifiers.iter().any(|modifier| modifier.enabled)
+        self.graph_cache.is_some() || self.modifiers.iter().any(|modifier| modifier.enabled)
+    }
+
+    /// Há resultado de operações do grafo para este objeto?
+    pub fn has_graph_result(&self) -> bool {
+        self.graph_cache.is_some()
+    }
+
+    /// Resultado das operações do grafo (cache), se houver.
+    pub fn graph_mesh(&self) -> Option<&Mesh> {
+        self.graph_cache.as_ref().map(|(_, mesh)| mesh)
+    }
+
+    /// Chave de dependência do resultado em cache (para evitar reavaliar).
+    pub fn graph_cache_key(&self) -> Option<u64> {
+        self.graph_cache.as_ref().map(|(key, _)| *key)
+    }
+
+    /// Instala (ou limpa) o resultado das operações do grafo.
+    pub fn set_graph_cache(&mut self, cache: Option<(u64, Mesh)>) {
+        self.graph_cache = cache;
     }
 
     /// Malha avaliada emprestada quando não há modifiers (caso comum: zero
     /// cópia e zero hash) e calculada quando há. Preferir esta API em caminhos
     /// por frame (render, seleção, picking).
     pub fn evaluated_mesh_ref(&self) -> std::borrow::Cow<'_, Mesh> {
+        if let Some((_, graph)) = &self.graph_cache {
+            return std::borrow::Cow::Borrowed(graph);
+        }
         if !self.has_enabled_modifiers() {
             return std::borrow::Cow::Borrowed(&self.mesh);
         }
@@ -684,6 +786,11 @@ impl Asset {
             .iter()
             .map(|v| matrix.transform_point3(v.vec()))
             .collect()
+    }
+
+    /// Caixa delimitadora alinhada aos eixos (AABB) em coordenadas de mundo.
+    pub fn world_bounds(&self) -> Option<align::BoundingBox3D> {
+        align::BoundingBox3D::from_asset(self)
     }
 
     /// Ponto em mundo → frame local do objeto (entrada de cursor, snap, raio).
@@ -733,7 +840,16 @@ impl Asset {
     /// Render, preview e export usam este resultado; edição continua operando
     /// sobre `mesh`, preservando a natureza não destrutiva da pilha.
     pub fn evaluated_mesh(&self) -> Mesh {
-        if !self.has_enabled_modifiers() {
+        if let Some((_, graph)) = &self.graph_cache {
+            return graph.clone();
+        }
+        self.modifier_evaluated_mesh()
+    }
+
+    /// Malha após **só** a pilha de modifiers legados (ponto de partida das
+    /// operações do grafo); ignora o cache do Operation Graph.
+    pub fn modifier_evaluated_mesh(&self) -> Mesh {
+        if !self.modifiers.iter().any(|modifier| modifier.enabled) {
             return self.mesh.to_owned_value();
         }
         let key = (self.source_mesh_hash(), self.modifier_hash());
@@ -763,6 +879,9 @@ impl Asset {
 
     /// Cache-aware evaluation. Callers with `&mut Asset` reuse the last result.
     pub fn evaluated_mesh_cached(&mut self) -> &Mesh {
+        if let Some((_, graph)) = &self.graph_cache {
+            return graph;
+        }
         let key = (self.source_mesh_hash(), self.modifier_hash());
         let miss = self
             .eval_cache
@@ -1124,6 +1243,20 @@ impl ReferenceImage {
 /// Documento autoral canônico (website/docs/02-application/state-separation.md).
 pub type Document = Project;
 
+/// Metadados opcionais de um grupo (collection) da Estrutura.
+///
+/// Ficam à parte de `Project::collections` para que arquivos antigos abram sem
+/// migração: sem entrada aqui, o grupo não tem cor própria.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CollectionMeta {
+    /// Cor de seleção do grupo. Ver [`Project::selection_color_of`] para a precedência.
+    #[serde(default)]
+    pub color: Option<[u8; 3]>,
+    /// Quando verdadeiro, a cor do grupo vence a cor própria de cada objeto.
+    #[serde(default)]
+    pub force_color: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Project {
     #[serde(default = "Uuid::new_v4")]
@@ -1138,8 +1271,14 @@ pub struct Project {
     pub history_selection: Vec<Uuid>,
     #[serde(default = "default_palette")]
     pub palette: Vec<[f32; 3]>,
+    /// Paletas nomeadas do seletor de cor (opcional no arquivo).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub palettes: Vec<NamedPalette>,
     #[serde(default)]
     pub collections: Vec<String>,
+    /// Cor e opções de cada grupo; só tem entrada o grupo que as definiu.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub collection_meta: std::collections::BTreeMap<String, CollectionMeta>,
     #[serde(default)]
     pub annotations: Vec<AnnotationItem>,
     #[serde(default)]
@@ -1223,6 +1362,13 @@ pub struct Project {
     /// Camadas de movimento, mesclagem e tweaks manuais (P3D-170, Fatia 4). Append-only.
     #[serde(default)]
     pub motion_layers: Vec<MotionLayer>,
+    /// Operation Graph (ADR-C13): operações persistentes e re-editáveis como nós.
+    /// Append-only; `document.json` usa `serde(default)`, arquivos antigos carregam vazio.
+    #[serde(default)]
+    pub op_graph: op_graph::OpGraph,
+    /// Último erro por nó do grafo (derivado; nunca serializado).
+    #[serde(skip)]
+    pub op_graph_errors: std::collections::BTreeMap<Uuid, String>,
 }
 
 impl Project {
@@ -1249,10 +1395,138 @@ impl Project {
         changed
     }
 
+    /// Reavalia as operações do Operation Graph cujo resultado está desatualizado e
+    /// limpa o cache dos objetos sem operações. Barato quando nada mudou (só hashes).
+    /// Devolve os ids de objetos cujo resultado foi recalculado.
+    pub fn refresh_op_graph(&mut self) -> Vec<Uuid> {
+        let targets = self.op_graph.targets();
+        let mut recomputed = Vec::new();
+        for asset in &mut self.assets {
+            if !targets.contains(&asset.id) && asset.has_graph_result() {
+                asset.set_graph_cache(None);
+                recomputed.push(asset.id);
+            }
+        }
+        let alive: std::collections::HashSet<Uuid> =
+            self.op_graph.nodes.iter().map(|node| node.id).collect();
+        self.op_graph_errors.retain(|id, _| alive.contains(id));
+        for target in targets {
+            let key = self.op_graph.dependency_key(&self.assets, target);
+            let current = self
+                .assets
+                .iter()
+                .find(|asset| asset.id == target)
+                .and_then(Asset::graph_cache_key);
+            if current == Some(key) {
+                continue;
+            }
+            let evaluation = self.op_graph.evaluate_asset(&self.assets, target);
+            for operation in self.op_graph.operations_on(target) {
+                self.op_graph_errors.remove(&operation.id);
+            }
+            for (node, message) in evaluation.errors {
+                self.op_graph_errors.insert(node, message);
+            }
+            if let Some(asset) = self.assets.iter_mut().find(|asset| asset.id == target) {
+                asset.set_graph_cache(evaluation.mesh.map(|mesh| (key, mesh)));
+                recomputed.push(target);
+            }
+        }
+        recomputed
+    }
+
+    /// Migra a pilha legada `Asset.modifiers` (Mirror/Symmetry) para operações do
+    /// Operation Graph, sem perda: mesma ordem, mesmo estado ligado/desligado, mesmos
+    /// parâmetros e o UUID do modifier vira o id do nó. As operações migradas ficam
+    /// **antes** das que já agiam no objeto (o legado sempre era avaliado primeiro).
+    /// Um objeto cuja migração falharia (limites do grafo, parâmetro fora da faixa)
+    /// mantém o legado intacto. Retorna quantos modifiers migraram.
+    pub fn migrate_legacy_modifiers(&mut self) -> usize {
+        let mut migrated = 0;
+        for index in 0..self.assets.len() {
+            let Some(asset) = self.assets.get(index) else {
+                continue;
+            };
+            if asset.modifiers.is_empty() {
+                continue;
+            }
+            let (asset_id, modifiers) = (asset.id, asset.modifiers.clone());
+            let mut graph = self.op_graph.clone();
+            if migrate_modifiers_into(&mut graph, asset_id, &modifiers).is_err() {
+                continue;
+            }
+            self.op_graph = graph;
+            if let Some(asset) = self.assets.get_mut(index) {
+                asset.modifiers.clear();
+                asset.eval_cache = None;
+            }
+            migrated += modifiers.len();
+        }
+        if migrated > 0 {
+            self.refresh_op_graph();
+        }
+        migrated
+    }
+
     /// Primeira luz habilitada da cena, se houver.
     pub fn active_light(&self) -> Option<&Light> {
         self.lights.iter().find(|light| light.enabled)
     }
+}
+
+/// Converte `modifiers` em nós do grafo ligados ao objeto `asset` (ver
+/// [`Project::migrate_legacy_modifiers`]). Erro = nada deve ser aplicado.
+fn migrate_modifiers_into(
+    graph: &mut op_graph::OpGraph,
+    asset: Uuid,
+    modifiers: &[ModifierInstance],
+) -> Result<(), op_graph::GraphError> {
+    use op_graph::ParamValue;
+    const AXES: [&str; 3] = ["x", "y", "z"];
+    let axis = |axis: usize| ParamValue::Choice(AXES.get(axis).copied().unwrap_or("x").to_string());
+    let object = graph.ensure_object_node(asset)?;
+    let mut created = Vec::with_capacity(modifiers.len());
+    for (row, modifier) in modifiers.iter().enumerate() {
+        let position = [-260.0, row as f32 * 110.0];
+        let node = match modifier.kind {
+            ModifierKind::Mirror { axis: a, weld } => graph.add_node(
+                op_graph::TYPE_MIRROR,
+                &[
+                    ("axis", axis(a)),
+                    ("weld", ParamValue::Float(f64::from(weld))),
+                ],
+                position,
+            )?,
+            ModifierKind::Symmetry {
+                axis: a,
+                positive_to_negative,
+                weld,
+            } => graph.add_node(
+                op_graph::TYPE_SYMMETRY,
+                &[
+                    ("axis", axis(a)),
+                    (
+                        "positive_to_negative",
+                        ParamValue::Bool(positive_to_negative),
+                    ),
+                    ("weld", ParamValue::Float(f64::from(weld))),
+                ],
+                position,
+            )?,
+        };
+        // Identidade estável: o nó herda o UUID do modifier quando livre.
+        let node = if graph.node(modifier.id).is_none() {
+            graph.rename_node(node, modifier.id)?;
+            modifier.id
+        } else {
+            node
+        };
+        graph.set_enabled(node, modifier.enabled)?;
+        graph.connect(node, 0, object, 0)?;
+        created.push(node);
+    }
+    graph.move_inputs_first(object, 0, &created);
+    Ok(())
 }
 
 impl Default for Project {
@@ -1272,6 +1546,10 @@ impl Default for Project {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -1851,6 +2129,10 @@ impl Project {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
+            collection_meta: Default::default(),
+            palettes: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2163,10 +2445,96 @@ impl Project {
 
     pub fn remove_collection(&mut self, name: &str) {
         self.collections.retain(|c| c != name);
+        self.collection_meta.remove(name);
         for a in &mut self.assets {
             if a.collection.as_deref() == Some(name) {
                 a.collection = None;
             }
+        }
+    }
+
+    /// Renomeia um grupo levando consigo a cor e as opções. Devolve `false` se
+    /// `from` não existe ou `to` (já aparado) é vazio ou já está em uso.
+    pub fn rename_collection(&mut self, from: &str, to: &str) -> bool {
+        let to = to.trim();
+        if to.is_empty() || to == from || self.collections.iter().any(|c| c == to) {
+            return false;
+        }
+        let Some(slot) = self.collections.iter_mut().find(|c| c.as_str() == from) else {
+            return false;
+        };
+        *slot = to.to_string();
+        if let Some(meta) = self.collection_meta.remove(from) {
+            self.collection_meta.insert(to.to_string(), meta);
+        }
+        for asset in &mut self.assets {
+            if asset.collection.as_deref() == Some(from) {
+                asset.collection = Some(to.to_string());
+            }
+        }
+        true
+    }
+
+    /// Define a cor de seleção do grupo e se ela vence a cor de cada objeto.
+    /// `color = None` remove a cor (e a opção de forçar perde o sentido).
+    /// Devolve `false` se o grupo não existe ou nada mudou.
+    pub fn set_collection_color(
+        &mut self,
+        name: &str,
+        color: Option<[u8; 3]>,
+        force: bool,
+    ) -> bool {
+        if !self.collections.iter().any(|c| c == name) {
+            return false;
+        }
+        let force = force && color.is_some();
+        let current = self.collection_meta.get(name).cloned().unwrap_or_default();
+        let next = CollectionMeta {
+            color,
+            force_color: force,
+        };
+        if current == next {
+            return false;
+        }
+        if next == CollectionMeta::default() {
+            self.collection_meta.remove(name);
+        } else {
+            self.collection_meta.insert(name.to_string(), next);
+        }
+        true
+    }
+
+    /// Remove o grupo `name` se ele existir e já não tiver nenhum objeto.
+    ///
+    /// Só deve ser chamado para um grupo que **acabou de** perder membros, de
+    /// modo que um grupo vazio criado de propósito não suma por outro motivo.
+    pub fn prune_collection_if_empty(&mut self, name: &str) -> bool {
+        let occupied = self
+            .assets
+            .iter()
+            .any(|asset| asset.collection.as_deref() == Some(name));
+        if occupied || !self.collections.iter().any(|c| c == name) {
+            return false;
+        }
+        self.collections.retain(|c| c != name);
+        self.collection_meta.remove(name);
+        true
+    }
+
+    /// Cor de seleção efetiva de um objeto: **o mais específico vence**
+    /// (objeto > grupo > global). Com "forçar cor do grupo", a cor do grupo vence
+    /// a do objeto. `None` quando nada define a cor: usar a global.
+    pub fn selection_color_of(&self, asset: &Asset) -> Option<[u8; 3]> {
+        let own = asset.selection_overlay_color;
+        let group = asset
+            .collection
+            .as_deref()
+            .and_then(|name| self.collection_meta.get(name))
+            .filter(|meta| meta.color.is_some());
+        match group {
+            Some(meta) if meta.force_color => meta.color,
+            Some(meta) => own.or(meta.color),
+            None => own,
         }
     }
 
@@ -2201,6 +2569,10 @@ impl Project {
             self.active -= 1;
         } else {
             self.active = self.active.min(self.assets.len() - 1);
+        }
+        // Tirar o último membro de um grupo desfaz o grupo.
+        if let Some(group) = removed.collection.as_deref() {
+            self.prune_collection_if_empty(group);
         }
     }
 
@@ -2499,6 +2871,29 @@ impl Project {
     /// Normaliza projeto vindo de arquivo (M2/M3): malhas válidas,
     /// no mínimo 1 asset, `active` dentro dos limites e materiais íntegros (P3D-050).
     pub fn validate(&mut self) {
+        // Operation Graph vindo de arquivo é entrada hostil: inválido = descartado
+        // (a malha autoral dos objetos nunca depende dele).
+        // Defeitos são corrigidos um a um; descartar o grafo inteiro é o último recurso.
+        self.op_graph.repair();
+        if self.op_graph.validate().is_err() {
+            self.op_graph = Default::default();
+        }
+        // Paletas nomeadas também vêm de arquivo: limites, cores e nomes corrigidos.
+        palette::repair_palettes(&mut self.palettes);
+        let asset_ids: std::collections::HashSet<Uuid> =
+            self.assets.iter().map(|asset| asset.id).collect();
+        let stale: Vec<Uuid> = self
+            .op_graph
+            .nodes
+            .iter()
+            .filter_map(|node| match node.params.get("asset") {
+                Some(op_graph::ParamValue::Asset(id)) if !asset_ids.contains(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        for id in stale {
+            self.op_graph.forget_asset(id);
+        }
         // Migra a lista legada de Smooth para o objeto e a esvazia (uma só autoridade).
         for legacy_id in std::mem::take(&mut self.smooth_shaded_assets) {
             if let Some(asset) = self.assets.iter_mut().find(|asset| asset.id == legacy_id) {
@@ -2573,6 +2968,9 @@ impl Project {
             );
             if let Some(cv) = a.texture.as_mut() {
                 cv.validate();
+            }
+            if let Some(stack) = a.paint_stack.as_mut() {
+                stack.repair();
             }
             if !a.base_color.iter().all(|x| x.is_finite()) {
                 a.base_color = [0.75, 0.75, 0.78];

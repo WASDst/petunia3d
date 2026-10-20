@@ -383,7 +383,14 @@ pub mod arrangement;
 mod bevel;
 pub mod boolean;
 pub mod boolean_cleanup;
+mod boolean_partition;
 pub mod cleanup;
+pub mod solid_builder;
+
+pub use solid_builder::{
+    CommittedObject, RegionGroup, RegionGroupOrigin, RegionPlan, ShapeBuilderBudget,
+    SolidOperation, SolidRegion, SolidRegionProvenance, evaluate_multi_solid,
+};
 mod connect;
 pub mod curve;
 pub mod half_edge;
@@ -392,6 +399,7 @@ pub mod inset;
 pub mod knife;
 pub mod loop_cut;
 mod loops;
+pub mod morph;
 pub mod obj;
 pub mod ops;
 pub mod path_frames;
@@ -418,6 +426,8 @@ pub use half_edge::{
     EdgeId, FaceId, HalfEdge, HalfEdgeId, HalfEdgeMesh, TopologyDefect, TopologyReport, VertexId,
 };
 pub use inset::{InsetMode, InsetReport};
+pub use morph::{MorphBlend, MorphError, MorphTarget};
+pub use ops::ExtrudeMode;
 pub use path_frames::{PathFrame, PathFrameError, compute_parallel_transport_frames};
 pub use primitives::{CircleFill, PrimitiveAudit, PrimitiveDescriptor, primitive_audit};
 pub use sweep::{SweepFrame, SweepOptions, compute_rmf_frames, generate_sweep};
@@ -670,8 +680,8 @@ mod tests {
     }
 
     use crate::{
-        EdgeKey, Face, FaceIndex, Mesh, RepairPolicy, VertexIndex, edge_key, triangulate::ear_clip,
-        triangulate::ray_tri_hit, validation::repair_external_mesh,
+        EdgeKey, ExtrudeMode, Face, FaceIndex, Mesh, RepairPolicy, Vertex, VertexIndex, edge_key,
+        triangulate::ear_clip, triangulate::ray_tri_hit, validation::repair_external_mesh,
     };
     use glam::Vec3;
 
@@ -854,6 +864,105 @@ mod tests {
         m.select_all();
         m.extrude_selected(0.5);
         assert!(m.faces.iter().all(|f| f.uv.len() == f.verts.len()));
+    }
+
+    /// C8: os três modos de extrusão — região (manifold), faces separadas e
+    /// cada face pela própria normal.
+    ///
+    /// Duas faces quadradas que compartilham a aresta 2–3.
+    fn two_adjacent_quads() -> Mesh {
+        let mut m = Mesh::default();
+        for corner in [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, -1.0],
+            [1.0, 0.0, -1.0],
+        ] {
+            m.verts.push(Vertex::new(corner[0], corner[1], corner[2]));
+        }
+        let mut a = Face::new(vec![0, 1, 2, 3]);
+        a.selected = true;
+        let mut b = Face::new(vec![3, 2, 5, 4]);
+        b.selected = true;
+        m.faces.push(a);
+        m.faces.push(b);
+        m
+    }
+
+    #[test]
+    fn extrude_modes_differ_in_topology_and_direction() {
+        // Região: vértices compartilhados (malha fechada) e movimento comum.
+        let region = {
+            let mut m = two_adjacent_quads();
+            m.extrude_selected_with_mode(0.5, ExtrudeMode::Region);
+            // Só os vértices novos da região: 6 vértices únicos.
+            assert_eq!(m.verts.len(), 6 + 6, "região: vértices compartilhados");
+            // Nenhuma aresta com mais de duas faces: continua fechada.
+            let mut uses: std::collections::HashMap<(u32, u32), usize> =
+                std::collections::HashMap::new();
+            for face in &m.faces {
+                for k in 0..face.verts.len() {
+                    let a = face.verts[k];
+                    let b = face.verts[(k + 1) % face.verts.len()];
+                    let key = if a <= b { (a, b) } else { (b, a) };
+                    *uses.entry(key).or_default() += 1;
+                }
+            }
+            assert!(
+                uses.values().all(|count| *count <= 2),
+                "a região continua manifold"
+            );
+            m
+        };
+
+        // Individual: cada face duplica o topo (4 + 4 vértices).
+        let individual = {
+            let mut m = two_adjacent_quads();
+            m.extrude_selected_with_mode(0.5, ExtrudeMode::Individual);
+            assert_eq!(m.verts.len(), 6 + 8, "individual: topo de cada face");
+            m
+        };
+
+        // Direção: região e "individual" sobem pela normal da região;
+        // "along_normals" cada face segue a sua própria normal.
+        let top_of = |m: &Mesh, face: usize| -> Vec<[f32; 3]> {
+            m.faces[face]
+                .verts
+                .iter()
+                .map(|&vi| m.verts[vi as usize].pos)
+                .collect()
+        };
+        let region_top = top_of(&region, 0);
+        assert_eq!(
+            region_top,
+            top_of(&individual, 0),
+            "individual e região sobem na mesma direção"
+        );
+
+        let along = {
+            let mut m = two_adjacent_quads();
+            m.extrude_selected_with_mode(0.5, ExtrudeMode::AlongNormals);
+            m
+        };
+        assert_ne!(
+            region_top,
+            top_of(&along, 0),
+            "ao longo das normais cada face segue a sua própria normal"
+        );
+    }
+
+    #[test]
+    fn extrude_mode_ids_round_trip() {
+        for mode in [
+            ExtrudeMode::Region,
+            ExtrudeMode::Individual,
+            ExtrudeMode::AlongNormals,
+        ] {
+            assert_eq!(ExtrudeMode::from_id(mode.id()), Some(mode));
+        }
+        assert_eq!(ExtrudeMode::from_id("nope"), None);
     }
 
     #[test]

@@ -325,6 +325,19 @@ A UI pode oferecer ação de conveniência futura `Mark Sharp + Seam`, mas o mod
 - closed mesh Orient Outward;
 - Face Orientation independente de SurfaceShading.
 
+### Status da bateria e evidências (2026-10-17)
+
+Todos os testes obrigatórios foram formalizados e validados:
+- **Cube Flat / Smooth / All Sharp**: `crates/mesh/src/shading.rs` (`flat_cube_has_face_normals_on_every_corner`, `smooth_cube_without_sharp_averages_to_the_diagonal`, `smooth_cube_with_every_edge_sharp_looks_flat`).
+- **Cylinder Smooth com cap boundaries Sharp**: `Mesh::radial_frustum` gera as bordas dos caps como arestas Sharp por padrão; testado em `crates/project/tests/normals_shading_g18_gates_tests.rs::test_g18_gate_cylinder_smooth_with_cap_boundaries_sharp` (tampas perfeitamente planas em +Y/-Y e laterais suaves em XZ sem vazamento em Y).
+- **Uneven face areas sem diferença Render/Export**: `crates/project/tests/normals_shading_g18_gates_tests.rs::test_g18_gate_uneven_face_areas_zero_render_export_difference` (corner-angle weighting imune à disparidade 1:100 de área e paridade estrita entre `to_triangles_shaded` e `shaded_corners`).
+- **UV seam vs Sharp independentes**: `crates/mesh/src/shading.rs` (`sharp_boundary_around_a_face_splits_its_corner_normals`, `uv_seam_without_sharp_keeps_normals_smooth`).
+- **Mark/Clear Sharp Undo/Redo**: `crates/core/tests/shading_and_save_tests.rs::mark_and_clear_sharp_are_undoable_and_independent_of_seams`.
+- **Topology operation remapeia Sharp**: `crates/mesh/src/ops.rs` (`join`, `subdivide`), `crates/mesh/src/loop_cut.rs`, `crates/mesh/src/half_edge.rs` (`remove_isolated_vertices`).
+- **glTF vertex split em hard-normal boundary**: `crates/project/tests/normals_shading_g18_gates_tests.rs::test_g18_gate_gltf_vertex_split_on_hard_normal_boundary` (duplicação de vértices na borda Sharp e unificação na borda suave).
+- **OBJ normal indices por corner**: `crates/project/tests/normals_shading_g18_gates_tests.rs::test_g18_gate_obj_normal_indices_per_corner` (`vn` por corner nos tokens `f v/vt/vn`).
+- **Winding / Orient Consistently / Orient Outward**: `crates/mesh/src/shading.rs` e `crates/core/tests/shading_and_save_tests.rs`.
+
 ## Regra anti-bloat
 
 Persistir somente decisões de authoring:

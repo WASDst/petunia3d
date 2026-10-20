@@ -1,0 +1,781 @@
+   Compiling petunia_core v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/core)
+   Compiling petunia_render v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/render)
+   Compiling petunia_module_model v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-model)
+   Compiling petunia_module_assets v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-assets)
+   Compiling petunia_module_uv v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-uv)
+   Compiling petunia_module_paint v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-paint)
+   Compiling petunia_application v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/application)
+   Compiling petunia_editor v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/editor)
+   Compiling petunia_project v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/project)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4m 30s
+     Running unittests src/lib.rs (target/debug/deps/petunia_core-7ebd39be9fb690c2)
+
+running 179 tests
+test animate_session::tests::a_new_session_is_empty_and_paused ... ok
+test animate_session::tests::wrap_time_stays_inside_the_cycle ... ok
+test boolean_texture::tests::cut_transfers_both_operand_textures_into_a_new_atlas ... ok
+test boolean_texture::tests::tangent_normal_rotates_with_the_new_uv_basis ... ok
+test brush::brush_size_contract_tests::slider_maps_to_pixels_with_a_floor ... ok
+test brush::tests::default_sanitizes_and_clamps ... ok
+test brush::tests::kind_mapping_roundtrip ... ok
+test brush::tests::preview_kind_matches_brush_semantics ... ok
+test brush::tests::preview_style_derives_tint_and_alpha ... ok
+test brush::tests::stroke_dabs_are_poll_rate_invariant ... ok
+test brush::tests::stroke_sampler_carries_sub_step_residual_between_events ... ok
+test brush::tests::stroke_sampler_rejects_non_finite_input_without_corrupting_session ... ok
+test bvh::tests::any_respects_the_limit_and_the_filter ... ok
+test bvh::tests::empty_and_non_finite_inputs_are_safe ... ok
+test bvh::tests::nearest_matches_brute_force_on_a_grid ... ok
+test camera::tests::frame_keeps_selection_inside_portrait_viewport ... ok
+test camera::tests::isometric_presets_and_nominal_views ... ok
+test camera::tests::large_frame_updates_depth_range_in_both_projections ... ok
+test camera::tests::orthographic_orbit_preserves_projection_scale_and_parallel_rays ... ok
+test camera::tests::pan_follows_screen_basis_in_top_and_bottom_views ... ok
+test camera::tests::pole_navigation_keeps_a_continuous_screen_basis ... ok
+test camera::tests::projection_toggle_preserves_focal_plane_scale_and_roundtrips ... ok
+test camera::tests::pseudo_isometric_2to1_framing_and_projection ... ok
+test camera::tests::rays_match_projected_cursor_in_all_presets ... ok
+test camera::tests::scale_input_rejects_invalid_values_and_reset_retains_view ... ok
+test diagnostics::tests::category_names_are_stable ... ok
+test diagnostics::tests::emit_does_not_panic_without_subscriber ... ok
+test docs::tests::test_all_docs_topics_have_valid_urls_and_titles ... ok
+test draw_batch::tests::imported_batch_is_one_undo ... ok
+test draw_batch::tests::invalid_or_duplicate_profile_does_not_leave_partial_batch ... ok
+test edit_api::tests::component_selection_ops_combine_and_reject_stale_indices ... ok
+test edit_api::tests::hover_fallback_only_when_nothing_is_selected ... ok
+test edit_api::tests::invalid_tool_meshes_are_rejected_without_change ... ok
+test edit_api::tests::seams_pins_material_and_nudge_are_commands ... ok
+test edit_api::tests::tool_results_are_one_undo_entry_and_refuse_stale_objects ... ok
+test handles::tests::get_mut_edits_live_entries_only ... ok
+test handles::tests::stale_handles_never_resolve ... ok
+test inference::tests::axis_guide_infers_direction_from_anchor ... ok
+test inference::tests::axis_guide_steps_by_grid_spacing ... ok
+test inference::tests::grid_is_the_last_resort ... ok
+test inference::tests::hidden_points_need_xray ... ok
+test inference::tests::invalid_input_is_ignored ... ok
+test inference::tests::moving_vertices_are_never_targets ... ok
+test inference::tests::points_beat_edges_and_edges_beat_faces ... ok
+test inference::tests::tolerance_is_measured_in_pixels_at_any_zoom ... ok
+test jobs::tests::channel_delivers_and_drains_in_order ... ok
+test jobs::tests::parallel_sum_matches_sequential ... ok
+test jobs::tests::parallel_sum_rejects_non_finite ... ok
+test jobs::tests::validate_keeps_order_and_reports_each_item ... ok
+test jobs::tests::worker_thread_can_report_through_sender ... ok
+test loop_cut::tests::repeated_slide_previews_rebuild_same_topology ... ok
+test modal::tests::axes_and_planes_constrain_absolute_translation ... ok
+test modal::tests::axis_lock_initialization_and_toggling ... ok
+test modal::tests::cancel_preserves_redo_and_undo_cancels_active_preview ... ok
+test modal::tests::cancel_restores_every_operation_without_touching_history ... ok
+test modal::tests::corrupted_mesh_rejected_before_indexing ... ok
+test modal::tests::edit_mode_moves_are_world_deltas_on_transformed_objects ... ok
+test modal::tests::empty_selection_rejected_in_edit_mode_and_object_mode_moves_frame ... ok
+test modal::tests::feedback_reports_snap_only_when_the_caller_snapped ... ok
+test modal::tests::identity_after_preview_does_not_create_history_or_geometry ... ok
+test modal::tests::invalid_inputs_leave_last_preview_untouched ... ok
+test modal::tests::invalid_numeric_axis_preserves_last_valid_preview ... ok
+test modal::tests::locked_asset_rejects_begin_modal ... ok
+test modal::tests::modal_bevel_supports_multiple_vertices_batch ... ok
+test modal::tests::modal_bevel_supports_single_vertex_selection ... ok
+test modal::tests::multiple_previews_commit_one_checkpoint_and_roundtrip ... ok
+test modal::tests::numeric_xyz_fields_rebuild_absolute_transform_and_commit_once ... ok
+test modal::tests::rotation_and_plane_scale_preserve_pivot_and_constrained_coordinates ... ok
+test modal::tests::rotation_and_scale_have_no_world_point_or_guide_line ... ok
+test modal::tests::test_modal_tool_feedback_generation ... ok
+test modal::tests::test_proportional_editing_move_influences_unselected_vertices ... ok
+test modal::tests::topology_undo_and_redo_resynchronize_cached_selection ... ok
+test picking::tests::concave_polygon_does_not_pick_notch ... ok
+test picking::tests::edge_is_continuous_and_has_five_pixel_tolerance ... ok
+test picking::tests::faces_choose_nearest_surface ... ok
+test picking::tests::hidden_vertex_and_edge_require_xray ... ok
+test picking::tests::malformed_mesh_and_invalid_viewport_are_safe ... ok
+test picking::tests::perspective_edge_hit_projects_back_to_cursor ... ok
+test picking::tests::top_view_pick_matches_render_projection ... ok
+test picking::tests::vertex_tolerance_stays_eight_pixels_at_different_zoom_and_resolution ... ok
+test picking::tests::vertices_behind_camera_are_not_pickable_in_xray ... ok
+test poly_pen::tests::closed_box_edges_are_not_border_edges ... ok
+test poly_pen::tests::drawn_polygon_is_one_undo_and_selected ... ok
+test poly_pen::tests::edge_extrude_gesture_is_one_undo_and_escape_restores ... ok
+test poly_pen::tests::painting_a_strip_is_one_undo_and_escape_restores ... ok
+test poly_pen::tests::refused_polygon_leaves_history_untouched ... ok
+test poly_pen::tests::splitting_an_edge_is_one_undo_and_selects_the_new_point ... ok
+test poly_pen::tests::strips_only_start_on_border_edges ... ok
+test preview_tests::cut_preview_cancel_restores_topology_and_commit_is_atomic ... ok
+test preview_tests::generic_preview_cannot_start_during_modal_or_paint_stroke ... ok
+test preview_tests::identity_cut_preview_does_not_pollute_history ... ok
+test preview_tests::modal_cannot_start_during_generic_preview_or_paint_stroke ... ok
+test preview_tests::paint_cancel_restores_colors_without_discarding_redo ... ok
+test preview_tests::paint_stroke_cannot_start_inside_modal_or_cut_preview ... ok
+test preview_tests::repeated_paint_samples_commit_a_single_undo_and_redo_restores_colors ... ok
+test primitive_session::tests::all_ten_kinds_begin_update_confirm ... ok
+test primitive_session::tests::cancel_removes_asset_and_restores_selection ... ok
+test primitive_session::tests::confirm_keeps_single_checkpoint ... ok
+test primitive_session::tests::descriptor_builds_valid_meshes ... ok
+test primitive_session::tests::descriptor_roundtrips_kind ... ok
+test primitive_session::tests::intervening_operation_invalidates_session ... ok
+test primitive_session::tests::plane_scales_to_rectangle ... ok
+test primitive_session::tests::reopen_creates_new_session_from_last ... ok
+test primitive_session::tests::reset_restores_defaults ... ok
+test primitive_session::tests::workspace_switch_finalizes_session_keeping_mesh ... ok
+test proportional::tests::test_constant_falloff ... ok
+test proportional::tests::test_falloff_boundaries ... ok
+test proportional::tests::test_falloff_monotonicity ... ok
+test recent_projects::tests::test_recent_projects_ordering_and_cap ... ok
+test recent_projects::tests::test_recent_projects_prune_missing ... ok
+test region_push::tests::cancel_restores_the_document_exactly ... ok
+test region_push::tests::crossing_profiles_expose_their_overlap_as_a_region ... ok
+test region_push::tests::free_region_becomes_a_closed_solid_in_a_new_asset ... ok
+test region_push::tests::last_operation_reapplies_the_region_push_in_the_same_undo ... ok
+test region_push::tests::region_on_a_face_is_imprinted_and_extruded_as_one_undo ... ok
+test render_revision::tests::direct_texture_mutation_requires_revision_publication ... ok
+test render_revision::tests::direct_uv_change_invalidates_unrevisioned_legacy_project ... ok
+test render_revision::tests::identical_scene_same_fingerprint ... ok
+test render_revision::tests::selection_change_invalidates ... ok
+test render_revision::tests::shading_flag_changes_mesh_fingerprint ... ok
+test render_revision::tests::texture_revision_invalidates_texture_without_rebuilding_mesh ... ok
+test render_revision::tests::uv_revision_changes_mesh_fingerprint_without_geometry_revisions ... ok
+test render_revision::tests::vertex_move_changes_fingerprint_without_count_change ... ok
+test render_revision::tests::visibility_change_invalidates ... ok
+test schema_contracts::tests::command_intent_schema_requires_command_field ... ok
+test schema_contracts::tests::intent_rejects_unknown_json_shape ... ok
+test schema_contracts::tests::scene_item_schema_roundtrips_through_json ... ok
+test selection::tests::selection_domain_from_select_mode_equivalence ... ok
+test selection::tests::selection_membership_and_topological_remap ... ok
+test selection::tests::selection_typed_ids_and_apply_to_mesh ... ok
+test shape_builder::tests::click_on_one_face_extracts_it_without_changing_the_silhouette ... ok
+test shape_builder::tests::delete_removes_only_the_touched_faces ... ok
+test shape_builder::tests::deleting_an_enclosed_face_removes_its_area ... ok
+test shape_builder::tests::merge_consumes_open_dividers_and_preserves_their_external_pieces ... ok
+test shape_builder::tests::merge_drag_over_two_faces_fuses_them_and_keeps_the_rest ... ok
+test shape_builder::tests::nothing_touched_is_an_error_and_leaves_the_document_alone ... ok
+test shape_builder::tests::pathfinder_needs_two_shapes ... ok
+test shape_builder::tests::pathfinder_operations_match_set_algebra_in_one_undo_step ... ok
+test shape_builder::tests::profiles_used_by_a_generator_are_not_touched ... ok
+test shape_builder::tests::untouched_profile_keeps_identity_and_name ... ok
+test snap::tests::test_edge_snap ... ok
+test snap::tests::test_grid_snap ... ok
+test snap::tests::test_increment_snap ... ok
+test snap::tests::test_snap_query_dispatcher ... ok
+test snap::tests::test_vertex_snap ... ok
+test state::model_quick_action_tests::empty_preferences_resolve_to_canonical_defaults ... ok
+test state::model_quick_action_tests::pinning_sanitizes_unknown_ids_duplicates_and_limit ... ok
+test state::workspace_memory_tests::switch_saves_and_restores_dock_layout ... ok
+test state::workspace_memory_tests::switch_to_same_workspace_is_noop ... ok
+test state::workspace_memory_tests::workspace_index_covers_all_workspaces ... ok
+test tool_session::tests::a_confirmed_gesture_is_one_undo_entry_and_adjusting_it_keeps_the_depth ... ok
+test tool_session::tests::an_unchanged_gesture_creates_no_history ... ok
+test tool_session::tests::click_below_threshold_selects_and_drag_above_begins ... ok
+test tool_session::tests::click_move_click_on_a_handle_latches_and_next_click_commits ... ok
+test tool_session::tests::digits_outside_a_gesture_are_ignored ... ok
+test tool_session::tests::escape_ladder_cancels_the_gesture_then_exits_the_tool ... ok
+test tool_session::tests::extrude_drag_follows_the_projected_normal_under_zoom ... ok
+test tool_session::tests::extrude_toward_the_camera_falls_back_to_vertical_drag ... ok
+test tool_session::tests::inset_bevel_and_scale_have_bounded_screen_mappings ... ok
+test tool_session::tests::invalid_adjustment_restores_the_previous_result ... ok
+test tool_session::tests::keyboard_latched_gesture_follows_the_pointer_and_click_confirms ... ok
+test tool_session::tests::last_operation_expires_when_the_document_changes ... ok
+test tool_session::tests::secondary_button_never_cancels ... ok
+test tool_session::tests::threshold_is_configurable_and_clamped ... ok
+test tool_session::tests::typed_value_wins_over_the_pointer_and_never_leaks ... ok
+test uv_selection::tests::corner_mode_selects_the_uv_vertex_across_faces ... ok
+test uv_selection::tests::face_mode_selects_every_corner_and_faces_round_trip ... ok
+test uv_selection::tests::island_mode_takes_the_whole_island ... ok
+test uv_selection::tests::retain_valid_drops_corners_of_removed_faces ... ok
+test uv_selection::tests::sync_is_explicit_in_both_directions ... ok
+test uv_selection::tests::unchanged_3d_selection_never_resets_a_uv_only_selection ... ok
+test viewport::tests::panels_and_hidpi_map_to_same_pixels_for_both_backends ... ok
+test viewport::tests::projected_corners_and_interior_agree_with_egui_at_fractional_dpi ... ok
+test viewport::tests::resize_clamps_gpu_rect_and_rejects_empty_viewport ... ok
+test viewport_query::lasso_tests::box_detects_an_edge_crossing_without_an_endpoint_inside ... ok
+test viewport_query::lasso_tests::concave_lasso_detects_only_crossings_of_its_actual_boundary ... ok
+test viewport_query::lasso_tests::concave_lasso_does_not_select_its_bounding_box ... ok
+test viewport_query::lasso_tests::front_ortho_cube_box_lasso_border_crossing_selects_front_face_and_edge_only ... ok
+test viewport_query::lasso_tests::front_ortho_cube_box_lasso_select_only_visible_components_without_through_selection ... ok
+
+test result: ok. 179 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.97s
+
+     Running tests/command_tests.rs (target/debug/deps/command_tests-5f74c267d0e590c7)
+
+running 57 tests
+test dissolve_and_contextual_delete_each_commit_one_roundtrip ... ok
+test failed_dispatch_restores_primitive_creation_session ... ok
+test flip_normals_advances_only_normal_revision ... ok
+test no_op_command_creates_no_history_entry_and_keeps_session ... ok
+test persistent_profile_sweep_and_bake_are_transactional ... ok
+test profile_draft_and_batch_updates_are_single_entry_roundtrips ... ok
+test profile_owned_spline_rejects_edits_that_break_planarity ... ok
+test project_history_budget_uses_deep_snapshot_size ... ok
+test selection_command_advances_only_selection_revision ... ok
+test separate_selection_creates_new_part_from_selected_faces ... ok
+test separate_selection_with_vertex_selection ... ok
+test shade_smooth_is_per_object_transactional_and_persistent ... ok
+test spline_attachment_reprojection_repairs_topology_and_can_change_target ... ok
+test spline_authoring_commands_cover_point_handles_loop_reverse_convert_and_delete ... ok
+test spline_conversion_resolves_attached_points_before_baking ... ok
+test spline_create_move_undo_redo_is_transactional_and_domain_scoped ... ok
+test spline_surface_attachment_commands_are_transactional ... ok
+test test_add_primitive_commands_and_undo_redo ... ok
+test test_alias_does_not_duplicate_command_ids_in_the_catalog ... ok
+test test_app_state_dispatch_command_string_id ... ok
+test test_boolean_cleanup_can_be_turned_off_to_keep_the_kernel_triangles ... ok
+test test_boolean_cut_returns_quads_not_kernel_triangles_and_undoes_in_one_step ... ok
+test test_boolean_fuse_and_cut_between_active_and_operand ... ok
+test test_boolean_refuses_the_active_asset_as_operand_and_missing_operand ... ok
+test test_canonical_command_dispatcher_metadata_and_categories ... ok
+test test_command_context_isolation ... ok
+test test_command_dispatcher_registry ... ok
+test test_command_guard_catches_panics_and_restores_document ... ok
+test test_commands_operate_with_application_selection ... ok
+test test_decal_commands_transform_and_bake ... ok
+test test_delete_selection_in_edit_and_object_modes ... ok
+test test_duplicate_and_delete_asset_cmd ... ok
+test test_duplicate_selection_in_edit_mode ... ok
+test test_edit_reference_command_validates_bounds_nan_and_revisions ... ok
+test test_extrude_individual_command_and_undo ... ok
+test test_flip_diagonal_command_and_undo ... ok
+test test_frame_all_and_selection_dont_dirty_project ... ok
+test test_headless_full_modeling_session ... ok
+test test_instantiate_asset_command_and_undo ... ok
+test test_join_merges_both_topologies_without_a_boolean_kernel ... ok
+test test_keep_parts_keeps_the_operand_in_the_scene ... ok
+test test_mesh_commands_reject_non_finite_and_degenerate_parameters ... ok
+test test_mesh_editing_commands_subdivide_merge_flip ... ok
+test test_migrated_mesh_commands_are_transactional ... ok
+test test_outliner_asset_lock_and_visibility_commands_and_undo ... ok
+test test_outliner_collection_commands_and_undo ... ok
+test test_project_from_reference_and_bake_commands ... ok
+test test_reference_pixels_stay_shared_without_copying_for_snapshots ... ok
+test test_rename_active_asset_validates_and_commits_one_undo_entry ... ok
+test test_reorder_asset_cmd_and_undo ... ok
+test test_revolve_command_and_undo ... ok
+test test_select_linked_and_box_select_commands ... ok
+test test_selection_commands_are_non_destructive ... ok
+test test_ui_state_defaults_wave_6 ... ok
+test test_view_preset_commands_and_hud ... ok
+test unavailable_command_does_not_create_history_or_dirty_document ... ok
+test uv_commands_commit_once_and_advance_only_uv_revision ... ok
+
+test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+     Running tests/keyframe_integrity.rs (target/debug/deps/keyframe_integrity-b8eae28f54fed67f)
+
+running 7 tests
+test blended_layers_require_an_explicit_authoring_policy ... ok
+test deletion_preserves_neighbors_at_24_30_and_60_fps_and_undo ... ok
+test every_authoring_operation_is_confined_to_the_explicit_clip ... ok
+test keying_procedural_pose_preserves_the_sample ... ok
+test keying_without_draft_preserves_visible_interpolated_pose ... ok
+test stale_ambiguous_and_foreign_clips_do_not_mutate_or_consume_drafts ... ok
+test undoing_first_clip_creation_does_not_leave_an_unusable_authoring_target ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/origin_frame.rs (target/debug/deps/origin_frame-bc793500e24dc39f)
+
+running 20 tests
+test centers_and_individual_origins_are_distinct_and_shear_rejection_is_atomic ... ok
+test clear_transform_commands_reset_authoritative_trs_without_freezing_or_editing_mesh ... ok
+test commands_reject_unsupported_sources_without_baking_or_history ... ok
+test cursor_rebases_local_frame_preserving_world_surface_and_all_mesh_attributes ... ok
+test distant_finite_origin_is_rejected_when_f32_rebase_would_collapse_surface ... ok
+test geometry_to_legacy_origin_uses_its_local_offset_and_preserves_frame ... ok
+test geometry_to_origin_moves_surface_in_local_frame_and_keeps_object_frame ... ok
+test invalid_instance_and_prefab_frames_leave_document_and_history_untouched ... ok
+test legacy_baked_objects_keep_metadata_and_visible_motion_until_explicit_rebase ... ok
+test legacy_reset_still_inverts_baked_trs_and_is_undoable ... ok
+test legacy_without_offset_has_a_compatible_center_and_copy_keeps_it_at_target ... ok
+test native_project_roundtrip_preserves_rebased_frame_and_legacy_offset_is_explicitly_normalized ... ok
+test nonactive_origin_target_does_not_freeze_active_primitive_and_missing_id_is_rejected ... ok
+test object_grs_changes_only_frame_and_obeys_origin_after_rebase ... ok
+test origin_drag_is_absolute_keeps_surface_and_cancels_or_commits_once ... ok
+test origin_presets_distinguish_all_geometry_selection_and_world_bottom ... ok
+test prefab_capture_and_placement_use_world_bounds_without_baking_local_geometry ... ok
+test separating_geometry_and_instantiating_transformed_objects_preserves_world_frames ... ok
+test snap_geometry_and_frame_are_frozen_while_origin_drag_keeps_surface_available ... ok
+test stale_explicit_target_noop_and_registered_commands_use_transactional_dispatch ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/prefab_tests.rs (target/debug/deps/prefab_tests-c8af00c240af5f53)
+
+running 3 tests
+test deleting_a_prefab_is_undoable_and_unknown_ids_are_refused ... ok
+test instantiating_places_a_selected_copy_and_undo_removes_it ... ok
+test saving_a_prefab_keeps_the_scene_unchanged ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/primitive_pipeline_tests.rs (target/debug/deps/primitive_pipeline_tests-7c64f45cf5a3f020)
+
+running 2 tests
+test canceled_primitive_never_reaches_save ... ok
+test primitive_full_pipeline_per_species ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/project_service_tests.rs (target/debug/deps/project_service_tests-ac4b415ee538bd16)
+
+running 13 tests
+test test_add_reference_image ... ok
+test test_error_handling ... ok
+test test_export_all_obj_to_dir ... ok
+test test_export_glb ... ok
+test test_import_and_export_obj ... ok
+test test_new_project_resets_state ... ok
+test test_palette_import_and_export ... ok
+test test_project_dirty_state_lifecycle ... ok
+test test_project_service_pipeline_export_and_import ... ok
+test test_recovery_from_snapshot ... ok
+test test_reference_slot_lifecycle_and_frame_all ... ok
+test test_sanitize_filename ... ok
+test test_save_and_load_project_roundtrip ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/uv_transform_session.rs (target/debug/deps/uv_transform_session-16e35adbbda105da)
+
+running 4 tests
+test cancel_and_undo_discard_only_the_preview_and_keep_history_and_document ... ok
+test invalid_input_does_not_destroy_the_last_valid_preview ... ok
+test preview_is_absolute_and_document_is_unchanged_until_single_commit ... ok
+test stale_object_revision_and_selection_refuse_commit_without_overwriting_external_change ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running unittests src/lib.rs (target/debug/deps/petunia_editor-1c914013de0c1a34)
+
+running 126 tests
+test animate::bridge_tests::a_draft_slider_value_deforms_the_model_live ... ok
+test animate::bridge_tests::a_rig_without_a_motion_shows_its_rest_pose ... ok
+test animate::bridge_tests::adding_a_creature_selects_it_and_explains_unavailable_motions ... ok
+test animate::bridge_tests::an_impossible_motion_is_refused_with_a_status_message ... ok
+test animate::bridge_tests::choosing_a_motion_creates_selects_and_plays_with_readable_sliders ... ok
+test animate::bridge_tests::creatures_switch_and_selection_survives_undo ... ok
+test animate::bridge_tests::curve_editor_intents_and_sampling ... ok
+test animate::bridge_tests::empty_project_guides_the_user_towards_a_creature ... ok
+test animate::bridge_tests::evaluator_is_cached_between_frames_and_playhead_moves ... ok
+test animate::bridge_tests::every_animate_text_key_exists_in_both_locales ... ok
+test animate::bridge_tests::fit_to_model_explains_itself_and_links_the_model_once ... ok
+test animate::bridge_tests::fit_to_model_reports_a_locked_or_empty_model ... ok
+test animate::bridge_tests::labels_render_in_the_active_language ... ok
+test animate::bridge_tests::motion_layers_and_tweak_blending_with_undo ... ok
+test animate::bridge_tests::onion_skin_and_motion_trails_toggle ... ok
+test animate::bridge_tests::playback_advances_wraps_and_pauses ... ok
+test animate::bridge_tests::pose_override_exists_only_for_a_bound_model_and_only_when_it_changes ... ok
+test animate::bridge_tests::posed_bones_are_projected_and_move_with_the_playhead ... ok
+test animate::bridge_tests::slider_gesture_previews_live_and_commits_one_undo_step ... ok
+test animate::bridge_tests::style_chips_stepped_and_apply_now_go_through_commands ... ok
+test animate::bridge_tests::the_tick_only_runs_inside_the_animate_workspace ... ok
+test animate::bridge_tests::the_viewport_receives_the_pose_override_when_rendering ... ok
+test animate::bridge_tests::timeline_keyframe_intents_update_view_model_and_tracks ... ok
+test animate::parse_tests::parse_maps_every_action_and_rejects_garbage ... ok
+test animate::parse_tests::value_labels_are_short ... ok
+test bridge::snapping::origin_frame_tests::moving_object_group_does_not_snap_to_its_other_selected_objects ... ok
+test bridge::snapping::origin_frame_tests::origin_drag_snaps_to_stationary_surface_using_frozen_frame_on_first_query ... ok
+test bridge::tool_gestures::contextual_selection_tests::clicking_a_select_handle_below_drag_threshold_keeps_selection ... ok
+test bridge::tool_gestures::contextual_selection_tests::empty_drag_commits_box_and_locked_assets_offer_no_handles ... ok
+test bridge::tool_gestures::contextual_selection_tests::empty_drag_previews_box_without_mutating_selection_and_cancel_discards_it ... ok
+test bridge::tool_gestures::contextual_selection_tests::explicit_handles_keep_precision_and_snap_modifiers ... ok
+test bridge::tool_gestures::contextual_selection_tests::persistent_profile_can_be_drawn_picked_and_edited_without_leaving_poly ... ok
+test bridge::tool_gestures::contextual_selection_tests::profiles_are_visible_and_shape_builder_available_in_poly ... ok
+test bridge::tool_gestures::contextual_selection_tests::select_gizmo_drag_uses_the_existing_transaction_and_cancel_restores_source ... ok
+test bridge::tool_gestures::contextual_selection_tests::select_has_a_universal_gizmo_and_geometry_drag_is_protected ... ok
+test bridge::tool_preview::tests::same_geometry_tracks_positions_and_topology ... ok
+test bridge::viewport_actions::tests::typed_regions_select_add_subtract_and_lasso_without_rebuilding_geometry ... ok
+test brush_panel::tests::applying_a_preset_switches_tool_and_style ... ok
+test brush_panel::tests::params_are_clamped_and_unknown_names_rejected ... ok
+test brush_panel::tests::user_presets_round_trip_through_disk ... ok
+test color_wheel::tests::color_wheel_image_has_correct_dimensions ... ok
+test color_wheel::tests::hsv_to_rgb_primary_colors ... ok
+test color_wheel::tests::hue_ring_preserves_dark_color_and_triangle_reaches_black_and_white ... ok
+test color_wheel::tests::rgb_round_trip_and_achromatic_hue_are_preserved ... ok
+test color_wheel::tests::triangle_marker_round_trip_covers_saturation_and_value ... ok
+test commands::tests::command_id_roundtrips_through_string_representations ... ok
+test commands::tests::fuzzy_search_matches_semantic_key ... ok
+test commands::tests::model_only_commands_are_hidden_from_paint ... ok
+test commands::tests::search_keeps_global_commands_in_every_workspace ... ok
+test decal_tool::tests::angles_wrap_into_a_half_open_turn ... ok
+test decal_tool::tests::file_stems_are_sanitized ... ok
+test decal_tool::tests::typed_width_rejects_invalid_values_and_keeps_the_uv_aspect ... ok
+test draw_shapes::tests::distance_to_segment_reports_foot_fraction ... ok
+test files::tests::dialog_kinds_have_stable_translation_keys ... ok
+test inspector_layout::tests::collapse_is_independent_and_idempotent ... ok
+test inspector_layout::tests::invalid_ratios_never_change_layout_and_endpoints_keep_both_panes_reachable ... ok
+test inspector_layout::tests::layout_is_restored_independently_for_every_compiled_workspace ... ok
+test keymap_edit::tests::a_shortcut_used_elsewhere_is_flagged_but_applied ... ok
+test keymap_edit::tests::editing_a_builtin_profile_creates_a_user_copy_and_persists_the_change ... ok
+test keymap_edit::tests::escape_cancels_a_capture_without_changing_the_binding ... ok
+test keymap_edit::tests::labels_are_derived_from_the_action_id ... ok
+test keymap_edit::tests::reset_restores_the_default_and_delete_returns_to_the_default_profile ... ok
+test keymap_edit::tests::snapshot_lists_user_profiles_after_the_builtin_ones ... ok
+test keymap_edit::tests::space_swaps_to_the_previous_tool_and_workspace_keys_switch_workspaces ... ok
+test numeric::tests::arithmetic_expressions_evaluate_correctly ... ok
+test numeric::tests::escape_restores_value_before_edit ... ok
+test numeric::tests::exact_input_commits_and_clamps_to_semantic_range ... ok
+test numeric::tests::field_commit_text_supports_expressions_and_relative_mods ... ok
+test numeric::tests::fine_scrubbing_uses_a_smaller_step ... ok
+test numeric::tests::invalid_input_does_not_corrupt_previous_value ... ok
+test numeric::tests::parser_rejects_empty_and_non_finite_values ... ok
+test numeric::tests::relative_operations_modify_base_value ... ok
+test numeric::tests::setting_a_value_preserves_constraints_and_resets_editing ... ok
+test numpad_key_tests::numpad_names_normalize_across_backends ... ok
+test overlay::tests::escape_closes_the_most_recent_layer_first ... ok
+test overlay::tests::explicit_close_removes_only_the_matching_surface ... ok
+test overlay::tests::outside_click_does_not_close_non_dismissible_layers ... ok
+test overlay::tests::outside_click_skips_pinned_layers ... ok
+test overlay::tests::reopening_existing_surface_moves_it_to_top_without_duplicates ... ok
+test paint_view_tools::tests::point_in_triangle_includes_edges_and_rejects_outside ... ok
+test projection::clipped_path_tests::closed_ring_in_front_of_the_camera_is_written_whole ... ok
+test projection::clipped_path_tests::open_polyline_restarts_after_a_hidden_stretch ... ok
+test projection::clipped_path_tests::ring_crossing_the_near_plane_is_clipped_not_dropped ... ok
+test projection::clipped_path_tests::ring_entirely_behind_the_camera_writes_nothing ... ok
+test section_layout::tests::add_modifier_targets_pinned_asset ... ok
+test section_layout::tests::defaults_keep_every_section_docked ... ok
+test section_layout::tests::drag_writes_to_disk_once_on_commit ... ok
+test section_layout::tests::move_clamps_coordinates_through_sanitized ... ok
+test section_layout::tests::pin_open_survives_collapse_all ... ok
+test section_layout::tests::pinned_asset_rejects_oversized_ids ... ok
+test section_layout::tests::pinned_material_resolves_asset_material ... ok
+test section_layout::tests::pinned_modifiers_act_on_displayed_stack ... ok
+test section_layout::tests::pinned_object_section_shows_pinned_asset_with_active_fallback ... ok
+test section_layout::tests::restore_overlays_persisted_entries_onto_defaults ... ok
+test section_layout::tests::restore_section_layouts_loads_persisted_entries ... ok
+test section_layout::tests::section_index_covers_all_six_sections_distinctly ... ok
+test section_layout::tests::section_intents_mutate_state_and_persist_hermetically ... ok
+test section_layout::tests::section_persist_cost_stays_flat_per_mutation ... ok
+test section_layout::tests::section_view_model_exposes_canonical_order ... ok
+test section_layout::tests::settings_persist_keeps_section_layouts ... ok
+test section_layout::tests::toggle_all_sections_skips_pinned_open ... ok
+test section_layout::tests::unknown_section_ids_are_rejected ... ok
+test split_view::tests::close_stops_rendering_and_keeps_the_document_untouched ... ok
+test split_view::tests::opens_in_front_view_and_renders_only_when_something_changed ... ok
+test split_view::tests::rerenders_when_edge_mode_or_studio_light_change ... ok
+test theme::tests::theme_registry_has_canonical_themes ... ok
+test thumbnail::tests::thumbnail_has_geometry_pixels_and_transparent_background ... ok
+test view_layout::tests::hovered_view_has_priority_and_clean_views_are_skipped ... ok
+test view_layout::tests::ids_round_trip ... ok
+test view_layout::tests::layouts_degrade_to_what_fits ... ok
+test view_layout::tests::quad_defaults_are_persp_top_front_right ... ok
+test view_layout::tests::quad_is_not_reachable_from_ids ... ok
+test view_layout::tests::rects_tile_the_area_without_overlap ... ok
+test view_layout::tests::scheduler_renders_at_most_one_passive_view_and_never_starves ... ok
+test view_model::status_severity_tests::classifies_status_messages_by_severity ... ok
+test viewport_intents::tests::coordinate_units_preserve_capture_and_reject_nonfinite_projection ... ok
+test viewport_intents::tests::invalid_wire_phases_cannot_become_a_tool_cancel ... ok
+test viewport_intents::tests::lasso_keeps_existing_bounds_and_subtract_precedence ... ok
+test viewport_soft::tests::software_pose_override_replaces_the_mesh_only_while_drawing ... ok
+test viewport_soft::tests::software_selection_style_changes_pixels ... ok
+test viewport_soft::tests::software_studio_light_follows_the_camera ... ok
+test viewport_soft::tests::software_viewport_initializes_and_renders_frame ... ok
+test viewport_soft::tests::software_viewport_renders_with_selection_domains ... ok
+test viewport_soft::tests::software_viewport_resizes_correctly ... ok
+test viewport_soft::tests::software_wireframe_overlay_toggle_changes_pixels ... ok
+test viewport_soft::tests::software_xray_opacity_changes_visible_pixels ... ok
+
+test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+
+     Running tests/contextual_interactions.rs (target/debug/deps/contextual_interactions-5bea52344293ca08)
+
+running 9 tests
+test animate_keys_do_not_delete_geometry_or_switch_to_previous_tool ... ok
+test effective_profiles_override_physical_fallbacks_and_removed_keys_stay_removed ... ok
+test navigation_anchor_is_explicit_and_switching_it_does_not_move_camera ... ok
+test navigation_does_not_consult_transform_pivot_or_active_cursor_tool ... ok
+test presets_share_tools_and_restore_the_free_camera_without_document_change ... ok
+test removed_select_shortcut_has_no_physical_w_fallback ... ok
+test transform_center_copies_cursor_once_and_recopy_is_explicit ... ok
+test uv_shortcuts_open_a_domain_preview_and_enter_escape_use_its_transaction ... ok
+test xray_wireframe_and_select_through_have_independent_state ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running unittests src/lib.rs (target/debug/deps/petunia_project-82136cdd24de0f4b)
+
+running 244 tests
+test animation::tests::rotation_only_track_keeps_rest_offset_and_rest_frame_is_identity ... ok
+test animation::tests::test_animation_retargeting ... ok
+test animation::tests::test_animation_track_sampling_and_interpolation ... ok
+test animation::tests::test_auto_fit_humanoid_and_skin_weights ... ok
+test animation::tests::test_clip_sample_pose_and_matrices ... ok
+test animation::tests::test_rig_presets_validity ... ok
+test autosave::tests::autosave_coalesces_cycles_without_a_new_revision ... ok
+test autosave::tests::failed_snapshots_are_retried_on_the_same_revision ... ok
+test autosave::tests::generations_are_listed_newest_first_with_revision_and_discarded_one_by_one ... ok
+test autosave::tests::snapshot_names_parse_with_and_without_revision ... ok
+test autosave::tests::test_autosave_retention_pruning ... ok
+test autosave::tests::test_autosave_tick_only_triggers_when_dirty ... ok
+test autosave::tests::test_session_lock_and_recovery_detection ... ok
+test autosave::tests::untitled_documents_keep_separate_generations_per_project_id ... ok
+test bleed_tests::bleed_only_changes_a_copy_within_requested_radius ... ok
+test export::bleed_tests::padding_preserves_transparent_artwork_inside_uv_faces ... ok
+test export::tests::glb_carries_decal_sets_in_material_extras ... ok
+test export::tests::glb_embeds_painted_texture_as_png ... ok
+test export::tests::glb_empty_errors ... ok
+test export::tests::glb_exports_skin_joints_weights_and_animations ... ok
+test export::tests::glb_nan_mesh_errors_not_panics ... ok
+test export::tests::glb_rejects_non_monotonic_keyframe_times ... ok
+test export::tests::glb_roundtrip_via_gltf_crate ... ok
+test export::tests::glb_skin_is_skipped_with_a_note_when_weights_do_not_match_the_mesh ... ok
+test export::tests::glb_without_rig_keeps_no_skin_or_animation ... ok
+test export::tests::glb_without_texture_has_no_images ... ok
+test export::tests::json_str_escapes_controls ... ok
+test export::tests::obj_has_vt ... ok
+test format::tests::bounded_reads_ignore_the_declared_entry_size ... ok
+test format::tests::canvas_pixels_legacy_number_array_still_loads ... ok
+test format::tests::canvas_pixels_postcard_layout_is_unchanged ... ok
+test format::tests::canvas_pixels_serialize_as_compact_base64 ... ok
+test format::tests::clean_files_load_strict_with_an_empty_report ... ok
+test format::tests::compound_profiles_svg_sources_and_surface_paths_survive_zip ... ok
+test format::tests::document_without_spline_fields_defaults_to_empty_storage ... ok
+test format::tests::hostile_project_normalized ... ok
+test format::tests::legacy_postcard_still_loads ... ok
+test format::tests::oversized_input_is_rejected ... ok
+test format::tests::postcard_layout_before_splines_loads_with_additive_defaults ... ok
+test format::tests::postcard_layout_with_splines_loads_with_procedural_defaults ... ok
+test format::tests::prefab_library_roundtrips_and_old_documents_default_to_empty ... ok
+test format::tests::profile_and_path_generator_roundtrip ... ok
+test format::tests::rejects_garbage ... ok
+test format::tests::save_load_roundtrip ... ok
+test format::tests::saved_project_with_large_textures_reloads ... ok
+test format::tests::strict_load_refuses_repairs_and_legacy_repair_reports_them ... ok
+test format::tests::test_atomic_save_preserves_original_on_failure ... ok
+test format::tests::test_future_version_rejected ... ok
+test format::tests::test_project_metadata_and_asset_tags_roundtrip ... ok
+test game_ready::tests::empty_objects_block_and_errors_sort_first ... ok
+test game_ready::tests::healthy_cube_has_no_errors_and_reports_counts ... ok
+test game_ready::tests::invalid_geometry_is_an_error_with_target_and_action ... ok
+test ik::tests::chain_solutions_are_deterministic_and_respect_weight ... ok
+test ik::tests::chain_validation_reports_structured_errors ... ok
+test ik::tests::fabrik_and_look_at_chains_drive_the_skeleton ... ok
+test ik::tests::fabrik_converges_preserves_lengths_and_root ... ok
+test ik::tests::ik_chains_persist_and_are_pruned_by_the_project ... ok
+test ik::tests::leg_chain_lifts_the_foot_to_the_target_and_only_touches_the_chain ... ok
+test ik::tests::soft_ik_is_continuous_and_never_overextends ... ok
+test ik::tests::two_bone_clamps_unreachable_and_too_close_targets_without_nan ... ok
+test ik::tests::two_bone_pole_chooses_the_bend_side ... ok
+test ik::tests::two_bone_reaches_reachable_targets_and_keeps_lengths ... ok
+test import_gltf::tests::glb_roundtrip_preserves_uv_and_color ... ok
+test import_gltf::tests::glb_with_texture_imports_material_and_canvas ... ok
+test import_gltf::tests::gltf_json_with_data_uri_buffer_imports ... ok
+test import_gltf::tests::hostile_mode_is_skipped_not_panic ... ok
+test import_gltf::tests::malformed_json_is_a_parse_error ... ok
+test import_gltf::tests::missing_asset_is_rejected ... ok
+test import_gltf::tests::unsupported_major_version_is_rejected ... ok
+test import_gltf::tests::valid_gltf_summarizes_structure ... ok
+test import_obj::tests::empty_obj_is_a_validation_error ... ok
+test import_obj::tests::malformed_obj_is_a_parse_error ... ok
+test import_obj::tests::quad_is_triangulated_not_preserved ... ok
+test import_obj::tests::valid_obj_imports_triangulated_mesh ... ok
+test io_atomic::tests::atomic_write_creates_missing_parents ... ok
+test io_atomic::tests::atomic_write_roundtrips_and_replaces ... ok
+test io_atomic::tests::temp_scope_cleans_up_on_drop ... ok
+test model_library::tests::test_model_library_query_search_and_filter ... ok
+test object_transform::tests::identity_round_trips ... ok
+test object_transform::tests::large_translation_does_not_hide_shear_or_projective_terms ... ok
+test object_transform::tests::negative_scale_flags_winding_flip ... ok
+test object_transform::tests::shear_and_singular_matrices_are_refused ... ok
+test object_transform::tests::trs_round_trips_through_the_matrix ... ok
+test package::tests::foreign_zip_without_manifest_is_rejected ... ok
+test package::tests::garbage_bytes_are_rejected ... ok
+test package::tests::roundtrip_with_attachments ... ok
+test package::tests::traversal_names_are_rejected ... ok
+test paint_layers::svg_compatibility_tests::canonical_json_retains_svg_source ... ok
+test paint_layers::svg_compatibility_tests::legacy_postcard_decal_keeps_its_four_field_layout ... ok
+test paint_layers::tests::active_layer_tracking_survives_remove_and_move ... ok
+test paint_layers::tests::brightness_contrast_flat_is_mid_gray ... ok
+test paint_layers::tests::composite_shows_the_variant_keyed_at_the_playback_time ... ok
+test paint_layers::tests::composite_tiles_matches_full_composite ... ok
+test paint_layers::tests::composite_tiles_partial_keeps_clean_tiles ... ok
+test paint_layers::tests::decal_bounds_map_to_the_tiles_they_touch ... ok
+test paint_layers::tests::decal_from_svg_keeps_aspect_and_source ... ok
+test paint_layers::tests::decal_from_svg_rejects_bad_input ... ok
+test paint_layers::tests::decal_json_without_source_svg_still_deserializes ... ok
+test paint_layers::tests::decal_rerasterize_changes_resolution_only ... ok
+test paint_layers::tests::decal_rerasterize_error_leaves_decal_intact ... ok
+test paint_layers::tests::decal_rerasterize_without_source_is_noop ... ok
+test paint_layers::tests::decal_set_round_trips_json_and_old_files_open_without_variants ... ok
+test paint_layers::tests::decal_set_variants_switch_remove_and_follow_the_track ... ok
+test paint_layers::tests::decal_with_source_svg_round_trips_json ... ok
+test paint_layers::tests::grain_is_deterministic_and_seeded ... ok
+test paint_layers::tests::grain_zero_intensity_is_identity ... ok
+test paint_layers::tests::hue_shift_180_turns_red_into_cyan ... ok
+test paint_layers::tests::layer_stack_composition_is_deterministic ... ok
+test paint_layers::tests::levels_maps_black_to_white_and_is_bounded ... ok
+test paint_layers::tests::merging_a_surface_decal_down_uses_the_mesh ... ok
+test paint_layers::tests::new_effects_serialize_roundtrip ... ok
+test paint_layers::tests::pixelate_makes_stack_not_tileable ... ok
+test paint_layers::tests::surface_decal_composites_bakes_and_round_trips ... ok
+test paint_layers::tests::surface_decal_crosses_a_seam_and_keeps_the_image_aspect ... ok
+test paint_layers::tests::surface_decal_lands_only_where_it_was_placed ... ok
+test paint_layers::tests::svg_variants_are_rerasterized_to_the_area_they_cover ... ok
+test paint_layers::tests::test_decal_transform_and_bake_to_raster ... ok
+test paint_layers::tests::test_paint_layers_merge_down ... ok
+test paint_layers::tests::variant_track_steps_without_interpolation_and_loops ... ok
+test palette::tests::gpl_roundtrip ... ok
+test palette::tests::hex_roundtrip ... ok
+test path_generator::tests::configured_budget_rejects_oversized_mesh_before_generation ... ok
+test path_generator::tests::evaluation_cache_invalidates_after_dependency_edit ... ok
+test path_generator::tests::evaluation_cache_tracks_resolved_surface_attachment_geometry ... ok
+test path_generator::tests::open_profile_draft_is_valid_authoring_but_not_a_sweep_dependency ... ok
+test path_generator::tests::sweep_evaluation_is_deterministic_and_reports_dependencies ... ok
+test path_generator::tests::zero_handle_bezier_keeps_its_corners ... ok
+test plugin_data::tests::missing_plugins_are_reported_without_dropping_payloads ... ok
+test plugin_data::tests::payloads_round_trip_through_json ... ok
+test plugin_data::tests::writes_validate_namespace_and_size ... ok
+test prefab::tests::empty_or_unknown_selection_creates_nothing ... ok
+test prefab::tests::names_are_unique_and_rename_keeps_uniqueness ... ok
+test prefab::tests::prefab_geometry_is_centered_and_instances_land_at_position ... ok
+test prefab::tests::query_filters_sorts_and_normalizes_tags ... ok
+test prefab::tests::removing_a_prefab_keeps_instances_without_links ... ok
+test prefab::tests::saving_a_prefab_does_not_touch_the_scene ... ok
+test prefab::tests::updating_a_prefab_marks_older_instances_outdated ... ok
+test profile::compound_tests::holes_survive_json_and_old_profiles_default_to_no_holes ... ok
+test profile::primitive_tests::dimensions_preserve_transformed_frame_and_legacy_data_is_explicit ... ok
+test profile::tests::legacy_profile_layout_does_not_consume_the_next_record ... ok
+test profile::tests::profile_accepts_open_authoring_drafts_but_requires_planar_unattached_points ... ok
+test profile::tests::workplane_from_three_points_and_face_edge ... ok
+test profile::tests::workplane_normalizes_axes_and_preserves_handedness ... ok
+test profile_tools::tests::arc_passes_through_endpoints ... ok
+test profile_tools::tests::cleanup_stages_report_what_they_did ... ok
+test profile_tools::tests::closed_contours_keep_three_points_and_bad_input_is_untouched ... ok
+test profile_tools::tests::resample_only_adds_points_on_long_segments ... ok
+test profile_tools::tests::round_corner_keeps_dimensions ... ok
+test profile_tools::tests::trace_separate_pixels_and_hole ... ok
+test rig::tests::test_bone_removal_reparents_children ... ok
+test rig::tests::test_duplicate_bone_name_rejected ... ok
+test rig::tests::test_hierarchy_cycle_prevention ... ok
+test rig::tests::test_linear_blend_skinning_identity_pose ... ok
+test rig::tests::test_linear_blend_skinning_translation_pose ... ok
+test rig::tests::test_reparent_and_remove_keep_bind_and_recompute_rest_offsets ... ok
+test rig::tests::test_rest_local_translation_is_offset_from_parent_and_bind_is_absolute ... ok
+test rig::tests::test_rest_pose_yields_identity_skinning_for_offset_hierarchy ... ok
+test rig::tests::test_rest_rotation_is_respected_and_rest_pose_stays_identity ... ok
+test rig::tests::test_skeleton_creation_and_bone_hierarchy ... ok
+test rig::tests::test_skin_weights_normalization_and_validation ... ok
+test rig_roles::tests::assignment_rules_and_revisions ... ok
+test rig_roles::tests::humanoid_preset_roles_are_inferred ... ok
+test rig_roles::tests::mixamo_and_generic_names_are_recognised ... ok
+test rig_roles::tests::project_infers_persists_and_prunes_roles ... ok
+test rig_roles::tests::quadruped_and_multi_leg_presets_have_all_legs ... ok
+test rig_roles::tests::requirements_report_readable_errors ... ok
+test rig_roles::tests::serpent_fish_and_bird_presets_have_their_roles ... ok
+test shared::tests::clone_shares_until_the_first_write ... ok
+test shared::tests::serialization_is_transparent ... ok
+test spline::tests::a_point_toggles_between_straight_and_curved ... ok
+test spline::tests::cache_invalidates_only_when_spline_revision_changes ... ok
+test spline::tests::cache_rejects_same_revision_with_different_geometry_after_restore ... ok
+test spline::tests::cubic_evaluation_and_tangent_are_finite ... ok
+test spline::tests::evaluation_rejects_non_finite_and_unbounded_requests ... ok
+test spline::tests::handle_modes_enforce_alignment_and_mirroring ... ok
+test spline::tests::legacy_spline_json_without_attachment_defaults_to_detached_points ... ok
+test spline::tests::polyline_arc_length_and_resampling_are_uniform ... ok
+test spline::tests::resampled_frames_survive_near_vertical_and_repeated_control_points ... ok
+test spline::tests::reverse_preserves_bezier_geometry_with_opposite_parameterization ... ok
+test spline::tests::snapping_prioritizes_nearby_points_then_grid ... ok
+test spline::tests::spline_serialization_preserves_ids_and_authoring_data ... ok
+test spline::tests::splitting_a_bezier_segment_preserves_the_curve ... ok
+test spline::tests::splitting_a_polyline_segment_keeps_the_shape ... ok
+test surface_attachment::tests::face_corner_uvs_keep_seam_sides_distinct ... ok
+test surface_attachment::tests::position_edits_and_unrelated_revisions_preserve_attachment ... ok
+test surface_attachment::tests::queries_reject_invalid_rays_and_respect_visibility_and_locking ... ok
+test surface_attachment::tests::raycast_builds_barycentric_attachment_and_surface_frame ... ok
+test surface_attachment::tests::reprojection_is_deterministic_and_preserves_authored_offsets ... ok
+test surface_attachment::tests::topology_change_requires_explicit_reattach_and_detach_keeps_fallback ... ok
+test surface_recipe::tests::cycle_is_rejected_with_path ... ok
+test surface_recipe::tests::invert_chain_is_deterministic_and_cached ... ok
+test surface_recipe::tests::missing_input_is_reported ... ok
+test surface_recipe::tests::mix_and_multiply_compose ... ok
+test surface_recipe::tests::recipe_serializes_roundtrip_with_schema_version ... ok
+test surface_recipe::tests::type_mismatch_and_unknown_node_are_explicit ... ok
+test svg::tests::centred_and_fit_to_size ... ok
+test svg::tests::circle_becomes_closed_cubic_spline ... ok
+test svg::tests::closed_with_two_nodes_is_not_closed_spline ... ok
+test svg::tests::consecutive_duplicate_nodes_are_removed ... ok
+test svg::tests::cubic_path_keeps_relative_handles ... ok
+test svg::tests::deep_group_nesting_is_rejected_but_moderate_is_fine ... ok
+test svg::tests::degenerate_subpaths_are_dropped ... ok
+test svg::tests::duplicate_ids_use_worst_case ... ok
+test svg::tests::empty_input_is_empty ... ok
+test svg::tests::entity_declarations_are_rejected ... ok
+test svg::tests::external_href_is_ignored ... ok
+test svg::tests::group_transform_and_viewbox_scaling ... ok
+test svg::tests::hidden_paths_are_skipped ... ok
+test svg::tests::huge_coordinates_do_not_panic ... ok
+test svg::tests::info_reads_size_and_viewbox ... ok
+test svg::tests::invalid_fit_size_is_zero_size ... ok
+test svg::tests::long_linear_use_chain_hits_depth_cap_without_overflowing_stack ... ok
+test svg::tests::malformed_xml_is_parse_error ... ok
+test svg::tests::malformed_xml_is_parse_error_before_expansion ... ok
+test svg::tests::moderate_use_expansion_still_works ... ok
+test svg::tests::nested_group_transforms_compose ... ok
+test svg::tests::node_cap_is_enforced ... ok
+test svg::tests::open_and_closed_subpaths_and_names ... ok
+test svg::tests::oversize_input_is_rejected_before_parsing ... ok
+test svg::tests::quadratic_is_converted_to_equivalent_cubic ... ok
+test svg::tests::rasterize_alpha_is_straight ... ok
+test svg::tests::rasterize_circle_is_round ... ok
+test svg::tests::rasterize_clamps_max_px ... ok
+test svg::tests::rasterize_huge_document_size_is_clamped ... ok
+test svg::tests::rasterize_is_deterministic ... ok
+test svg::tests::rasterize_preserves_aspect_and_longest_side ... ok
+test svg::tests::rasterize_rect_fills_expected_pixels ... ok
+test svg::tests::rect_subpath_is_closed_polyline_with_four_nodes ... ok
+test svg::tests::round_trip_to_splines_validates ... ok
+test svg::tests::text_is_ignored_without_panic ... ok
+test svg::tests::use_bomb_30_levels_with_xlink_href_is_rejected ... ok
+test svg::tests::use_bomb_is_rejected_fast_everywhere ... ok
+test svg::tests::use_bomb_with_wide_fanout_is_rejected ... ok
+test svg::tests::use_cycles_and_dangling_refs_do_not_hang_the_check ... ok
+test svg::tests::y_axis_is_flipped_to_y_up ... ok
+test svg::tests::zero_size_is_rejected ... ok
+test tests::evaluated_mesh_cache_tracks_source_content_not_only_counts ... ok
+test tests::history_footprint_shares_unchanged_meshes_between_clones ... ok
+test tests::project_changes_advance_only_declared_revisions ... ok
+test tests::restored_revision_clock_advances_only_the_published_domain ... ok
+test tests::spline_storage_is_counted_in_history_budget ... ok
+test tests::test_annotation_item_transform ... ok
+test tests::test_project_annotations_and_measurements_management ... ok
+test tests::test_project_remove_shifts_active_index ... ok
+
+test result: ok. 244 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/modifier_stack.rs (target/debug/deps/modifier_stack-2bc4098ba0b3bf68)
+
+running 5 tests
+test disabled_modifier_is_not_evaluated ... ok
+test export_obj_uses_evaluated_modifier_stack ... ok
+test modifier_cache_invalidates_when_properties_change ... ok
+test modifier_evaluation_does_not_mutate_base_mesh ... ok
+test modifier_stack_roundtrips_through_project_format ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/pipeline_tests.rs (target/debug/deps/pipeline_tests-ebc27f9eb098ae26)
+
+running 16 tests
+test batch_names_never_collide_inside_one_export ... ok
+test test_batch_export_entire_project_glb ... ok
+test test_batch_export_partial_failure_tolerance ... ok
+test test_export_multiple_assets_obj ... ok
+test test_export_single_asset_glb_with_materials ... ok
+test test_export_single_asset_obj ... ok
+test test_export_single_asset_overwrite_policy ... ok
+test test_export_single_asset_pkg ... ok
+test test_format_capabilities_matrix ... ok
+test test_hostile_gltf_malformed_json ... ok
+test test_hostile_obj_corrupt_data ... ok
+test test_hostile_pkg_corrupt_zip ... ok
+test test_import_obj_roundtrip ... ok
+test test_import_pkg_roundtrip ... ok
+test test_import_with_scaling ... ok
+test unsupported_options_are_reported_not_silently_dropped ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/save_tree.rs (target/debug/deps/save_tree-7cc4408e0d9f5bf8)
+
+running 3 tests
+test hostile_package_bytes_are_typed_errors ... ok
+test package_roundtrip_keeps_declared_tree ... ok
+test save_creates_exact_tree ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s

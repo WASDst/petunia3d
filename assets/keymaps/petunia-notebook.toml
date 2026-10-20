@@ -14,6 +14,9 @@ reset_camera = "Home"
 rename = "Ctrl+F2"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+make_face = "Shift+F"
+move = false
 box_select = "B"
 select_vertex = "F1"
 select_edge = "F2"

@@ -5,6 +5,7 @@ name = "Petunia Simples"
 description = "Atalhos minimalistas focados em modelagem rápida para iniciantes sem combinações complexas"
 
 [global]
+previous_tool = false
 undo = "Ctrl+Z"
 redo = "Ctrl+Y"
 save_project = "Ctrl+S"
@@ -12,6 +13,8 @@ help = "F1"
 reset_camera = "Space"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+make_face = "Shift+F"
 box_select = "B"
 select_vertex = "1"
 select_edge = "2"

@@ -17,7 +17,11 @@ fn primed() -> AppState {
 fn dispatch_intent_matches_typed_command_for_extrude() {
     let mut a = primed();
     let mut b = primed();
-    a.dispatch(&ExtrudeSelectedCmd { dist: 0.5 }).unwrap();
+    a.dispatch(&ExtrudeSelectedCmd {
+        dist: 0.5,
+        ..Default::default()
+    })
+    .unwrap();
     b.dispatch_intent(&CommandIntent {
         command: "model.extrude".into(),
         asset_id: None,

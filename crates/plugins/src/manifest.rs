@@ -46,7 +46,12 @@ impl Capability {
     /// Query names que a capability libera.
     fn queries(self) -> &'static [&'static str] {
         match self {
-            Self::ReadDocument => &["scene.list", "scene.hierarchy", "scene.tools"],
+            Self::ReadDocument => &[
+                "scene.list",
+                "scene.hierarchy",
+                "scene.tools",
+                "plugin.data",
+            ],
             Self::ReadSelection => &["scene.selection"],
             _ => &[],
         }

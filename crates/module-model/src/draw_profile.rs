@@ -253,6 +253,15 @@ pub fn profile_capture_face_index(state: &mut AppState, face: usize) -> bool {
         return false;
     }
 
+    // Validação estrita de planaridade da face (superfícies curvas são extensão posterior).
+    let tolerance = 1e-3;
+    for &idx in &face.verts {
+        let v = mesh.verts[idx as usize].vec();
+        if (v - center).dot(normal).abs() > tolerance {
+            return false;
+        }
+    }
+
     let right = (p1 - p0).normalize_or_zero();
     let right = if right.length_squared() < 1e-4 || right.abs_diff_eq(normal, 0.1) {
         if normal.y.abs() < 0.9 {

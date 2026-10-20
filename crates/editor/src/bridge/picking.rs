@@ -22,8 +22,49 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// aresta usam alvos em pixels lógicos, independentes da distância da
     /// câmera; objetos e faces usam a superfície real, nunca uma esfera de
     /// bounding que seleciona no vazio.
-    pub(crate) fn pick_viewport_target(&self, x: f32, y: f32) -> petunia_core::HoverTarget {
-        self.pick_target_for_domain(self.state.selection_domain(), x, y)
+    pub fn pick_viewport_target(&self, x: f32, y: f32) -> petunia_core::HoverTarget {
+        let filters = self.state.session.selection.filters;
+        if filters == petunia_core::SelectionFilters::all() {
+            self.pick_contextual_target(filters, x, y)
+        } else {
+            self.pick_target_for_domain(self.state.selection_domain(), x, y)
+        }
+    }
+
+    /// Resolução contextual de candidatos (SEL-002).
+    /// Ordem de elegibilidade: vértice próximo -> aresta próxima -> face sob o cursor -> objeto.
+    pub fn pick_contextual_target(
+        &self,
+        filters: petunia_core::SelectionFilters,
+        x: f32,
+        y: f32,
+    ) -> petunia_core::HoverTarget {
+        use petunia_core::HoverTarget as Target;
+        if filters.vertices {
+            let hit = self.pick_target_for_domain(SelectionDomain::Vertex, x, y);
+            if matches!(hit, Target::Vertex(_)) {
+                return hit;
+            }
+        }
+        if filters.edges {
+            let hit = self.pick_target_for_domain(SelectionDomain::Edge, x, y);
+            if matches!(hit, Target::Edge(_, _)) {
+                return hit;
+            }
+        }
+        if filters.faces {
+            let hit = self.pick_target_for_domain(SelectionDomain::Face, x, y);
+            if matches!(hit, Target::Face(_)) {
+                return hit;
+            }
+        }
+        if filters.objects {
+            let hit = self.pick_target_for_domain(SelectionDomain::Object, x, y);
+            if matches!(hit, Target::Object(_)) {
+                return hit;
+            }
+        }
+        Target::None
     }
 
     pub(crate) fn pick_target_for_domain(
@@ -67,8 +108,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             SelectionDomain::Face => petunia_core::SelectMode::Face,
             SelectionDomain::Object => return Target::None,
         };
-        let through = self.state.session.show_xray
-            || self.state.session.shading == petunia_core::Shading::Wireframe;
+        let through = self.state.session.selects_through();
         let viewport = glam::Vec2::new(width, height);
         let cursor = glam::Vec2::from_array(ndc);
         // O picking compara posições com a câmera (mundo): malha editável no
@@ -122,7 +162,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         _direction: glam::Vec3,
         position: glam::Vec3,
     ) -> bool {
-        if self.state.session.show_xray {
+        if self.state.session.selects_through() {
             return false;
         }
         let scene = self.scene_query();
@@ -282,8 +322,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         self.last_viewport_click = Some(([normalized_x, normalized_y], now));
         let loop_select = loop_select || is_double_click;
-        let draw =
-            self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw;
+        let draw = self.state.workspace == Workspace::Model;
         if draw && self.profile_transform_gesture.is_none() {
             let pixel = [
                 normalized_x * self.viewport_size[0],

@@ -137,6 +137,8 @@ pub struct ViewportRenderSettings {
     pub show_overlays: bool,
     pub show_grid: bool,
     pub show_axes: bool,
+    /// Eixos do mundo visíveis (X, Y, Z); valem só com `show_axes`.
+    pub axes_visible: [bool; 3],
     pub grid: RenderGrid,
     /// Leitura das arestas por modo (DRAW = feições, POLY = topologia).
     pub edge_mode: EdgeMode,
@@ -177,8 +179,9 @@ impl Default for ViewportRenderSettings {
             show_overlays: true,
             show_grid: true,
             show_axes: true,
+            axes_visible: [true, false, true],
             grid: RenderGrid {
-                size: 10.0,
+                size: 20.0,
                 spacing: 1.0,
                 opacity: 0.5,
                 show_isometric_guide: false,
@@ -224,6 +227,11 @@ pub struct RenderEdge {
     pub color: [f32; 3],
     /// Multiplicador de [`ViewportRenderSettings::line_width_px`].
     pub width: f32,
+    /// Normais (locais) das duas faces vizinhas. Sem Raio-X, a aresta só é
+    /// desenhada se alguma delas está de frente para a câmera: sem isso o
+    /// deslocamento de profundidade deixava "tocos" de arestas de trás nos
+    /// cantos. Zero = sem face (borda aberta ou wireframe): sempre desenhada.
+    pub normals: [[f32; 3]; 2],
 }
 
 /// Objeto desenhável. Selecionar ou mover a câmera não altera as revisões.
@@ -341,14 +349,20 @@ impl ComponentOverlays {
     }
 }
 
-/// Contorno de seleção de objetos (domínio Object), em largura constante.
+/// Um objeto contornado e a cor do seu contorno (já resolvida: cor da parte,
+/// variante do ativo ou do hover).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OutlineEntry {
+    pub object_id: Uuid,
+    pub color: [f32; 4],
+}
+
+/// Contorno de objetos (domínio Object), em largura constante. A ordem importa:
+/// entradas posteriores vencem onde as silhuetas se sobrepõem (hover, depois
+/// selecionados, por último o ativo).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RenderOutline {
-    pub selected: Vec<Uuid>,
-    /// Ativo, desenhado com `active_color` (precisa estar em `selected`).
-    pub active: Option<Uuid>,
-    pub color: [f32; 4],
-    pub active_color: [f32; 4],
+    pub entries: Vec<OutlineEntry>,
     /// Raio em px lógicos.
     pub radius_px: f32,
 }

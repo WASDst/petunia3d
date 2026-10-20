@@ -23,10 +23,10 @@ use uuid::Uuid;
 
 use crate::Shading;
 use crate::frame::{
-    CameraMatrices, ComponentOverlays, DirtyRect, IDENTITY, OverlayFaceVertex, OverlayLine,
-    OverlayPoint, OwnedReference, OwnedRenderFrame, OwnedTexture, RenderEdge, RenderFrameInput,
-    RenderLight, RenderMesh, RenderObject, RenderOutline, RenderReferenceImage, RenderTexture,
-    RenderVertex, ViewportPalette, ViewportRenderSettings,
+    CameraMatrices, ComponentOverlays, DirtyRect, IDENTITY, OutlineEntry, OverlayFaceVertex,
+    OverlayLine, OverlayPoint, OwnedReference, OwnedRenderFrame, OwnedTexture, RenderEdge,
+    RenderFrameInput, RenderLight, RenderMesh, RenderObject, RenderOutline, RenderReferenceImage,
+    RenderTexture, RenderVertex, ViewportPalette, ViewportRenderSettings,
 };
 use crate::overlays::{OverlayShape, WorkplaneOverlay, edge_overlay_visible};
 use crate::scene::{self, RefPlane};
@@ -43,10 +43,18 @@ const WIRE_EDGE_COLOR: [f32; 3] = [0.62, 0.66, 0.74];
 const WIRE_SELECTED_EDGE_COLOR: [f32; 3] = [1.0, 0.62, 0.20];
 const TRIANGULATION_COLOR: [f32; 3] = [0.3, 0.65, 0.95];
 /// Preselection: ciano #7DDCFF único em GPU, software e shell.
-const HOVER_LINE: [f32; 4] = [0.49, 0.86, 1.0, 0.85];
-const HOVER_FACE: [f32; 4] = [0.49, 0.86, 1.0, 0.18];
-const EDGE_GUIDE: [f32; 4] = [0.70, 0.75, 0.83, 0.76];
-const VERTEX_GUIDE: [f32; 4] = [0.73, 0.78, 0.85, 0.9];
+// B12 (guia de linguagem visual): componentes discretos e escuros, só o que está
+// selecionado ganha cor e tamanho; o hover é um destaque, não um halo.
+const HOVER_LINE: [f32; 4] = [0.49, 0.86, 1.0, 0.9];
+const HOVER_FACE: [f32; 4] = [0.49, 0.86, 1.0, 0.12];
+const EDGE_GUIDE: [f32; 4] = [0.05, 0.05, 0.06, 0.9];
+const VERTEX_GUIDE: [f32; 4] = [0.04, 0.04, 0.05, 1.0];
+/// Raio dos pontos de vértice em px lógicos: comum, selecionado e sob o cursor.
+const VERTEX_RADIUS: f32 = 2.0;
+const VERTEX_SELECTED_RADIUS: f32 = 3.0;
+const VERTEX_HOVER_RADIUS: f32 = 3.5;
+/// Tinta da face selecionada (o contorno na cor de seleção dá a forma).
+const FACE_SELECTED_ALPHA: f32 = 0.22;
 
 struct Hasher(u64);
 
@@ -72,6 +80,9 @@ fn overlay_key(settings: &ViewportRenderSettings) -> u64 {
     h.mix(u64::from(settings.show_overlays));
     h.mix(u64::from(settings.show_grid));
     h.mix(u64::from(settings.show_axes));
+    for visible in settings.axes_visible {
+        h.mix(u64::from(visible));
+    }
     for value in [
         settings.grid.size,
         settings.grid.spacing,
@@ -347,6 +358,9 @@ impl SceneExtractor {
             for value in asset.world_matrix().to_cols_array() {
                 components_key.f32(value);
             }
+            // A cor da parte também entra: trocar só a cor refaz os overlays.
+            let [r, g, b] = project.selection_color_of(asset).unwrap_or([0; 3]);
+            components_key.mix(u64::from(u32::from_le_bytes([r, g, b, 1])));
         }
         let components_key = components_key.finish();
         if self.components_key != Some(components_key) {
@@ -722,24 +736,64 @@ fn rgb_f32(rgb: [u8; 3]) -> [f32; 3] {
 
 /// Contorno dos objetos selecionados: base em 62 % da cor de seleção e o ativo
 /// na cor da parte (ou da seleção).
+/// Cor do contorno de um objeto: a da própria parte (`selection_overlay_color`)
+/// ou a global. Os níveis seguem o papel: ativo pleno, selecionado mais escuro,
+/// hover discreto.
+fn outline_rgb(project: &Project, asset: &Asset, style: &ComponentStyle) -> [f32; 3] {
+    rgb_f32(
+        project
+            .selection_color_of(asset)
+            .unwrap_or(style.selection_rgb),
+    )
+}
+
 fn resolve_outline(
     project: &Project,
     style: &ComponentStyle,
     selected: &[Uuid],
     active: Option<Uuid>,
 ) -> RenderOutline {
-    let base = rgb_f32(style.selection_rgb);
-    let active_rgb = rgb_f32(
-        project
-            .active()
-            .and_then(Asset::effective_selection_overlay_color)
-            .unwrap_or(style.selection_rgb),
-    );
+    let mut entries = Vec::with_capacity(selected.len() + 1);
+    let find = |id: Uuid| project.assets.iter().find(|asset| asset.id == id);
+    // Hover primeiro: qualquer seleção o cobre.
+    if style.domain == SelectionDomain::Object
+        && let HoverTarget::Object(index) = style.hover
+        && let Some(asset) = project.assets.get(index)
+        && asset.visible
+        && !selected.contains(&asset.id)
+    {
+        let rgb = outline_rgb(project, asset, style);
+        entries.push(OutlineEntry {
+            object_id: asset.id,
+            color: [
+                rgb[0] * 0.5 + 0.25,
+                rgb[1] * 0.5 + 0.25,
+                rgb[2] * 0.5 + 0.25,
+                1.0,
+            ],
+        });
+    }
+    let active = active.filter(|id| selected.contains(id));
+    for id in selected.iter().copied().filter(|id| Some(*id) != active) {
+        if let Some(asset) = find(id) {
+            let rgb = outline_rgb(project, asset, style);
+            entries.push(OutlineEntry {
+                object_id: id,
+                color: [rgb[0] * 0.62, rgb[1] * 0.62, rgb[2] * 0.62, 1.0],
+            });
+        }
+    }
+    if let Some(id) = active
+        && let Some(asset) = find(id)
+    {
+        let rgb = outline_rgb(project, asset, style);
+        entries.push(OutlineEntry {
+            object_id: id,
+            color: [rgb[0], rgb[1], rgb[2], 1.0],
+        });
+    }
     RenderOutline {
-        selected: selected.to_vec(),
-        active: active.filter(|id| selected.contains(id)),
-        color: [base[0] * 0.62, base[1] * 0.62, base[2] * 0.62, 1.0],
-        active_color: [active_rgb[0], active_rgb[1], active_rgb[2], 1.0],
+        entries,
         radius_px: style.thickness.clamp(1.0, 4.0),
     }
 }
@@ -865,9 +919,11 @@ pub fn build_edges(
                     WIRE_EDGE_COLOR
                 },
                 width: 1.0,
+                normals: [[0.0; 3]; 2],
             });
         }
     } else {
+        let adjacency = edge_face_normals(mesh);
         for (a, b, _selected, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
             if !edge_overlay_visible(settings.show_wireframe_overlay, settings.edge_mode, feature) {
                 continue;
@@ -877,7 +933,17 @@ pub fn build_edges(
             } else {
                 (THIN_EDGE_COLOR, THIN_EDGE_SCALE)
             };
-            edges.push(RenderEdge { a, b, color, width });
+            let normals = adjacency
+                .get(&position_key(a, b))
+                .copied()
+                .unwrap_or([[0.0; 3]; 2]);
+            edges.push(RenderEdge {
+                a,
+                b,
+                color,
+                width,
+                normals,
+            });
         }
     }
     if settings.show_triangulation {
@@ -887,10 +953,58 @@ pub fn build_edges(
                 b,
                 color: TRIANGULATION_COLOR,
                 width: THIN_EDGE_SCALE,
+                normals: [[0.0; 3]; 2],
             });
         }
     }
     edges
+}
+
+/// Chave de aresta pelas posições dos extremos, ordem-independente.
+type EdgeKey = ([u32; 3], [u32; 3]);
+
+/// Normais das (até duas) faces vizinhas de uma aresta.
+type EdgeNormals = [[f32; 3]; 2];
+
+/// Chave de aresta pelas posições (independe da ordem dos extremos).
+fn position_key(a: [f32; 3], b: [f32; 3]) -> EdgeKey {
+    let (ka, kb) = (a.map(f32::to_bits), b.map(f32::to_bits));
+    if ka <= kb { (ka, kb) } else { (kb, ka) }
+}
+
+/// Normais das (até) duas faces de cada aresta. Arestas com mais de duas faces
+/// (não-manifold) ou com uma só ficam com zero: sempre desenhadas.
+fn edge_face_normals(mesh: &petunia_core::Mesh) -> HashMap<EdgeKey, EdgeNormals> {
+    let mut faces_of: HashMap<EdgeKey, (u8, EdgeNormals)> = HashMap::new();
+    for (index, face) in mesh.faces.iter().enumerate() {
+        let normal = mesh.face_normal(index);
+        if !normal.is_finite() || normal.length_squared() < 1.0e-12 {
+            continue;
+        }
+        let count = face.verts.len();
+        for corner in 0..count {
+            let (Some(&ia), Some(&ib)) =
+                (face.verts.get(corner), face.verts.get((corner + 1) % count))
+            else {
+                continue;
+            };
+            let (Some(va), Some(vb)) = (mesh.verts.get(ia as usize), mesh.verts.get(ib as usize))
+            else {
+                continue;
+            };
+            let entry = faces_of
+                .entry(position_key(va.pos, vb.pos))
+                .or_insert((0, [[0.0; 3]; 2]));
+            if let Some(slot) = entry.1.get_mut(usize::from(entry.0)) {
+                *slot = normal.to_array();
+            }
+            entry.0 = entry.0.saturating_add(1);
+        }
+    }
+    faces_of
+        .into_iter()
+        .map(|(key, (count, normals))| (key, if count == 2 { normals } else { [[0.0; 3]; 2] }))
+        .collect()
 }
 
 fn build_object(
@@ -998,11 +1112,11 @@ pub fn build_component_overlays(
     };
     let mesh = mesh_to_draw(pose, asset);
     let selected = rgb_f32(
-        asset
-            .effective_selection_overlay_color()
+        project
+            .selection_color_of(asset)
             .unwrap_or(style.selection_rgb),
     );
-    let face_color = [selected[0], selected[1], selected[2], 0.32];
+    let face_color = [selected[0], selected[1], selected[2], FACE_SELECTED_ALPHA];
     let edge_color = [selected[0], selected[1], selected[2], 1.0];
     let thickness = style.thickness;
     let segment = |a: u32, b: u32| {
@@ -1035,24 +1149,26 @@ pub fn build_component_overlays(
                         a,
                         b,
                         color: edge_color,
-                        width_px: thickness.max(2.5),
+                        width_px: thickness.clamp(1.5, 3.0),
                     });
                 }
             }
         }
         SelectionDomain::Vertex => {
             for vertex in &mesh.verts {
+                // A espessura de seleção (preferência) engrossa um pouco os pontos.
+                let grow = (thickness - 2.0).max(0.0) * 0.5;
                 overlays.points.push(if vertex.selected {
                     OverlayPoint {
                         position: vertex.pos,
                         color: edge_color,
-                        radius_px: (thickness * 2.0).clamp(5.0, 7.0),
+                        radius_px: VERTEX_SELECTED_RADIUS + grow,
                     }
                 } else {
                     OverlayPoint {
                         position: vertex.pos,
                         color: VERTEX_GUIDE,
-                        radius_px: (thickness * 1.5).clamp(3.5, 5.5),
+                        radius_px: VERTEX_RADIUS + grow,
                     }
                 });
             }
@@ -1065,6 +1181,24 @@ pub fn build_component_overlays(
             for (index, face) in mesh.faces.iter().enumerate() {
                 if face.selected {
                     face_fill(&mut overlays.faces, &mesh, index, face_color);
+                    // Contorno fino na cor de seleção: a forma da face lê sem
+                    // precisar de tinta forte.
+                    let count = face.verts.len();
+                    for corner in 0..count {
+                        let (Some(&a), Some(&b)) =
+                            (face.verts.get(corner), face.verts.get((corner + 1) % count))
+                        else {
+                            continue;
+                        };
+                        if let Some((a, b)) = segment(a, b) {
+                            overlays.lines.push(OverlayLine {
+                                a,
+                                b,
+                                color: edge_color,
+                                width_px: thickness.clamp(1.0, 2.0),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1077,7 +1211,7 @@ pub fn build_component_overlays(
                 overlays.points.push(OverlayPoint {
                     position: vertex.pos,
                     color: HOVER_LINE,
-                    radius_px: (thickness * 2.5).clamp(6.5, 8.5),
+                    radius_px: VERTEX_HOVER_RADIUS + (thickness - 2.0).max(0.0) * 0.5,
                 });
             }
         }
@@ -1087,7 +1221,7 @@ pub fn build_component_overlays(
                     a,
                     b,
                     color: HOVER_LINE,
-                    width_px: thickness * 1.35,
+                    width_px: thickness.clamp(1.5, 2.5),
                 });
             }
         }
@@ -1201,6 +1335,85 @@ mod tests {
         settings.edge_mode = EdgeMode::Overlay;
         settings.show_wireframe_overlay = false;
         assert!(build_edges(&mesh, &settings).is_empty());
+    }
+
+    #[test]
+    fn edge_normals_come_from_the_two_neighbour_faces() {
+        let mesh = two_quads();
+        let key = position_key([0.0, -1.0, 0.0], [0.0, 1.0, 0.0]);
+        let adjacency = edge_face_normals(&mesh);
+        let normals = adjacency.get(&key).copied().expect("aresta do meio");
+        assert_eq!(normals[0], [0.0, 0.0, 1.0]);
+        assert_eq!(normals[1], [0.0, 0.0, 1.0]);
+        // A chave não depende da ordem dos extremos.
+        assert_eq!(position_key([0.0, 1.0, 0.0], [0.0, -1.0, 0.0]), key);
+
+        // O overlay entrega as normais à aresta que separa as duas faces.
+        let settings = ViewportRenderSettings {
+            edge_mode: EdgeMode::Topology,
+            show_wireframe_overlay: true,
+            ..ViewportRenderSettings::default()
+        };
+        let edges = build_edges(&mesh, &settings);
+        let middle = edges
+            .iter()
+            .find(|edge| position_key(edge.a, edge.b) == key)
+            .expect("aresta do meio no overlay");
+        assert_eq!(middle.normals, normals);
+        // Bordas abertas ficam sem normal: sempre desenhadas, mesmo sem Raio-X.
+        assert_eq!(
+            edges
+                .iter()
+                .filter(|edge| edge.normals == [[0.0; 3]; 2])
+                .count(),
+            6
+        );
+    }
+
+    #[test]
+    fn closed_mesh_knows_both_faces_and_non_manifold_edges_draw_always() {
+        let corners = [
+            [-1.0, -1.0, -1.0],
+            [1.0, -1.0, -1.0],
+            [1.0, 1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0],
+            [1.0, -1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+        ];
+        let mut cube = petunia_core::Mesh::default();
+        for corner in corners {
+            cube.verts
+                .push(Vertex::new(corner[0], corner[1], corner[2]));
+        }
+        for face in [
+            [0usize, 1, 2, 3],
+            [4, 5, 6, 7],
+            [0, 1, 5, 4],
+            [1, 2, 6, 5],
+            [2, 3, 7, 6],
+            [3, 0, 4, 7],
+        ] {
+            cube.faces
+                .push(Face::new(face.iter().map(|index| *index as u32).collect()));
+        }
+        let adjacency = edge_face_normals(&cube);
+        assert_eq!(adjacency.len(), 12, "cubo: 12 arestas");
+        assert!(
+            adjacency
+                .values()
+                .all(|normals| normals[0] != [0.0; 3] && normals[1] != [0.0; 3]),
+            "cubo fechado: toda aresta tem as duas faces"
+        );
+
+        // Uma terceira face na mesma aresta é não-manifold: sem normais, sempre desenhada.
+        cube.faces.push(Face::new(vec![0, 1, 2]));
+        let adjacency = edge_face_normals(&cube);
+        assert_eq!(
+            adjacency[&position_key(corners[0], corners[1])],
+            [[0.0; 3]; 2]
+        );
     }
 
     #[test]
@@ -1323,10 +1536,68 @@ mod tests {
         let id = project.assets[0].id;
         let style = ComponentStyle::default();
         let outline = resolve_outline(&project, &style, &[], Some(id));
-        assert_eq!(outline.active, None);
+        assert!(outline.entries.is_empty());
         let outline = resolve_outline(&project, &style, &[id], Some(id));
-        assert_eq!(outline.active, Some(id));
-        assert!(outline.color[0] < outline.active_color[0]);
+        assert_eq!(outline.entries.len(), 1);
+        assert_eq!(outline.entries[0].object_id, id);
+    }
+
+    #[test]
+    fn outline_uses_each_parts_own_color_and_the_active_one_last() {
+        let mut project = Project::new();
+        let first = project.assets[0].id;
+        project.add("Segundo", petunia_core::Mesh::cube(1.0));
+        let second = project.assets[1].id;
+        project.assets[0].selection_overlay_color = Some([255, 0, 0]);
+        project.assets[1].selection_overlay_color = Some([0, 0, 255]);
+        let style = ComponentStyle::default();
+        let outline = resolve_outline(&project, &style, &[first, second], Some(first));
+        assert_eq!(outline.entries.len(), 2);
+        assert_eq!(outline.entries[0].object_id, second);
+        assert!(outline.entries[0].color[2] > outline.entries[0].color[0]);
+        assert_eq!(outline.entries[1].object_id, first);
+        assert!(outline.entries[1].color[0] > outline.entries[1].color[2]);
+    }
+
+    #[test]
+    fn outline_uses_the_group_color_unless_the_object_has_its_own() {
+        let mut project = Project::new();
+        let first = project.assets[0].id;
+        project.add("Segundo", petunia_core::Mesh::cube(1.0));
+        let second = project.assets[1].id;
+        project.add_collection("Rodas");
+        for asset in &mut project.assets {
+            asset.collection = Some("Rodas".into());
+        }
+        project.set_collection_color("Rodas", Some([0, 255, 0]), false);
+        project.assets[0].selection_overlay_color = Some([255, 0, 0]);
+        let style = ComponentStyle::default();
+        let green_dominant = |color: [f32; 4]| color[1] > color[0] && color[1] > color[2];
+        let red_dominant = |color: [f32; 4]| color[0] > color[1] && color[0] > color[2];
+        let outline = resolve_outline(&project, &style, &[first, second], Some(first));
+        let color_of = |id| {
+            outline
+                .entries
+                .iter()
+                .find(|entry| entry.object_id == id)
+                .map(|entry| entry.color)
+                .expect("entrada do objeto")
+        };
+        assert!(
+            red_dominant(color_of(first)),
+            "a cor própria vence por padrão"
+        );
+        assert!(green_dominant(color_of(second)), "o outro herda a do grupo");
+
+        // Forçar: o grupo vence a cor própria.
+        project.set_collection_color("Rodas", Some([0, 255, 0]), true);
+        let forced = resolve_outline(&project, &style, &[first, second], Some(first));
+        assert!(
+            forced
+                .entries
+                .iter()
+                .all(|entry| green_dominant(entry.color))
+        );
     }
 
     #[test]

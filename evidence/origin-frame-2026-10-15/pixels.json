@@ -1,0 +1,11 @@
+{
+  "backend": "Software3dViewport",
+  "boundary": "UiIntent::SetOriginCursor -> CommandDispatcher",
+  "moved_changed_pixels": 78629,
+  "native_qt": "not run",
+  "rebased_changed_pixels": 0,
+  "size": [
+    800,
+    600
+  ]
+}

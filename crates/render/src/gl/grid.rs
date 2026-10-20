@@ -19,7 +19,7 @@ pub(super) fn grid_data(settings: &ViewportRenderSettings) -> Vec<f32> {
     };
     if settings.show_overlays && settings.show_grid {
         let grid = &settings.grid;
-        for (a, b, color) in scene::grid_lines_custom(
+        for (a, b, color) in scene::grid_plane_lines(
             grid.size,
             grid.spacing,
             grid.opacity,
@@ -29,9 +29,10 @@ pub(super) fn grid_data(settings: &ViewportRenderSettings) -> Vec<f32> {
             push(a, b, color);
         }
     }
+    // Eixos depois do plano, com depth test (ver `draw_grid`): não atravessam
+    // a frente dos objetos. Cada eixo liga/desliga sozinho; o Y nasce oculto.
     if settings.show_overlays && settings.show_axes {
-        let extent = settings.grid.size.max(10.0);
-        for (a, b, color) in scene::world_axes_lines(extent) {
+        for (a, b, color) in scene::grid_axis_lines(settings.grid.size, settings.axes_visible) {
             push(a, b, color);
         }
     }
@@ -87,8 +88,33 @@ mod tests {
         settings.show_overlays = true;
         settings.show_grid = false;
         let axes = grid_data(&settings).len();
-        assert_eq!(axes, 3 * 12, "três eixos");
+        assert_eq!(axes, 2 * 12, "X e Z; o Y nasce oculto");
+        settings.axes_visible = [true, true, true];
+        assert_eq!(
+            grid_data(&settings).len(),
+            3 * 12,
+            "três eixos quando pedidos"
+        );
+        settings.axes_visible = [false, false, false];
+        assert!(grid_data(&settings).is_empty(), "nenhum eixo pedido");
         settings.show_grid = true;
-        assert!(grid_data(&settings).len() > axes);
+        assert!(!grid_data(&settings).is_empty());
+    }
+
+    #[test]
+    fn hostile_spacing_never_explodes_the_line_count() {
+        let settings = ViewportRenderSettings {
+            grid: crate::frame::RenderGrid {
+                size: 1000.0,
+                spacing: 1e-9,
+                opacity: f32::NAN,
+                show_isometric_guide: false,
+                isometric_angle_deg: 30.0,
+            },
+            ..ViewportRenderSettings::default()
+        };
+        let floats = grid_data(&settings).len();
+        // 2 linhas por passo, (2*2000+1) passos, 12 floats por linha, mais os eixos.
+        assert!(floats <= (2 * 4001 + 3) * 12, "linhas demais: {floats}");
     }
 }

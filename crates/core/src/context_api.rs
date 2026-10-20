@@ -45,6 +45,25 @@ impl AppState {
     }
 
     #[inline]
+    pub fn animate_solve_ik(
+        &mut self,
+        chain_id: Uuid,
+        target_world: [f32; 3],
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_solve_ik(chain_id, target_world))
+    }
+
+    #[inline]
+    pub fn animate_cancel_ik(&mut self) {
+        self.in_context(|ctx| ctx.animate_cancel_ik())
+    }
+
+    #[inline]
+    pub fn animate_commit_ik(&mut self) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_commit_ik())
+    }
+
+    #[inline]
     pub fn animate_set_bone_transform(
         &mut self,
         bone_id: u32,
@@ -357,6 +376,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn query_uv_diagnostics(&self) -> UvDiagnosticsDto {
+        self.view().query_uv_diagnostics()
+    }
+
+    #[inline]
     pub fn set_active_asset_by_id(&mut self, id: Uuid) -> bool {
         self.in_context(|ctx| ctx.set_active_asset_by_id(id))
     }
@@ -402,7 +426,17 @@ impl AppState {
         hint: Option<&RegionPlane>,
         edit: &ShapeEdit,
     ) -> Result<ShapeEditReport, ShapeEditError> {
-        self.in_context(|ctx| ctx.apply_shape_edit(hint, edit))
+        self.in_context(|ctx| ctx.apply_shape_edit(hint, None, edit))
+    }
+
+    #[inline]
+    pub fn apply_shape_edit_with_operands(
+        &mut self,
+        hint: Option<&RegionPlane>,
+        operands: Option<&[uuid::Uuid]>,
+        edit: &ShapeEdit,
+    ) -> Result<ShapeEditReport, ShapeEditError> {
+        self.in_context(|ctx| ctx.apply_shape_edit(hint, operands, edit))
     }
 
     #[inline]
@@ -465,6 +499,11 @@ impl AppState {
     #[inline]
     pub fn active_is_parametric(&self) -> bool {
         self.view().active_is_parametric()
+    }
+
+    #[inline]
+    pub fn active_is_composition(&self) -> bool {
+        self.view().active_is_composition()
     }
 
     #[inline]
@@ -623,6 +662,27 @@ impl AppState {
     }
 
     #[inline]
+    pub fn uv_press(&mut self, point: glam::Vec2, radius: f32, extend: bool) -> bool {
+        self.in_context(|ctx| ctx.uv_press(point, radius, extend))
+    }
+
+    #[inline]
+    pub fn uv_box_select(
+        &mut self,
+        min: glam::Vec2,
+        max: glam::Vec2,
+        extend: bool,
+        subtract: bool,
+    ) -> bool {
+        self.in_context(|ctx| ctx.uv_box_select(min, max, extend, subtract))
+    }
+
+    #[inline]
+    pub fn uv_select_faces(&mut self, faces: &[usize], extend: bool) -> bool {
+        self.in_context(|ctx| ctx.uv_select_faces(faces, extend))
+    }
+
+    #[inline]
     pub fn set_uv_sync(&mut self, enabled: bool) {
         self.in_context(|ctx| ctx.set_uv_sync(enabled))
     }
@@ -658,6 +718,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn calculate_transform_frame(&self, orientation: TransformOrientation) -> TransformFrame {
+        self.view().calculate_transform_frame(orientation)
+    }
+
+    #[inline]
     pub fn animate_selected_bone_pivot(&self) -> Option<glam::Vec3> {
         self.view().animate_selected_bone_pivot()
     }
@@ -680,6 +745,16 @@ impl AppState {
     #[inline]
     pub fn set_origin_selection(&mut self) -> Result<(), &'static str> {
         self.in_context(|ctx| ctx.set_origin_selection())
+    }
+
+    #[inline]
+    pub fn set_origin_world(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_world())
+    }
+
+    #[inline]
+    pub fn set_origin_point(&mut self, point: glam::Vec3) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_point(point))
     }
 
     #[inline]
@@ -762,16 +837,102 @@ impl AppState {
     }
 
     #[inline]
-    pub fn apply_boolean(
+    pub fn apply_solid_shape_builder(
         &mut self,
-        op: petunia_mesh::boolean::BooleanOp,
-    ) -> Result<usize, petunia_mesh::boolean::BooleanError> {
-        self.in_context(|ctx| ctx.apply_boolean(op))
+        explicit_operand: Option<uuid::Uuid>,
+        op: crate::solid_commands::SolidOperation,
+    ) -> Result<crate::solid_commands::SolidShapeBuilderReport, crate::command::CommandError> {
+        self.in_context(|ctx| ctx.apply_solid_shape_builder(explicit_operand, op))
     }
 
     #[inline]
-    pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
-        self.in_context(|ctx| ctx.join_active_with_operand())
+    pub fn create_solid_composition(
+        &mut self,
+        base_id: Option<uuid::Uuid>,
+        operands: &[uuid::Uuid],
+        op: crate::solid_commands::SolidOperation,
+        budget: Option<petunia_mesh::ShapeBuilderBudget>,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.create_solid_composition(base_id, operands, op, budget))
+    }
+
+    #[inline]
+    pub fn bake_solid_composition(
+        &mut self,
+        target: Option<uuid::Uuid>,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.bake_solid_composition(target))
+    }
+
+    #[inline]
+    pub fn toggle_solid_composition_step(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        step_id: uuid::Uuid,
+        enabled: bool,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.toggle_solid_composition_step(target, step_id, enabled))
+    }
+
+    #[inline]
+    pub fn reorder_solid_composition_steps(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        from: usize,
+        to: usize,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.reorder_solid_composition_steps(target, from, to))
+    }
+
+    #[inline]
+    pub fn align_workplane_to_face(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        face_index: usize,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.align_workplane_to_face(target, face_index))
+    }
+
+    #[inline]
+    pub fn align_workplane_to_selection(&mut self) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.align_workplane_to_selection())
+    }
+
+    #[inline]
+    pub fn imprint_profile_on_surface(
+        &mut self,
+        profile_id: uuid::Uuid,
+        target: Option<uuid::Uuid>,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.imprint_profile_on_surface(profile_id, target))
+    }
+
+    #[inline]
+    pub fn contextual_push_pull(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        distance: f32,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.contextual_push_pull(target, distance))
+    }
+
+    /// Outro objeto selecionado, distinto do ativo: o operando implícito das
+    /// operações de dois objetos (Join, Shape Builder sólido).
+    #[inline]
+    pub fn second_selected_asset(&self) -> Option<uuid::Uuid> {
+        let view = self.view();
+        let active = view.document.active().map(|asset| asset.id);
+        view.editor
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .find(|id| Some(*id) != active && view.document.assets.iter().any(|a| a.id == *id))
+    }
+
+    #[inline]
+    pub fn join_selected_into_active(&mut self) -> Result<usize, &'static str> {
+        self.in_context(|ctx| ctx.join_selected_into_active())
     }
 
     #[inline]
@@ -809,6 +970,17 @@ impl AppState {
     }
 
     #[inline]
+    pub fn toggle_paint_isolate_ghost(&mut self) {
+        self.in_context(|ctx| ctx.toggle_paint_isolate_ghost())
+    }
+
+    /// Pedido de importação para o host abrir o diálogo de arquivos.
+    #[inline]
+    pub fn request_import(&mut self, filter: &str) {
+        self.in_context(|ctx| ctx.request_import(filter))
+    }
+
+    #[inline]
     pub fn refresh_isolation(&mut self) {
         self.in_context(|ctx| ctx.refresh_isolation())
     }
@@ -840,6 +1012,246 @@ impl AppState {
         value: f32,
     ) -> Result<Option<LastOperation>, ModalError> {
         self.in_context(|ctx| ctx.adjust_last_operation(last, value))
+    }
+
+    /// Inspeciona a operação em andamento e devolve o descritor canônico de feedback (H28 / MF-001–008).
+    #[inline]
+    pub fn current_modeling_feedback(&self) -> Option<crate::modeling_feedback::OperationFeedback> {
+        crate::modeling_feedback::ModelingFeedbackInspector::inspect_current_operation(self)
+    }
+
+    /// Preflight de operação Booleana (MF-003 / MF-T04).
+    #[inline]
+    pub fn preflight_boolean_feedback(
+        &self,
+        op_a: uuid::Uuid,
+        op_b: uuid::Uuid,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_boolean(self, op_a, op_b)
+    }
+
+    /// Preflight de simetria / Mirror (MF-004 / MF-T05).
+    #[inline]
+    pub fn preflight_mirror_feedback(
+        &self,
+        asset_id: uuid::Uuid,
+        normal: [f32; 3],
+        offset: f32,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_mirror(
+            self, asset_id, normal, offset,
+        )
+    }
+
+    /// Preflight de pincel de escultura / deformação (MF-005 / MF-T06).
+    #[inline]
+    pub fn preflight_sculpt_feedback(
+        &self,
+        radius: f32,
+        strength: f32,
+        hit: [f32; 3],
+        normal: [f32; 3],
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_sculpt(
+            radius, strength, hit, normal,
+        )
+    }
+
+    /// Preflight de remesh sobre malha com skin bind (MF-007 / MF-T07).
+    #[inline]
+    pub fn preflight_remesh_skin_feedback(
+        &self,
+        asset_id: uuid::Uuid,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_remesh_skin(self, asset_id)
+    }
+
+    /// Preflight de seleção mista ou parcialmente incompatível (MF-007 / MF-T08).
+    #[inline]
+    pub fn preflight_partial_selection_feedback(
+        &self,
+        requested_domain: &str,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_partial_selection(
+            self,
+            requested_domain,
+        )
+    }
+
+    #[inline]
+    pub fn query_volume_frame(
+        &self,
+        asset_id: uuid::Uuid,
+        frame: crate::spatial_query::SpatialFrameKind,
+        rep: crate::spatial_query::GeometryRepresentation,
+    ) -> Option<crate::spatial_query::VolumeFrame> {
+        self.view().query_volume_frame(asset_id, frame, rep)
+    }
+
+    #[inline]
+    pub fn query_spatial(
+        &self,
+        query: crate::spatial_query::SpatialQueryKind,
+    ) -> Result<crate::spatial_query::SpatialQueryResult, CommandError> {
+        self.view().query_spatial(query)
+    }
+
+    #[inline]
+    pub fn query_section(
+        &self,
+        asset_id: uuid::Uuid,
+        plane: &crate::section_analysis::SectionPlane,
+    ) -> Result<crate::section_analysis::SectionResult, CommandError> {
+        self.view().query_section(asset_id, plane)
+    }
+
+    #[inline]
+    pub fn probe_thickness(
+        &self,
+        asset_id: uuid::Uuid,
+        query: &crate::section_analysis::ThicknessProbeQuery,
+    ) -> Result<crate::section_analysis::ThicknessProbeResult, CommandError> {
+        self.view().probe_thickness(asset_id, query)
+    }
+
+    pub fn scale_to_dimension(
+        &mut self,
+        asset_id: uuid::Uuid,
+        axis: usize,
+        target_dimension: f32,
+        uniform: bool,
+        frame: crate::spatial_query::SpatialFrameKind,
+    ) -> Result<(), CommandError> {
+        let cmd = crate::spatial_query::ScaleToDimensionCmd::new(
+            asset_id,
+            axis,
+            target_dimension,
+            uniform,
+            frame,
+        );
+        crate::command::CommandDispatcher::dispatch(self, &cmd)
+    }
+
+    #[inline]
+    pub fn open_companion_view(&mut self) {
+        self.session.companion_view.enabled = true;
+    }
+
+    #[inline]
+    pub fn close_companion_view(&mut self) {
+        self.session.companion_view.enabled = false;
+    }
+
+    #[inline]
+    pub fn toggle_companion_view(&mut self) {
+        self.session.companion_view.enabled = !self.session.companion_view.enabled;
+    }
+
+    #[inline]
+    pub fn is_companion_view_open(&self) -> bool {
+        self.session.companion_view.enabled
+    }
+
+    #[inline]
+    pub fn companion_view_state(&self) -> &crate::spatial_query::CompanionViewState {
+        &self.session.companion_view
+    }
+
+    #[inline]
+    pub fn set_show_xray(&mut self, enabled: bool) {
+        self.session.show_xray = enabled;
+        // Invariante VSP-004: X-Ray visual nunca altera a política de seleção!
+    }
+
+    #[inline]
+    pub fn set_select_through(&mut self, enabled: bool) {
+        self.session.select_policy = if enabled {
+            crate::SelectPolicy::Through
+        } else {
+            crate::SelectPolicy::VisibleOnly
+        };
+        // Invariante VSP-004: a política de seleção nunca altera show_xray!
+    }
+
+    /// Orientação dos eixos do gizmo e das restrições de G/R/S (B15).
+    #[inline]
+    pub fn set_transform_orientation(&mut self, orientation: crate::TransformOrientation) {
+        self.session.transform_orientation = orientation;
+    }
+
+    /// Escolhe a política de seleção (B10): Automática, Só visível ou Através.
+    #[inline]
+    pub fn set_select_policy(&mut self, policy: crate::SelectPolicy) {
+        self.session.select_policy = policy;
+    }
+
+    #[inline]
+    pub fn active_section_plane(&self) -> Option<&crate::section_analysis::SectionPlane> {
+        self.session.active_section.as_ref()
+    }
+
+    #[inline]
+    pub fn set_active_section_plane(&mut self, plane: crate::section_analysis::SectionPlane) {
+        self.session.active_section = Some(plane);
+    }
+
+    #[inline]
+    pub fn clear_active_section_plane(&mut self) {
+        self.session.active_section = None;
+    }
+
+    #[inline]
+    pub fn visual_assistance_profile(&self) -> crate::visual_assistance::VisualAssistanceProfile {
+        self.session.visual_assistance
+    }
+
+    #[inline]
+    pub fn set_visual_assistance_profile(
+        &mut self,
+        profile: crate::visual_assistance::VisualAssistanceProfile,
+    ) {
+        self.session.visual_assistance = profile;
+        // Invariante VSP-001: nunca altera keymap, ferramentas ou documento!
+    }
+
+    #[inline]
+    pub fn clay_mode(&self) -> crate::visual_assistance::ClayMode {
+        self.session.clay_settings.mode
+    }
+
+    #[inline]
+    pub fn set_clay_mode(&mut self, mode: crate::visual_assistance::ClayMode) {
+        self.session.clay_settings.mode = mode;
+        // Invariante VSP-002: modo de trabalho desacoplado do documento!
+    }
+
+    #[inline]
+    pub fn clay_lighting(&self) -> crate::visual_assistance::LightingAnchor {
+        self.session.clay_settings.lighting
+    }
+
+    #[inline]
+    pub fn set_clay_lighting(&mut self, anchor: crate::visual_assistance::LightingAnchor) {
+        self.session.clay_settings.lighting = anchor;
+    }
+
+    #[inline]
+    pub fn set_companion_view_trigger(
+        &mut self,
+        trigger: crate::visual_assistance::CompanionViewTrigger,
+    ) {
+        self.session.companion_view.trigger_mode = trigger;
+    }
+
+    #[inline]
+    pub fn gizmo_accessibility_feedback(
+        &self,
+    ) -> crate::visual_assistance::GizmoAccessibilityFeedback {
+        crate::visual_assistance::evaluate_gizmo_accessibility(
+            self.modal.as_ref(),
+            self.session.transform_orientation,
+            self.session.snap_enabled,
+        )
     }
 }
 
@@ -961,6 +1373,60 @@ impl CommandContext<'_> {
     }
 
     #[inline]
+    pub fn query_volume_frame(
+        &self,
+        asset_id: uuid::Uuid,
+        frame: crate::spatial_query::SpatialFrameKind,
+        rep: crate::spatial_query::GeometryRepresentation,
+    ) -> Option<crate::spatial_query::VolumeFrame> {
+        self.view().query_volume_frame(asset_id, frame, rep)
+    }
+
+    #[inline]
+    pub fn query_spatial(
+        &self,
+        query: crate::spatial_query::SpatialQueryKind,
+    ) -> Result<crate::spatial_query::SpatialQueryResult, CommandError> {
+        self.view().query_spatial(query)
+    }
+
+    #[inline]
+    pub fn query_section(
+        &self,
+        asset_id: uuid::Uuid,
+        plane: &crate::section_analysis::SectionPlane,
+    ) -> Result<crate::section_analysis::SectionResult, CommandError> {
+        self.view().query_section(asset_id, plane)
+    }
+
+    #[inline]
+    pub fn probe_thickness(
+        &self,
+        asset_id: uuid::Uuid,
+        query: &crate::section_analysis::ThicknessProbeQuery,
+    ) -> Result<crate::section_analysis::ThicknessProbeResult, CommandError> {
+        self.view().probe_thickness(asset_id, query)
+    }
+
+    pub fn scale_to_dimension(
+        &mut self,
+        asset_id: uuid::Uuid,
+        axis: usize,
+        target_dimension: f32,
+        uniform: bool,
+        frame: crate::spatial_query::SpatialFrameKind,
+    ) -> Result<(), CommandError> {
+        let cmd = crate::spatial_query::ScaleToDimensionCmd::new(
+            asset_id,
+            axis,
+            target_dimension,
+            uniform,
+            frame,
+        );
+        crate::command::CommandDispatcher::dispatch_context(self, &cmd)
+    }
+
+    #[inline]
     pub fn active_is_parametric(&self) -> bool {
         self.view().active_is_parametric()
     }
@@ -998,6 +1464,11 @@ impl CommandContext<'_> {
     }
 
     #[inline]
+    pub fn calculate_transform_frame(&self, orientation: TransformOrientation) -> TransformFrame {
+        self.view().calculate_transform_frame(orientation)
+    }
+
+    #[inline]
     pub fn animate_selected_bone_pivot(&self) -> Option<glam::Vec3> {
         self.view().animate_selected_bone_pivot()
     }
@@ -1005,6 +1476,11 @@ impl CommandContext<'_> {
     #[inline]
     pub fn current_tool_feedback(&self) -> Option<crate::modal_feedback::ToolFeedback> {
         self.view().current_tool_feedback()
+    }
+
+    #[inline]
+    pub fn current_modeling_feedback(&self) -> Option<crate::modeling_feedback::OperationFeedback> {
+        self.view().current_modeling_feedback()
     }
 
     #[inline]
@@ -1035,5 +1511,104 @@ impl CommandContext<'_> {
     #[inline]
     pub fn last_operation_is_current(&self, last: &LastOperation) -> bool {
         self.view().last_operation_is_current(last)
+    }
+
+    #[inline]
+    pub fn open_companion_view(&mut self) {
+        self.editor.companion_view.enabled = true;
+    }
+
+    #[inline]
+    pub fn close_companion_view(&mut self) {
+        self.editor.companion_view.enabled = false;
+    }
+
+    #[inline]
+    pub fn toggle_companion_view(&mut self) {
+        self.editor.companion_view.enabled = !self.editor.companion_view.enabled;
+    }
+
+    #[inline]
+    pub fn is_companion_view_open(&self) -> bool {
+        self.editor.companion_view.enabled
+    }
+
+    #[inline]
+    pub fn companion_view_state(&self) -> &crate::spatial_query::CompanionViewState {
+        &self.editor.companion_view
+    }
+
+    #[inline]
+    pub fn set_show_xray(&mut self, enabled: bool) {
+        self.editor.show_xray = enabled;
+        // Invariante VSP-004: X-Ray visual nunca altera a política de seleção!
+    }
+
+    #[inline]
+    pub fn set_select_through(&mut self, enabled: bool) {
+        self.editor.select_policy = if enabled {
+            crate::SelectPolicy::Through
+        } else {
+            crate::SelectPolicy::VisibleOnly
+        };
+        // Invariante VSP-004: a política de seleção nunca altera show_xray!
+    }
+
+    #[inline]
+    pub fn active_section_plane(&self) -> Option<&crate::section_analysis::SectionPlane> {
+        self.editor.active_section.as_ref()
+    }
+
+    #[inline]
+    pub fn set_active_section_plane(&mut self, plane: crate::section_analysis::SectionPlane) {
+        self.editor.active_section = Some(plane);
+    }
+
+    #[inline]
+    pub fn clear_active_section_plane(&mut self) {
+        self.editor.active_section = None;
+    }
+
+    #[inline]
+    pub fn visual_assistance_profile(&self) -> crate::visual_assistance::VisualAssistanceProfile {
+        self.editor.visual_assistance
+    }
+
+    #[inline]
+    pub fn set_visual_assistance_profile(
+        &mut self,
+        profile: crate::visual_assistance::VisualAssistanceProfile,
+    ) {
+        self.editor.visual_assistance = profile;
+        // Invariante VSP-001: nunca altera keymap, ferramentas ou documento!
+    }
+
+    #[inline]
+    pub fn clay_mode(&self) -> crate::visual_assistance::ClayMode {
+        self.editor.clay_settings.mode
+    }
+
+    #[inline]
+    pub fn set_clay_mode(&mut self, mode: crate::visual_assistance::ClayMode) {
+        self.editor.clay_settings.mode = mode;
+        // Invariante VSP-002: modo de trabalho desacoplado do documento!
+    }
+
+    #[inline]
+    pub fn clay_lighting(&self) -> crate::visual_assistance::LightingAnchor {
+        self.editor.clay_settings.lighting
+    }
+
+    #[inline]
+    pub fn set_clay_lighting(&mut self, anchor: crate::visual_assistance::LightingAnchor) {
+        self.editor.clay_settings.lighting = anchor;
+    }
+
+    #[inline]
+    pub fn set_companion_view_trigger(
+        &mut self,
+        trigger: crate::visual_assistance::CompanionViewTrigger,
+    ) {
+        self.editor.companion_view.trigger_mode = trigger;
     }
 }

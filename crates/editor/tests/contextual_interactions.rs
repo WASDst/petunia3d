@@ -1,0 +1,1240 @@
+use glam::Vec3;
+use petunia_core::{AppState, NavigationAnchor, PivotPoint};
+use petunia_editor::{
+    GrammarTool, ModelingMode, PlaceholderViewport, SlintUiBridge, UiIntent, ViewportGesture,
+};
+
+fn bridge() -> SlintUiBridge<PlaceholderViewport> {
+    let mut b = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    b.resize_viewport(800, 600);
+    b
+}
+
+#[test]
+fn presets_share_tools_and_restore_the_free_camera_without_document_change() {
+    let mut b = bridge();
+    b.apply(UiIntent::SetActiveTool("bevel".into()));
+    let free = b.state.session.camera.clone();
+    let assets = serde_json::to_value(&b.state.project.project.assets).unwrap();
+    let selection = b.state.session.selection.clone();
+    b.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert_eq!(b.state.active_tool, "bevel");
+    assert_eq!(b.state.session.camera.proj, petunia_core::Projection::Ortho);
+    b.apply(UiIntent::SetActiveTool("shape_builder".into()));
+    b.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    assert_eq!(b.state.active_tool, "shape_builder");
+    assert_eq!(b.grammar_tool(), Some(GrammarTool::ShapeBuilder));
+    assert_eq!(b.state.session.camera, free);
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        assets
+    );
+    assert_eq!(b.state.session.selection, selection);
+}
+
+#[test]
+fn navigation_anchor_is_explicit_and_switching_it_does_not_move_camera() {
+    let mut b = bridge();
+    b.state.session.cursor_3d = [3.0, 2.0, 1.0];
+    let before = b.state.session.camera.clone();
+    b.apply(UiIntent::SetNavigationAnchor(NavigationAnchor::Cursor3D));
+    assert_eq!(b.state.session.camera, before);
+    let anchor = Vec3::from(b.state.session.cursor_3d);
+    let old_distance = (before.eye() - anchor).length();
+    b.orbit_viewport(20.0, 10.0);
+    assert!(((b.state.session.camera.eye() - anchor).length() - old_distance).abs() < 1e-4);
+    let cursor = b.state.session.cursor_3d;
+    b.apply_viewport_gesture(ViewportGesture::Pan { dx: 12.0, dy: 8.0 });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+    let screen_before = b.state.session.camera.project_ndc(anchor);
+    b.apply_viewport_gesture(ViewportGesture::Zoom { delta: 70.0 });
+    let screen_after = b.state.session.camera.project_ndc(anchor);
+    assert!((screen_before.truncate() - screen_after.truncate()).length() < 1e-4);
+}
+
+#[test]
+fn navigation_does_not_consult_transform_pivot_or_active_cursor_tool() {
+    let mut a = bridge();
+    let mut b = bridge();
+    b.state.session.pivot_point = PivotPoint::Cursor3D;
+    b.state.session.cursor_3d = [50.0, 60.0, 70.0];
+    b.state.active_tool = "cursor_3d".into();
+    a.orbit_viewport(25.0, 7.0);
+    b.orbit_viewport(25.0, 7.0);
+    assert_eq!(a.state.session.camera, b.state.session.camera);
+}
+
+#[test]
+fn xray_wireframe_and_select_through_have_independent_state() {
+    let mut b = bridge();
+    b.state.session.show_xray = true;
+    b.state.session.shading = petunia_core::Shading::Wireframe;
+    assert!(b.state.session.select_policy != petunia_core::SelectPolicy::Through);
+    b.apply(UiIntent::SetSelectThrough(true));
+    b.state.session.show_xray = false;
+    assert!(b.state.session.select_policy == petunia_core::SelectPolicy::Through);
+    assert!(
+        b.state.session.viewport_session().select_policy == petunia_core::SelectPolicy::Through
+    );
+}
+
+/// B10: a política Automática segue o que se vê — Sólido respeita a oclusão,
+/// Raio-X e Wireframe selecionam através — sem que o Raio-X mude a política.
+#[test]
+fn auto_selection_policy_follows_what_is_visible() {
+    let mut b = bridge();
+    assert_eq!(
+        b.state.session.select_policy,
+        petunia_core::SelectPolicy::Auto
+    );
+    assert!(!b.state.session.selects_through(), "Sólido: só o visível");
+    b.state.session.show_xray = true;
+    assert!(b.state.session.selects_through(), "Raio-X: através");
+    assert_eq!(
+        b.state.session.select_policy,
+        petunia_core::SelectPolicy::Auto
+    );
+    b.state.session.show_xray = false;
+    b.state.session.shading = petunia_core::Shading::Wireframe;
+    assert!(b.state.session.selects_through(), "Wireframe: através");
+    b.state
+        .set_select_policy(petunia_core::SelectPolicy::VisibleOnly);
+    assert!(
+        !b.state.session.selects_through(),
+        "Só visível vence o Wireframe"
+    );
+}
+
+#[test]
+fn removed_select_shortcut_has_no_physical_w_fallback() {
+    let mut b = bridge();
+    b.state.ui.keybinds.remove_binding("model.tool_select");
+    b.state.active_tool = "rotate".into();
+    assert!(!b.route_shortcut("W", false, false, false));
+    assert_eq!(b.state.active_tool, "rotate");
+}
+
+#[test]
+fn uv_shortcuts_open_a_domain_preview_and_enter_escape_use_its_transaction() {
+    let mut b = bridge();
+    b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Uv));
+    let mesh = b.state.project.active_mesh().unwrap().clone();
+    b.state.session.uv_selection.sync = false;
+    b.state.session.uv_selection.set_faces(&mesh, [0]);
+    let source = b.state.project.active_mesh().unwrap().faces[0].uv.clone();
+    assert!(b.route_shortcut("G", false, false, false));
+    assert!(b.state.modal.is_none());
+    assert!(b.state.session.tools.uv_transform.is_some());
+    b.apply(UiIntent::UpdateUvTransform(
+        petunia_mesh::UvTransform::Translate(glam::Vec2::splat(0.2)),
+    ));
+    assert_eq!(b.state.project.active_mesh().unwrap().faces[0].uv, source);
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+    assert_eq!(b.state.project.active_mesh().unwrap().faces[0].uv, source);
+    assert!(b.route_shortcut("G", false, false, false));
+    b.apply(UiIntent::UpdateUvTransform(
+        petunia_mesh::UvTransform::Translate(glam::Vec2::splat(0.2)),
+    ));
+    assert!(b.route_shortcut("Enter", false, false, false));
+    assert_ne!(b.state.project.active_mesh().unwrap().faces[0].uv, source);
+}
+
+#[cfg(feature = "animation-workspace")]
+#[test]
+fn animate_keys_do_not_delete_geometry_or_switch_to_previous_tool() {
+    let mut b = bridge();
+    b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Animate));
+    let id = b
+        .state
+        .animate_add_rig(petunia_core::RigPresetKind::Humanoid)
+        .unwrap();
+    let bone = b.state.project.project.get_skeleton(id).unwrap().bones[1].id;
+    b.state.animate_select_bone(Some(bone));
+    let assets = serde_json::to_value(&b.state.project.project.assets).unwrap();
+    assert!(b.route_shortcut("I", false, false, false));
+    assert!(b.state.session.animate.active_clip.is_some());
+    assert!(b.route_shortcut("Space", false, false, false));
+    assert!(b.state.session.animate.playing);
+    assert!(b.state.session.animate.set_timeline_frame_rate(60.0));
+    assert!(b.route_shortcut("Right", false, false, false));
+    assert!((b.state.session.animate.time - 1.0 / 60.0).abs() < 1e-6);
+    b.state.animate_seek(0.0);
+    assert!(b.route_shortcut("Delete", false, false, false));
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        assets
+    );
+    b.state
+        .ui
+        .keybinds
+        .remove_binding("animate.delete_keyframe");
+    assert!(!b.route_shortcut("Delete", false, false, false));
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        assets
+    );
+}
+
+#[test]
+fn transform_center_copies_cursor_once_and_recopy_is_explicit() {
+    let mut b = bridge();
+    b.state.session.cursor_3d = [1.0, 2.0, 3.0];
+    assert!(b.state.session.copy_cursor_to_transform_center());
+    b.state.session.cursor_3d = [4.0, 5.0, 6.0];
+    assert_eq!(
+        b.state.calculate_pivot(PivotPoint::Cursor3D),
+        Vec3::new(1.0, 2.0, 3.0)
+    );
+    assert!(b.state.session.copy_cursor_to_transform_center());
+    assert_eq!(
+        b.state.calculate_pivot(PivotPoint::Cursor3D),
+        Vec3::new(4.0, 5.0, 6.0)
+    );
+    let camera = b.state.session.camera.clone();
+    assert!(!b.place_cursor_3d(f32::NAN, 0.5));
+    assert_eq!(b.state.session.camera, camera);
+    assert_eq!(b.state.session.cursor_3d, [4.0, 5.0, 6.0]);
+}
+
+#[test]
+fn effective_profiles_override_physical_fallbacks_and_removed_keys_stay_removed() {
+    let mut b = bridge();
+    b.state.ui.keybinds = petunia_config::keybinds::Keybinds::load_profile("3ds-max");
+    let shading = b.state.session.shading;
+    assert!(b.route_shortcut("Z", false, false, false));
+    assert_eq!(
+        b.state.session.shading, shading,
+        "Max Z frames, it must not toggle wireframe"
+    );
+    b.state.ui.keybinds = petunia_config::keybinds::Keybinds::load_profile("cinema-4d");
+    assert!(b.route_shortcut("D", false, false, false));
+    assert!(
+        !b.state.session.edit_pivot,
+        "Cinema D activates extrude, not pivot edit"
+    );
+    b.state.ui.keybinds = petunia_config::keybinds::Keybinds::load_profile("petunia-notebook");
+    assert!(!b.route_shortcut("1", false, false, false));
+    b.state.ui.keybinds.remove_binding("model.delete");
+    let before = serde_json::to_value(&b.state.project.project.assets).unwrap();
+    assert!(!b.route_shortcut("Delete", false, false, false));
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        before
+    );
+    b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Paint));
+    b.state.ui.keybinds.remove_binding("paint.size_decrease");
+    let size = b.state.canvas_brush;
+    assert!(!b.route_shortcut("[", false, false, false));
+    assert_eq!(b.state.canvas_brush, size);
+}
+
+#[test]
+fn contextual_picking_prioritizes_subcomponents_over_objects_when_all_filters_enabled() {
+    let mut b = bridge();
+    assert!(b.state.project.active().is_some());
+
+    b.state.session.selection.filters = petunia_core::SelectionFilters::objects_only();
+    let hit_obj = b.pick_viewport_target(0.5, 0.5);
+    assert!(matches!(hit_obj, petunia_core::HoverTarget::Object(_)));
+
+    b.state.session.selection.filters = petunia_core::SelectionFilters::all();
+    let hit_ctx = b.pick_viewport_target(0.5, 0.5);
+    assert!(matches!(
+        hit_ctx,
+        petunia_core::HoverTarget::Face(_)
+            | petunia_core::HoverTarget::Vertex(_)
+            | petunia_core::HoverTarget::Edge(_, _)
+    ));
+
+    b.state.session.selection.filters.faces = false;
+    b.state.session.selection.filters.vertices = false;
+    b.state.session.selection.filters.edges = false;
+    let hit_fallback = b.pick_viewport_target(0.5, 0.5);
+    assert!(matches!(hit_fallback, petunia_core::HoverTarget::Object(_)));
+}
+
+#[test]
+fn navigation_decoupling_pan_frame_and_history_invariants_h20() {
+    let mut b = bridge();
+    b.state.session.cursor_3d = [10.0, 20.0, 30.0];
+    let cursor = b.state.session.cursor_3d;
+
+    // Pan viewport: cursor_3d MUST NOT move
+    b.apply_viewport_gesture(ViewportGesture::Pan {
+        dx: 45.0,
+        dy: -30.0,
+    });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Zoom viewport: cursor_3d MUST NOT move
+    b.apply_viewport_gesture(ViewportGesture::Zoom { delta: 120.0 });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Orbit viewport: cursor_3d MUST NOT move
+    b.apply_viewport_gesture(ViewportGesture::Orbit { dx: 15.0, dy: 10.0 });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Navigation and camera actions MUST NOT create Undo entries or mark document dirty
+    assert!(!b.state.project.undo.can_undo());
+    assert!(!b.state.project.is_dirty());
+
+    // Switching NavigationAnchor MUST NOT create Undo entries or dirty document
+    b.apply(UiIntent::SetNavigationAnchor(NavigationAnchor::Cursor3D));
+    assert_eq!(
+        b.state.session.navigation_anchor,
+        NavigationAnchor::Cursor3D
+    );
+    assert!(!b.state.project.undo.can_undo());
+    assert!(!b.state.project.is_dirty());
+
+    // Placing cursor with invalid floats MUST be rejected safely
+    assert!(!b.place_cursor_3d(f32::NAN, 0.5));
+    assert!(!b.place_cursor_3d(0.5, f32::INFINITY));
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Freezing transform center keeps pivot isolated until explicit recopy
+    assert!(b.state.session.copy_cursor_to_transform_center());
+    b.state.session.cursor_3d = [100.0, 200.0, 300.0];
+    assert_eq!(
+        b.state.calculate_pivot(PivotPoint::Cursor3D),
+        Vec3::new(10.0, 20.0, 30.0)
+    );
+    assert!(b.state.session.copy_cursor_to_transform_center());
+    assert_eq!(
+        b.state.calculate_pivot(PivotPoint::Cursor3D),
+        Vec3::new(100.0, 200.0, 300.0)
+    );
+}
+
+#[test]
+fn draw_poly_preset_switching_and_roundtrip_invariants_h21() {
+    let mut b = bridge();
+    let initial_assets = serde_json::to_value(&b.state.project.project.assets).unwrap();
+    let initial_selection = b.state.session.selection.clone();
+    let initial_camera = b.state.session.camera.clone();
+
+    // 1. Switch to DRAW mode: sets Ortho and Draw mode without mutating geometry or selection
+    b.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert_eq!(b.modeling_mode, ModelingMode::Draw);
+    assert_eq!(b.state.session.camera.proj, petunia_core::Projection::Ortho);
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        initial_assets
+    );
+    assert_eq!(b.state.session.selection, initial_selection);
+    assert!(!b.state.project.undo.can_undo());
+
+    // 2. In DRAW mode, free orbit drag is redirected to planar pan (gesture is never dead)
+    let camera_before_orbit = b.state.session.camera.clone();
+    b.apply_viewport_gesture(ViewportGesture::Orbit { dx: 20.0, dy: 10.0 });
+    // Camera remains Ortho; orientation did not pitch/yaw freely
+    assert_eq!(b.state.session.camera.proj, petunia_core::Projection::Ortho);
+    assert_ne!(b.state.session.camera.eye(), camera_before_orbit.eye());
+
+    // 3. Return to POLY mode: restores camera without creating Undo entry
+    b.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    assert_eq!(b.modeling_mode, ModelingMode::Poly);
+    assert_eq!(b.state.session.camera.proj, initial_camera.proj);
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        initial_assets
+    );
+    assert_eq!(b.state.session.selection, initial_selection);
+    assert!(!b.state.project.undo.can_undo());
+}
+
+#[test]
+fn shape_builder_explicit_operands_and_hole_preservation_invariants_h24() {
+    let mut b = bridge();
+    let plane = petunia_core::ProfileWorkplane {
+        origin: [0.0, 0.0, 5.0],
+        right: [1.0, 0.0, 0.0],
+        up: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    };
+
+    let add_square =
+        |b: &mut SlintUiBridge<PlaceholderViewport>, x: f64, y: f64, size: f64, name: &str| {
+            let pts = [
+                [x, y, 0.0],
+                [x + size, y, 0.0],
+                [x + size, y + size, 0.0],
+                [x, y + size, 0.0],
+            ];
+            let spline = petunia_core::SplineResource::from_polyline(name, &pts, true);
+            let profile = petunia_core::ProfileResource::new(name, spline.id, plane);
+            let id = profile.id;
+            b.state.project.project.splines.push(spline);
+            b.state.project.project.profiles.push(profile);
+            id
+        };
+
+    // 1. Setup 3 squares: sq1 and sq2 overlap, sq3 is distant
+    let sq1_id = add_square(&mut b, 0.0, 0.0, 2.0, "sq1");
+    let sq2_id = add_square(&mut b, 1.0, 1.0, 2.0, "sq2");
+    let sq3_id = add_square(&mut b, 10.0, 10.0, 2.0, "sq3");
+
+    // Add a hole in sq1
+    let hole = vec![[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]];
+    if let Some(sq1) = b.state.project.get_profile_mut(sq1_id) {
+        sq1.holes.push(hole);
+    }
+
+    assert_eq!(b.state.project.project.profiles.len(), 3);
+    let initial_undo = b.state.project.undo.depth().0;
+
+    // 2. Reject invalid operands gracefully without panicking
+    let cmd_empty = petunia_core::ShapeEditCmd {
+        plane: None,
+        operands: Some(vec![]),
+        edit: petunia_core::ShapeEdit::Pathfinder(petunia_core::PathfinderOp::Unite),
+    };
+    assert!(b.state.dispatch(&cmd_empty).is_err());
+
+    let cmd_single = petunia_core::ShapeEditCmd {
+        plane: None,
+        operands: Some(vec![sq1_id]),
+        edit: petunia_core::ShapeEdit::Pathfinder(petunia_core::PathfinderOp::Unite),
+    };
+    assert!(b.state.dispatch(&cmd_single).is_err());
+
+    // 3. Dispatch Unite with explicit operands (sq1 and sq2 only)
+    let cmd = petunia_core::ShapeEditCmd::pathfinder_with_operands(
+        petunia_core::PathfinderOp::Unite,
+        vec![sq1_id, sq2_id],
+    );
+    b.state
+        .dispatch(&cmd)
+        .expect("Unite with explicit operands should succeed");
+
+    // 4. Untouched sq3 preserves ID, name and spline
+    let sq3 = b
+        .state
+        .project
+        .get_profile(sq3_id)
+        .expect("sq3 must be preserved");
+    assert_eq!(sq3.id, sq3_id);
+    assert_eq!(sq3.name, "sq3");
+
+    // 5. Resulting merged shape preserves the hole from sq1
+    assert_eq!(b.state.project.project.profiles.len(), 2);
+    let merged = b
+        .state
+        .project
+        .project
+        .profiles
+        .iter()
+        .find(|p| p.id != sq3_id)
+        .expect("merged profile must exist");
+    assert_eq!(
+        merged.holes.len(),
+        1,
+        "Hole must be preserved in merged profile"
+    );
+
+    // 6. Undo restores all 3 original profiles atomically (single undo step)
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+    b.state.undo();
+    assert_eq!(b.state.project.project.profiles.len(), 3);
+    let sq1_restored = b
+        .state
+        .project
+        .get_profile(sq1_id)
+        .expect("sq1 must be restored");
+    assert_eq!(sq1_restored.holes.len(), 1);
+}
+
+#[test]
+fn solid_shape_builder_two_operands_and_undo_invariants_h25() {
+    let mut b = bridge();
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    for f in &mut cube1.faces {
+        f.material_slot = Some(1);
+    }
+    b.state.project.assets[0].mesh = cube1.into();
+    let asset1_id = b.state.project.assets[0].id;
+
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    for f in &mut cube2.faces {
+        f.material_slot = Some(2);
+    }
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    b.state.project.assets.push(asset2);
+
+    let mut cube3 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube3.verts {
+        v.pos[0] += 10.0;
+    }
+    cube3.triangulate();
+    let asset3 = petunia_project::Asset::new("Cube3", cube3);
+    let asset3_id = asset3.id;
+    b.state.project.assets.push(asset3);
+
+    assert_eq!(b.state.project.assets.len(), 3);
+    let initial_undo = b.state.project.undo.depth().0;
+
+    // 0. Invalid operands rejection: non-existent operand or active asset as operand
+    let cmd_invalid = petunia_core::SolidShapeEditCmd::with_operand(
+        petunia_core::SolidOperation::UniteAll,
+        uuid::Uuid::new_v4(),
+    );
+    assert!(b.state.dispatch(&cmd_invalid).is_err());
+
+    let cmd_self = petunia_core::SolidShapeEditCmd::with_operand(
+        petunia_core::SolidOperation::UniteAll,
+        asset1_id,
+    );
+    assert!(b.state.dispatch(&cmd_self).is_err());
+
+    // 1. Extract Overlap: extracts shared volume into a 4th asset atomically
+    let cmd_extract = petunia_core::SolidShapeEditCmd::extract_overlap_with_operand(asset2_id);
+    b.state
+        .dispatch(&cmd_extract)
+        .expect("extract overlap should succeed");
+    assert_eq!(b.state.project.assets.len(), 4);
+    assert_eq!(b.state.project.assets[2].id, asset3_id, "Cube3 untouched");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+
+    // 2. Undo restores the 3 original objects
+    b.state.undo();
+    assert_eq!(b.state.project.assets.len(), 3);
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+
+    // 3. Remove Overlap: cuts overlap from both operands, preserving material slots
+    let cmd_remove = petunia_core::SolidShapeEditCmd::remove_overlap_with_operand(asset2_id);
+    b.state
+        .dispatch(&cmd_remove)
+        .expect("remove overlap should succeed");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+    assert!(
+        b.state.project.assets[0]
+            .mesh
+            .faces
+            .iter()
+            .any(|f| f.material_slot == Some(1))
+    );
+    assert!(
+        b.state.project.assets[1]
+            .mesh
+            .faces
+            .iter()
+            .any(|f| f.material_slot == Some(2))
+    );
+    assert_eq!(b.state.project.assets[2].id, asset3_id, "Cube3 untouched");
+
+    b.state.undo();
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+
+    // 4. Unite: merges all regions
+    let cmd_unite = petunia_core::SolidShapeEditCmd::unite_with_operand(asset2_id);
+    b.state
+        .dispatch(&cmd_unite)
+        .expect("solid unite should succeed");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+    assert_eq!(b.state.project.assets[2].id, asset3_id, "Cube3 untouched");
+
+    b.state.undo();
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+    assert_eq!(b.state.project.assets.len(), 3);
+}
+
+#[test]
+fn solid_composition_multi_solid_and_reedit_invariants_h26() {
+    let mut b = bridge();
+
+    // Setup 3 cubes:
+    // Base cube at origin
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    b.state.project.assets[0].mesh = cube1.into();
+    let _base_id = b.state.project.assets[0].id;
+
+    // Cube 2 at (1.0, 0, 0)
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    b.state.project.assets.push(asset2);
+
+    // Cube 3 at (2.0, 0, 0)
+    let mut cube3 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube3.verts {
+        v.pos[0] += 2.0;
+    }
+    cube3.triangulate();
+    let asset3 = petunia_project::Asset::new("Cube3", cube3);
+    let asset3_id = asset3.id;
+    b.state.project.assets.push(asset3);
+
+    let initial_undo = b.state.project.undo.depth().0;
+
+    // 1. Create composition with Cube2 and Cube3 into Base
+    let create_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        vec![asset2_id, asset3_id],
+        petunia_core::SolidOperation::UniteAll,
+    );
+    b.state
+        .dispatch(&create_cmd)
+        .expect("Create solid composition should succeed");
+
+    assert!(
+        b.state.project.assets[0].is_composition(),
+        "Base asset must have composition recipe"
+    );
+    assert!(
+        !b.state.project.assets[1].visible,
+        "Secondary operand 1 must be hidden"
+    );
+    assert!(
+        !b.state.project.assets[2].visible,
+        "Secondary operand 2 must be hidden"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+
+    let recipe = b.state.project.assets[0].composition.as_ref().unwrap();
+    assert_eq!(recipe.steps.len(), 2);
+    assert_eq!(recipe.status, petunia_project::CompositionStatus::Valid);
+    let step2_id = recipe.steps[1].id;
+
+    // Direct polygon editing is rejected before bake ("Sem bake silencioso")
+    let subdivide_cmd = petunia_core::command::SubdivideSelectionCmd;
+    assert_eq!(
+        b.state.dispatch(&subdivide_cmd),
+        Err(petunia_core::command::CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    // 2. Toggle step (disable operand 3)
+    let toggle_cmd = petunia_core::ToggleSolidCompositionStepCmd::new(step2_id, false);
+    b.state
+        .dispatch(&toggle_cmd)
+        .expect("Toggle step should succeed");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 2);
+    let recipe_after = b.state.project.assets[0].composition.as_ref().unwrap();
+    assert!(!recipe_after.steps[1].enabled);
+
+    // 3. Invalidation check when an operand mesh changes topology
+    let mut modified_mesh = petunia_mesh::Mesh::cube(3.0);
+    modified_mesh.triangulate();
+    b.state.project.assets[1].mesh = modified_mesh.into();
+    let mut recipe_check = b.state.project.assets[0].composition.clone().unwrap();
+    let invalidated = recipe_check.check_invalidation(&b.state.project.assets);
+    assert!(invalidated);
+    assert_eq!(
+        recipe_check.status,
+        petunia_project::CompositionStatus::NeedsEvaluation
+    );
+
+    // 4. Bake composition (converts to static mesh - "Sem bake silencioso")
+    let bake_cmd = petunia_core::BakeSolidCompositionCmd::new();
+    b.state
+        .dispatch(&bake_cmd)
+        .expect("Bake composition should succeed");
+    assert!(
+        !b.state.project.assets[0].is_composition(),
+        "Bake must consume the recipe and leave static mesh"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 3);
+
+    // After explicit bake, direct polygon editing is permitted
+    assert_ne!(
+        b.state.dispatch(&subdivide_cmd),
+        Err(petunia_core::command::CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    // 5. Transactional Undo sequence
+    assert!(b.state.undo(), "Undo bake");
+    assert!(
+        b.state.project.assets[0].is_composition(),
+        "Undo must restore recipe"
+    );
+
+    assert!(b.state.undo(), "Undo toggle step");
+    let restored_recipe = b.state.project.assets[0].composition.as_ref().unwrap();
+    assert!(
+        restored_recipe.steps[1].enabled,
+        "Step 2 re-enabled by undo"
+    );
+
+    assert!(b.state.undo(), "Undo create composition");
+    assert!(
+        !b.state.project.assets[0].is_composition(),
+        "Undo must clear composition"
+    );
+    assert!(
+        b.state.project.assets[1].visible,
+        "Undo must restore operand 1 visibility"
+    );
+    assert!(
+        b.state.project.assets[2].visible,
+        "Undo must restore operand 2 visibility"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+}
+
+#[test]
+fn surface_construction_face_plane_imprint_with_holes_and_push_pull_h27() {
+    let mut b = bridge();
+    let initial_undo = b.state.project.undo.depth().0;
+    let initial_faces = b.state.project.assets[0].mesh.faces.len();
+
+    // 1. Select front face (face 4) and set workplane to face via UI intent
+    b.state.project.assets[0].mesh.faces[4].selected = true;
+    b.apply(petunia_editor::UiIntent::ProfileSetWorkplaneFace);
+    assert!(b.state.profile.workplane_locked);
+    assert_eq!(
+        b.state.profile.workplane_kind,
+        petunia_core::state::WorkplaneKind::Face
+    );
+
+    // 2. Add an annular profile with an outer square and an inner hole
+    let spline = petunia_project::SplineResource::from_polyline(
+        "OuterSpline",
+        &[
+            [-0.8, -0.8, 0.0],
+            [0.8, -0.8, 0.0],
+            [0.8, 0.8, 0.0],
+            [-0.8, 0.8, 0.0],
+        ],
+        true,
+    );
+    let spline_id = spline.id;
+    b.state.project.add_spline(spline).unwrap();
+
+    let mut profile = petunia_project::ProfileResource::new(
+        "RingProfile",
+        spline_id,
+        petunia_project::ProfileWorkplane {
+            origin: [0.0, 0.0, 1.0],
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        },
+    );
+    profile
+        .holes
+        .push(vec![[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]]);
+    let profile_id = profile.id;
+    b.state.project.add_profile(profile).unwrap();
+
+    // 3. Imprint profile with holes onto the face
+    let imprint_cmd = petunia_core::ImprintProfileCmd::new(profile_id);
+    b.state
+        .dispatch(&imprint_cmd)
+        .expect("Imprint profile with hole should succeed");
+
+    let faces_after_imprint = b.state.project.assets[0].mesh.faces.len();
+    assert!(
+        faces_after_imprint > initial_faces,
+        "Host face must be split and imprinted"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+
+    // 4. Contextual Push/Pull on embedded imprinted region
+    let push_cmd = petunia_core::ContextualPushPullCmd::new(0.6);
+    b.state
+        .dispatch(&push_cmd)
+        .expect("Contextual push/pull should succeed");
+
+    let mesh_pushed = &b.state.project.assets[0].mesh;
+    assert!(
+        mesh_pushed
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.6).abs() < 1e-4),
+        "Vertices must be extruded to Z = 1.6"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 2);
+
+    // 5. Curved/non-planar surface boundary check
+    let mut warped_mesh = petunia_mesh::Mesh::default();
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 1.0, 0.4)); // Non-planar
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 1.0, 0.0));
+    warped_mesh
+        .faces
+        .push(petunia_mesh::Face::new(vec![0, 1, 2, 3]));
+    let warped_asset = petunia_project::Asset::new("Warped", warped_mesh);
+    let warped_id = warped_asset.id;
+    b.state.project.assets.push(warped_asset);
+
+    let curved_cmd = petunia_core::AlignWorkplaneToFaceCmd::for_asset(warped_id, 0);
+    assert_eq!(
+        b.state.dispatch(&curved_cmd),
+        Err(petunia_core::command::CommandError::Execution(
+            "Face is curved or non-planar; curved surface construction is deferred to a subsequent extension".to_string()
+        ))
+    );
+
+    // 6. Transactional Undo/Redo sequence
+    assert!(b.state.undo(), "Undo push/pull");
+    assert_eq!(
+        b.state.project.assets[0].mesh.faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(b.state.undo(), "Undo imprint");
+    assert_eq!(b.state.project.assets[0].mesh.faces.len(), initial_faces);
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+
+    assert!(b.state.redo(), "Redo imprint");
+    assert_eq!(
+        b.state.project.assets[0].mesh.faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(b.state.redo(), "Redo push/pull");
+    assert!(
+        b.state.project.assets[0]
+            .mesh
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.6).abs() < 1e-4)
+    );
+}
+
+#[test]
+fn modeling_feedback_mf001_to_mf008_invariants_h28() {
+    let mut b = bridge();
+    let initial_undo = b.state.project.undo.depth().0;
+    let initial_faces = b.state.project.active_mesh().unwrap().faces.len();
+
+    // MF-001: Preview ativa com ghost e cancelamento limpo sem poluir histórico
+    b.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+    b.state.sync_selection();
+    b.state
+        .begin_modal(petunia_core::ModalKind::Extrude)
+        .unwrap();
+    b.state.update_modal(Vec3::Z * 2.0, 2.0).unwrap();
+
+    let feedback = b
+        .state
+        .current_modeling_feedback()
+        .expect("feedback disponível");
+    assert_eq!(feedback.operation_id, "Extrude");
+    assert_eq!(
+        feedback.active_dimension,
+        petunia_core::modeling_feedback::ActiveDimension::Distance
+    );
+    assert_eq!(feedback.numeric_value, 2.0);
+    assert!(feedback.ghost_mesh.is_some());
+    assert!(feedback.preview_mesh.is_some());
+
+    b.state.cancel_modal();
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+    assert_eq!(
+        b.state.project.active_mesh().unwrap().faces.len(),
+        initial_faces
+    );
+
+    // MF-002: Bounds e limites em operações modais (Extrude negativo)
+    b.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+    b.state.sync_selection();
+    b.state
+        .begin_modal(petunia_core::ModalKind::Extrude)
+        .unwrap();
+    b.state.update_modal(Vec3::Z * -1.5, -1.5).unwrap();
+    let fb_cavity = b.state.current_modeling_feedback().unwrap();
+    assert!(
+        fb_cavity
+            .warnings
+            .iter()
+            .any(|w| w.code == "EXTRUDE_NEGATIVE")
+    );
+    b.state.cancel_modal();
+
+    // MF-003: Preflight de booleana com operando aberto
+    let cube_id = b.state.project.assets[0].id;
+    let mut open_m = petunia_mesh::Mesh::default();
+    open_m.verts.push(petunia_mesh::Vertex::new(0.0, 0.0, 0.0));
+    open_m.verts.push(petunia_mesh::Vertex::new(1.0, 0.0, 0.0));
+    open_m.verts.push(petunia_mesh::Vertex::new(1.0, 1.0, 0.0));
+    open_m.faces.push(petunia_mesh::Face::new(vec![0, 1, 2]));
+    let open_asset = petunia_project::Asset::new("OpenSurface", open_m);
+    let open_id = open_asset.id;
+    b.state.project.assets.push(open_asset);
+
+    let bool_fb = b.state.preflight_boolean_feedback(cube_id, open_id);
+    assert!(!bool_fb.commit_enabled);
+    assert!(
+        bool_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "OPEN_BOOLEAN_OPERAND")
+    );
+
+    // MF-004: Mirror preflight com assimetria
+    let mirror_fb = b
+        .state
+        .preflight_mirror_feedback(cube_id, [1.0, 0.0, 0.0], 0.0);
+    assert!(mirror_fb.commit_enabled);
+
+    // MF-005: Pincel de escultura
+    let sculpt_fb = b
+        .state
+        .preflight_sculpt_feedback(0.35, 0.8, [0.0, 0.5, 0.0], [0.0, 1.0, 0.0]);
+    assert_eq!(sculpt_fb.operation_id, "sculpt");
+    assert_eq!(
+        sculpt_fb.active_dimension,
+        petunia_core::modeling_feedback::ActiveDimension::Distance
+    );
+
+    // MF-007: Remesh skin bind & seleção parcial
+    let mut skinned = petunia_project::Asset::new("Skinned", petunia_mesh::Mesh::cube(1.0));
+    skinned.skeleton_id = Some(uuid::Uuid::new_v4());
+    let skinned_id = skinned.id;
+    b.state.project.assets.push(skinned);
+
+    let skin_fb = b.state.preflight_remesh_skin_feedback(skinned_id);
+    assert!(
+        skin_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "SKIN_REMAP_REQUIRED")
+    );
+
+    b.state.project.assets[0].locked = true;
+    b.state.session.selection.assets = vec![cube_id, skinned_id];
+    let partial_fb = b
+        .state
+        .preflight_partial_selection_feedback("face_operation");
+    assert!(partial_fb.is_partial());
+
+    // MF-008: Pureza irrestrita das consultas
+    let before_state = b.state.project.undo.depth().0;
+    let _ = b.state.current_modeling_feedback();
+    let _ = b.state.preflight_boolean_feedback(cube_id, open_id);
+    assert_eq!(b.state.project.undo.depth().0, before_state);
+}
+
+#[test]
+fn spatial_dimensions_and_companion_view_invariants_h29() {
+    let mut b = bridge();
+    let cube_id = b.state.project.assets[0].id;
+
+    // VSP-003: Volume Frame World vs ObjectLocal sobre cubo rotacionado
+    b.state.project.assets[0].transform = petunia_project::ObjectTransform::from_trs(
+        glam::Vec3::new(5.0, 5.0, 0.0),
+        glam::Quat::from_rotation_z(std::f32::consts::PI * 0.25),
+        glam::Vec3::ONE,
+    );
+
+    let vf_world = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::World,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame World");
+    let vf_local = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame ObjectLocal");
+
+    assert!(
+        vf_world.volume > vf_local.volume + 5.0,
+        "World AABB cresce em relação ao volume mínimo da OBB local"
+    );
+    assert!(
+        (vf_local.volume - 8.0).abs() < 1e-3,
+        "Volume local do cubo 2x2x2 deve ser 8.0"
+    );
+    assert_eq!(vf_local.formatted_dimensions(), "2.000 × 2.000 × 2.000");
+
+    // VSP-003: ScaleToDimensionCmd com Undo/Redo no editor
+    let scale_res = b.state.scale_to_dimension(
+        cube_id,
+        0, // X
+        4.0,
+        false,
+        petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+    );
+    assert!(scale_res.is_ok());
+
+    let vf_scaled = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .unwrap();
+    assert!((vf_scaled.size[0] - 4.0).abs() < 1e-3);
+
+    assert!(b.state.undo(), "Undo da escala para dimensão");
+    let vf_undone = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .unwrap();
+    assert!((vf_undone.size[0] - 2.0).abs() < 1e-3);
+
+    // VSP-003: Zero dimension guard previne divisão por zero sem pânico
+    let plane_asset = petunia_project::Asset::new("FlatPlane", petunia_mesh::Mesh::plane(2.0));
+    let plane_id = plane_asset.id;
+    b.state.project.assets.push(plane_asset);
+
+    let zero_scale_res = b.state.scale_to_dimension(
+        plane_id,
+        1, // Y do plano é 0.0
+        3.0,
+        false,
+        petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+    );
+    assert!(
+        zero_scale_res.is_err(),
+        "Escala em dimensão zero deve ser rejeitada"
+    );
+
+    // VSP-004: Consultas espaciais entre assets
+    let second_cube = petunia_project::Asset::new("SecondCube", petunia_mesh::Mesh::cube(2.0));
+    let second_id = second_cube.id;
+    b.state.project.assets.push(second_cube);
+
+    // Reposiciona segundo cubo em X = 20.0
+    b.state
+        .project
+        .assets
+        .iter_mut()
+        .find(|a| a.id == second_id)
+        .unwrap()
+        .transform = petunia_project::ObjectTransform::from_trs(
+        glam::Vec3::new(20.0, 0.0, 0.0),
+        glam::Quat::IDENTITY,
+        glam::Vec3::ONE,
+    );
+
+    let clearance_res = b
+        .state
+        .query_spatial(
+            petunia_core::spatial_query::SpatialQueryKind::SurfaceClearance {
+                object_a: cube_id,
+                object_b: second_id,
+            },
+        )
+        .expect("Clearance query");
+    assert!(clearance_res.distance > 10.0);
+    assert!(!clearance_res.is_in_contact);
+    assert!(!clearance_res.is_intersecting);
+
+    // VSP-004: Companion View
+    assert!(!b.state.is_companion_view_open());
+    b.state.open_companion_view();
+    assert!(b.state.is_companion_view_open());
+    assert!(b.state.companion_view_state().is_orthographic);
+    b.state.close_companion_view();
+    assert!(!b.state.is_companion_view_open());
+
+    // VSP-004: X-Ray vs Select Through
+    b.state.set_show_xray(true);
+    assert!(b.state.show_xray);
+    assert!(b.state.select_policy != petunia_core::SelectPolicy::Through);
+    b.state.set_select_through(true);
+    b.state.set_show_xray(false);
+    assert!(!b.state.show_xray);
+    assert!(b.state.select_policy == petunia_core::SelectPolicy::Through);
+
+    // Pureza: consultas não poluem pilha de undo
+    let undo_depth_before = b.state.project.undo.depth().0;
+    let _ = b.state.query_volume_frame(
+        cube_id,
+        petunia_core::spatial_query::SpatialFrameKind::World,
+        petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+    );
+    let _ = b.state.query_spatial(
+        petunia_core::spatial_query::SpatialQueryKind::EuclideanDistance {
+            from: [0.0, 0.0, 0.0],
+            to: [1.0, 1.0, 1.0],
+        },
+    );
+    assert_eq!(b.state.project.undo.depth().0, undo_depth_before);
+}
+
+#[test]
+fn visual_assistance_and_accessibility_intents_h33() {
+    let mut b = bridge();
+
+    // 1. VSP-001: Intent para alterar perfil de assistência visual
+    assert_eq!(
+        b.state.visual_assistance_profile(),
+        petunia_core::VisualAssistanceProfile::Assisted
+    );
+    b.apply(UiIntent::SetVisualAssistanceProfile(
+        petunia_core::VisualAssistanceProfile::Analytical,
+    ));
+    assert_eq!(
+        b.state.visual_assistance_profile(),
+        petunia_core::VisualAssistanceProfile::Analytical
+    );
+
+    // 2. VSP-002: Intents para alterar modo Clay e iluminação
+    assert_eq!(b.state.clay_mode(), petunia_core::ClayMode::Disabled);
+    b.apply(UiIntent::SetClayMode(petunia_core::ClayMode::Technical));
+    assert_eq!(b.state.clay_mode(), petunia_core::ClayMode::Technical);
+
+    b.apply(UiIntent::SetClayLighting(
+        petunia_core::LightingAnchor::WorldFixed,
+    ));
+    assert_eq!(
+        b.state.clay_lighting(),
+        petunia_core::LightingAnchor::WorldFixed
+    );
+
+    // 3. VSP-004: Intents de Companion View
+    assert!(!b.state.is_companion_view_open());
+    b.apply(UiIntent::ToggleCompanionView);
+    assert!(b.state.is_companion_view_open());
+    assert!(!b.state.companion_view_state().steals_focus);
+
+    b.apply(UiIntent::SetCompanionViewTrigger(
+        petunia_core::CompanionViewTrigger::OptInAuto,
+    ));
+    assert_eq!(
+        b.state.companion_view_state().trigger_mode,
+        petunia_core::CompanionViewTrigger::OptInAuto
+    );
+
+    b.apply(UiIntent::ToggleCompanionView);
+    assert!(!b.state.is_companion_view_open());
+
+    // 4. SEL-007: Feedback semântico acessível do gizmo
+    let feedback = b.state.gizmo_accessibility_feedback();
+    assert_eq!(feedback.mode, "Idle");
+    assert!(feedback.high_contrast_compliant);
+    assert!(feedback.minimum_hit_target_dp >= 24.0);
+
+    // Invariante de histórico: zero poluição de Undo
+    assert_eq!(b.state.project.undo.depth().0, 0);
+}
+
+#[test]
+fn shared_semantic_action_execution_and_unknown_action_rejection_h09() {
+    let mut b = bridge();
+
+    // 1. Ações compartilhadas de seleção por contrato (SelectionDomain)
+    assert!(b.execute_core_command("select.domain_vertex").is_ok());
+    assert_eq!(
+        b.state.selection_domain(),
+        petunia_core::SelectionDomain::Vertex
+    );
+    assert!(b.execute_core_command("select.domain_face").is_ok());
+    assert_eq!(
+        b.state.selection_domain(),
+        petunia_core::SelectionDomain::Face
+    );
+    assert!(b.execute_core_command("select.domain_object").is_ok());
+    assert_eq!(
+        b.state.selection_domain(),
+        petunia_core::SelectionDomain::Object
+    );
+
+    // 2. Ações de seleção de elementos
+    assert!(b.execute_core_command("select.all").is_ok());
+    assert!(b.execute_core_command("select.none").is_ok());
+    assert!(b.execute_core_command("select.invert").is_ok());
+
+    // 3. Ações semânticas de transformação
+    b.apply(UiIntent::SetActiveTool("select".into()));
+    assert_eq!(b.state.active_tool, "select");
+    b.apply(UiIntent::SetActiveTool("transform".into()));
+    assert_eq!(b.state.active_tool, "transform");
+
+    // 4. Ações de Paint compartilhadas
+    b.apply(UiIntent::SetActiveTool("brush".into()));
+    assert_eq!(b.state.active_tool, "brush");
+    b.apply(UiIntent::SetActiveTool("eraser".into()));
+    assert_eq!(b.state.active_tool, "eraser");
+    b.apply(UiIntent::SetActiveTool("fill".into()));
+    assert_eq!(b.state.active_tool, "fill");
+
+    // 5. Ação desconhecida rejeitada com erro tipado e status informativo sem poluir histórico
+    let depth_before_err = b.state.project.undo.depth().0;
+    let err = b.execute_core_command("nonexistent.bogus_action");
+    assert!(err.is_err());
+    assert_eq!(b.state.project.undo.depth().0, depth_before_err);
+
+    // 6. route_shortcut retorna false para atalhos inexistentes sem efeitos colaterais
+    assert!(!b.route_shortcut("F24", false, false, false));
+    assert_eq!(b.state.project.undo.depth().0, depth_before_err);
+}
+
+#[test]
+fn uv_contextual_actions_and_shortcuts_h13() {
+    let mut b = bridge();
+    b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Uv));
+    assert_eq!(b.state.workspace, petunia_core::Workspace::Uv);
+
+    let mesh = b.state.project.active_mesh().unwrap().clone();
+    b.state.session.uv_selection.sync = false;
+    b.state.session.uv_selection.set_faces(&mesh, [0]);
+    b.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+
+    // 1. G/R/S iniciam sessões contextuais de transformação UV
+    assert!(b.route_shortcut("G", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_some());
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+
+    assert!(b.route_shortcut("R", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_some());
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+
+    assert!(b.route_shortcut("S", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_some());
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+
+    // 2. Ações de Seam ('U') e Pin ('P' / Alt+'P') no contexto UV
+    let initial_seams = b.state.project.active_mesh().unwrap().uv_seams.len();
+    assert!(b.route_shortcut("U", false, false, false));
+    let next_seams = b.state.project.active_mesh().unwrap().uv_seams.len();
+    assert_ne!(initial_seams, next_seams);
+
+    assert!(b.route_shortcut("P", false, false, false));
+    assert!(!b.state.project.active_mesh().unwrap().uv_pinned.is_empty());
+    assert!(b.route_shortcut("P", false, false, true)); // Alt+P limpa todos os pins
+    assert!(b.state.project.active_mesh().unwrap().uv_pinned.is_empty());
+
+    // 3. Setas direcionais realizam nudge de coordenadas UV
+    let face_uv_before = b.state.project.active_mesh().unwrap().faces[0].uv.clone();
+    assert!(b.route_shortcut("Right", false, false, false));
+    let face_uv_after = b.state.project.active_mesh().unwrap().faces[0].uv.clone();
+    assert_ne!(face_uv_before, face_uv_after);
+
+    // Vértices 3D permanecem intocados
+    assert_eq!(
+        b.state.project.active_mesh().unwrap().verts.len(),
+        mesh.verts.len()
+    );
+}

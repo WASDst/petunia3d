@@ -151,17 +151,39 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
                 } else if self.profile_transform_target_at(x, y) {
                     petunia_core::PressTarget::Handle(0)
-                } else if self.gizmo_target_at(x, y).is_some() {
+                } else if self.gizmo_takes_press(x, y) {
                     petunia_core::PressTarget::Handle(1)
                 } else {
                     petunia_core::PressTarget::Surface
                 };
+                self.tool_press_subtract = self
+                    .state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SUBTRACT)
+                    .held_in(held);
                 self.tool_press_extend = extend;
                 self.tool_press_alternate = alternate;
                 self.tool_session.press([x, y], target)
             }
             ViewportPointerPhase::Move => self.tool_session.move_to([x, y]),
-            ViewportPointerPhase::Release => self.tool_session.release([x, y]),
+            ViewportPointerPhase::Release => {
+                let select_handle = self.grammar_tool() == Some(GrammarTool::Select)
+                    && matches!(
+                        self.tool_session.phase(),
+                        petunia_core::ToolPhase::Pressed {
+                            target: petunia_core::PressTarget::Handle(_),
+                            ..
+                        }
+                    );
+                let effect = self.tool_session.release([x, y]);
+                if select_handle && matches!(effect, petunia_core::ToolEffect::Click { .. }) {
+                    // A click on an explicit handle must not select geometry behind it.
+                    petunia_core::ToolEffect::Nothing
+                } else {
+                    effect
+                }
+            }
             ViewportPointerPhase::Cancel => {
                 if self.tool_session.is_gesture_active() {
                     self.tool_session.key(petunia_core::ToolKey::Cancel)

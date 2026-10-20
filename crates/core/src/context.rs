@@ -46,10 +46,12 @@ pub enum TextureOp {
 }
 
 /// Saídas de um comando para fora do documento/editor.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct CommandEffects {
     /// Mensagem de status (última vence).
     pub status: Option<String>,
+    /// Mensagens de diagnóstico opcionais da execução (A04).
+    pub diagnostics: Vec<String>,
     /// Redesenho pedido, com o motivo mais recente quando conhecido.
     pub redraw: bool,
     pub redraw_reason: Option<DirtyReason>,
@@ -134,6 +136,11 @@ impl<'a> CommandContext<'a> {
 impl CommandContext<'_> {
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.effects.status = Some(msg.into());
+    }
+
+    /// Adiciona uma mensagem de diagnóstico pós-commit (A04).
+    pub fn add_diagnostic(&mut self, msg: impl Into<String>) {
+        self.effects.diagnostics.push(msg.into());
     }
 
     /// Pede redesenho (render-on-demand).

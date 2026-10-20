@@ -808,7 +808,9 @@ fn vertex_domain_draws_round_markers_of_constant_size() {
     };
     let near = marker_pixels(&mut h, 2.0);
     let far = marker_pixels(&mut h, 6.0);
-    assert!(near > 40, "disco de hover visível: {near}");
+    // B12: o hover é um ponto de 3,5 px de raio (π·3,5² ≈ 38 px; a borda
+    // suavizada sai do filtro de cor). Antes era um halo de 6,5 px (> 40).
+    assert!(near > 20, "disco de hover visível: {near}");
     let ratio = near as f32 / far.max(1) as f32;
     assert!((0.7..1.4).contains(&ratio), "tamanho em px: {near} × {far}");
 }
@@ -952,6 +954,64 @@ fn reference_images_draw_behind_and_in_front() {
         // Fora do cubo, a referência aparece nos dois passes.
         let [r, g, _, _] = frame.at(4, 4);
         assert!(g > r + 100, "borda: {r},{g}");
+    }
+}
+
+/// Cor dominante de um pixel RGBA: "red", "green", "blue" ou "yellow".
+fn dominant(px: [u8; 4]) -> &'static str {
+    let [r, g, b, _] = px.map(i32::from);
+    match (r > 150, g > 150, b > 150) {
+        (true, false, false) => "red",
+        (false, true, false) => "green",
+        (false, false, true) => "blue",
+        (true, true, false) => "yellow",
+        _ => "other",
+    }
+}
+
+/// A primeira linha da imagem é o topo: a referência aparece na orientação em que
+/// foi importada (antes o quad usava UVs de origem embaixo e a imagem saía de
+/// cabeça para baixo).
+#[test]
+fn reference_images_keep_the_orientation_they_were_imported_with() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(120, 90) else {
+        return;
+    };
+    let project = cube_project();
+    let camera = h.camera(ViewPreset::Front, 3.0);
+    // 2×2: em cima vermelho e verde; embaixo azul e amarelo (linhas de cima para baixo).
+    let rgba: Vec<u8> = [
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 255, 0, 255],
+    ]
+    .concat();
+    let mut image = petunia_core::ReferenceImage::from_rgba("quadrants".into(), 2, 2, rgba);
+    image.size = 8.0;
+    image.opacity = 1.0;
+    image.visible = true;
+    image.revision = 1;
+    image.xray = true;
+    image.axis = petunia_core::RefAxis::Front;
+    let refs = [image];
+    let frame = h.render(
+        |parts| {
+            parts.refs = &refs;
+            parts.settings.show_wireframe_overlay = false;
+        },
+        &project,
+        &camera,
+    );
+    let corners = [
+        ("topo-esquerda", frame.at(4, 4), "red"),
+        ("topo-direita", frame.at(115, 4), "green"),
+        ("base-esquerda", frame.at(4, 85), "blue"),
+        ("base-direita", frame.at(115, 85), "yellow"),
+    ];
+    for (name, pixel, expected) in corners {
+        assert_eq!(dominant(pixel), expected, "{name}: {pixel:?}");
     }
 }
 
@@ -1102,4 +1162,247 @@ fn painted_face_shows_in_render() {
         i32::from(painted[0]) > i32::from(painted[1]) + 60,
         "a face pintada de vermelho precisa renderizar vermelho! antes {plain:?}, depois {painted:?}"
     );
+}
+
+/// Caixa envolvente (x0, y0, x1, y1) dos pixels que diferem de `base`.
+fn changed_bounds(a: &Image, b: &Image) -> Option<(u32, u32, u32, u32)> {
+    let mut bounds: Option<(u32, u32, u32, u32)> = None;
+    for y in 0..a.height {
+        for x in 0..a.width {
+            if a.at(x, y) != b.at(x, y) {
+                bounds = Some(match bounds {
+                    None => (x, y, x, y),
+                    Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+                });
+            }
+        }
+    }
+    bounds
+}
+
+/// Regressão: o contorno de seleção acompanha o objeto depois de mover/escalar
+/// (sem "fantasma" da transformação anterior).
+#[test]
+fn selection_outline_follows_the_object_after_a_transform_edit() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(240, 240) else {
+        return;
+    };
+    let mut project = cube_project();
+    let id = project.assets[0].id;
+    let camera = h.camera(ViewPreset::Front, 4.0);
+    let selected = [id];
+    // Estado inicial e depois da edição de transformação (como o painel faz).
+    for (position, scale) in [
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+        ([-0.17, 0.42, -0.16], [0.44, 2.75, 0.49]),
+        ([0.5, -0.3, 0.0], [1.5, 0.5, 1.0]),
+    ] {
+        project.assets[0].position = position;
+        project.assets[0].scale = scale;
+        let without = h.render(
+            |parts| parts.palette.background = [0.0; 4],
+            &project,
+            &camera,
+        );
+        let with = h.render(
+            |parts| {
+                parts.outlined = &selected;
+                parts.outlined_active = Some(id);
+                parts.palette.background = [0.0; 4];
+            },
+            &project,
+            &camera,
+        );
+        let background = Image {
+            pixels: without
+                .at(0, 0)
+                .repeat((without.width * without.height) as usize),
+            width: without.width,
+            height: without.height,
+        };
+        let (sx0, sy0, sx1, sy1) = changed_bounds(&without, &background).expect("o objeto aparece");
+        let (ox0, oy0, ox1, oy1) = changed_bounds(&without, &with).expect("o contorno aparece");
+        let slack = 6;
+        assert!(
+            ox0 + slack >= sx0 && oy0 + slack >= sy0 && ox1 <= sx1 + slack && oy1 <= sy1 + slack,
+            "contorno {:?} fora da silhueta {:?} com escala {scale:?}",
+            (ox0, oy0, ox1, oy1),
+            (sx0, sy0, sx1, sy1)
+        );
+        assert!(
+            ox0 <= sx0 + slack && oy0 <= sy0 + slack && ox1 + slack >= sx1 && oy1 + slack >= sy1,
+            "contorno {:?} não cobre a silhueta {:?} com escala {scale:?}",
+            (ox0, oy0, ox1, oy1),
+            (sx0, sy0, sx1, sy1)
+        );
+    }
+}
+
+/// Pixels que mudaram entre duas imagens: (total, dominados pelo vermelho).
+fn changed_pixels(base: &Image, other: &Image) -> (usize, usize) {
+    let mut total = 0;
+    let mut red = 0;
+    for y in 0..base.height {
+        for x in 0..base.width {
+            if base.at(x, y) != other.at(x, y) {
+                total += 1;
+                let [r, g, b, _] = other.at(x, y);
+                if r > g.saturating_add(40) && r > b.saturating_add(40) {
+                    red += 1;
+                }
+            }
+        }
+    }
+    (total, red)
+}
+
+/// O contorno usa a cor de seleção da própria parte (não a global), no ativo e
+/// nos demais selecionados; o hover desenha um contorno discreto sem selecionar.
+#[test]
+fn outline_uses_each_parts_selection_color_and_draws_hover() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(200, 120) else {
+        return;
+    };
+    let mut project = cube_project();
+    project.assets[0].selection_overlay_color = Some([255, 0, 0]);
+    let id = project.assets[0].id;
+    let camera = h.camera(ViewPreset::Front, 3.0);
+    let selected = [id];
+    let plain = h.render(
+        |parts| parts.palette.background = [0.0; 4],
+        &project,
+        &camera,
+    );
+    let active = h.render(
+        |parts| {
+            parts.outlined = &selected;
+            parts.outlined_active = Some(id);
+            parts.palette.background = [0.0; 4];
+        },
+        &project,
+        &camera,
+    );
+    let (total, red) = changed_pixels(&plain, &active);
+    assert!(total > 0, "o contorno do ativo aparece");
+    assert!(
+        red * 4 >= total * 3,
+        "o contorno segue a cor da parte (vermelha): {red} de {total} pixels"
+    );
+
+    // Selecionado, mas não ativo: variante mais escura da mesma cor da parte.
+    let secondary = h.render(
+        |parts| {
+            parts.outlined = &selected;
+            parts.outlined_active = None;
+            parts.palette.background = [0.0; 4];
+        },
+        &project,
+        &camera,
+    );
+    let (total, red) = changed_pixels(&plain, &secondary);
+    assert!(total > 0 && red * 4 >= total * 3, "{red} de {total}");
+
+    // Hover sem seleção: aparece um contorno.
+    let hovered = h.render(
+        |parts| {
+            parts.components.hover = HoverTarget::Object(0);
+            parts.palette.background = [0.0; 4];
+        },
+        &project,
+        &camera,
+    );
+    let (hover_total, _) = changed_pixels(&plain, &hovered);
+    assert!(hover_total > 0, "o hover do objeto desenha um contorno");
+}
+
+/// B12: capturas reais (GL) do cubo em cada domínio de seleção, com seleção e
+/// hover, para comparar a hierarquia visual com o guia. Salvas em
+/// `target/render-captures/`; o teste confere só que há overlay sobre a face.
+#[test]
+fn edit_mode_overlays_capture_for_visual_review() {
+    use petunia_core::{HoverTarget, SelectionDomain};
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(480, 360) else {
+        return;
+    };
+    let dir =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/render-captures");
+    std::fs::create_dir_all(&dir).expect("diretório de capturas");
+    let camera = Camera {
+        target: Vec3::ZERO,
+        distance: 7.5,
+        aspect: 480.0 / 360.0,
+        ..Camera::default()
+    };
+    let cases: [(&str, SelectionDomain, HoverTarget); 4] = [
+        ("object", SelectionDomain::Object, HoverTarget::None),
+        ("vertex", SelectionDomain::Vertex, HoverTarget::Vertex(6)),
+        ("edge", SelectionDomain::Edge, HoverTarget::None),
+        ("face", SelectionDomain::Face, HoverTarget::None),
+    ];
+    for (name, domain, hover) in cases {
+        let mut project = cube_project();
+        let id = project.assets[0].id;
+        {
+            let mesh = project.active_mesh_mut().expect("cubo");
+            match domain {
+                SelectionDomain::Vertex => {
+                    for i in [2usize, 3] {
+                        mesh.verts[i].selected = true;
+                    }
+                }
+                SelectionDomain::Edge | SelectionDomain::Face => {
+                    // A primeira face de frente para a câmera e uma das suas arestas.
+                    let eye = camera.eye();
+                    let front = (0..mesh.faces.len())
+                        .find(|&f| {
+                            let c = mesh.faces[f]
+                                .verts
+                                .iter()
+                                .map(|&v| mesh.verts[v as usize].vec())
+                                .sum::<Vec3>()
+                                / mesh.faces[f].verts.len() as f32;
+                            mesh.face_normal(f).dot(eye - c) > 0.0
+                        })
+                        .expect("face de frente");
+                    if domain == SelectionDomain::Face {
+                        mesh.faces[front].selected = true;
+                    } else {
+                        let v = mesh.faces[front].verts.clone();
+                        let (a, b) = (v[0].min(v[1]), v[0].max(v[1]));
+                        mesh.selected_edges.insert((a, b));
+                    }
+                }
+                SelectionDomain::Object => {}
+            }
+        }
+        let selected = [id];
+        let image = h.render(
+            |parts| {
+                parts.settings.edge_mode = EdgeMode::Topology;
+                parts.settings.edit_mode_is_edit = domain != SelectionDomain::Object;
+                parts.components.domain = domain;
+                parts.components.hover = hover;
+                parts.components.thickness = 2.0;
+                if domain == SelectionDomain::Object {
+                    parts.outlined = &selected;
+                    parts.outlined_active = Some(id);
+                }
+            },
+            &project,
+            &camera,
+        );
+        let path = dir.join(format!("edit_{name}.png"));
+        image::save_buffer(
+            &path,
+            &image.pixels,
+            image.width,
+            image.height,
+            image::ExtendedColorType::Rgba8,
+        )
+        .expect("PNG salvo");
+        assert!(path.exists());
+    }
 }

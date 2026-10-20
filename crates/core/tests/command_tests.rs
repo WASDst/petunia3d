@@ -1591,6 +1591,44 @@ fn test_frame_all_and_selection_dont_dirty_project() {
 }
 
 #[test]
+fn camera_frame_advances_to_goal_and_ignores_hostile_dt() {
+    let mut state = AppState::default();
+    state.camera.target.x = 40.0;
+    state.camera.distance = 90.0;
+    state.camera.yaw = 1.3;
+    assert!(!state.advance_camera_frame(0.033), "nothing scheduled");
+    state
+        .dispatch_command("view.frame_selection")
+        .expect("frame selection");
+    let goal = state.camera_frame.clone().expect("framing scheduled").1;
+
+    for hostile in [f32::NAN, f32::INFINITY, -1.0] {
+        assert!(state.advance_camera_frame(hostile));
+        assert_eq!(state.camera.target.x, 40.0, "hostile dt must not move");
+    }
+    assert!(state.advance_camera_frame(0.1));
+    assert!(state.camera.target.x < 40.0 && state.camera.target.x > goal.target.x);
+    state.camera.yaw = 2.0; // órbita durante a transição é preservada
+    let mut ticks = 0;
+    while state.advance_camera_frame(0.1) {
+        ticks += 1;
+        assert!(ticks < 10, "animation must terminate");
+    }
+    assert!(state.camera_frame.is_none());
+    assert!((state.camera.target - goal.target).length() < 1e-5);
+    assert!((state.camera.distance - goal.distance).abs() < 1e-5);
+    assert_eq!(state.camera.yaw, 2.0);
+
+    state.ui.reduced_motion = true;
+    state.camera.distance = 90.0;
+    state.dispatch_command("view.frame_all").expect("frame all");
+    let goal = state.camera_frame.clone().expect("framing scheduled").1;
+    assert!(state.advance_camera_frame(0.0));
+    assert!(state.camera_frame.is_none(), "reduced motion jumps at once");
+    assert!((state.camera.distance - goal.distance).abs() < 1e-5);
+}
+
+#[test]
 fn test_instantiate_asset_command_and_undo() {
     let mut state = AppState::default();
     let asset_id = state.project.assets[0].id;
@@ -1606,7 +1644,11 @@ fn test_instantiate_asset_command_and_undo() {
     assert_eq!(state.project.active, initial_count);
 
     let instantiated = &state.project.assets[state.project.active];
-    let center = instantiated.mesh.selection_center();
+    let center = instantiated.origin_world().to_array();
+    assert_eq!(
+        serde_json::to_value(&*instantiated.mesh).unwrap(),
+        serde_json::to_value(&*state.project.assets[0].mesh).unwrap()
+    );
     assert!((center[0] - 5.0).abs() < 1e-4);
     assert!((center[1] - 0.0).abs() < 1e-4);
     assert!((center[2] - (-2.0)).abs() < 1e-4);
@@ -1622,7 +1664,13 @@ fn test_instantiate_asset_command_and_undo() {
     // 4. Teste via método auxiliar instantiate_asset_by_id
     assert!(state.instantiate_asset_by_id(asset_id, Some([10.0, 2.0, 3.0])));
     assert_eq!(state.project.assets.len(), initial_count + 2);
-    let center2 = state.project.assets.last().unwrap().mesh.selection_center();
+    let center2 = state
+        .project
+        .assets
+        .last()
+        .unwrap()
+        .origin_world()
+        .to_array();
     assert!((center2[0] - 10.0).abs() < 1e-4);
 
     // 5. Instanciação com ID inexistente falha graciosamente
@@ -1707,199 +1755,6 @@ fn test_alias_does_not_duplicate_command_ids_in_the_catalog() {
 }
 
 #[test]
-fn test_boolean_fuse_and_cut_between_active_and_operand() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
-    state.project.assets[0].name = "A".to_string();
-    let a_id = state.project.assets[0].id;
-
-    // Sem operando escolhido a operação precisa ser recusada.
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Union))
-            .is_err()
-    );
-    assert_eq!(state.project.assets.len(), 1);
-
-    // Cria B deslocado no eixo X para que a união tenha volume maior.
-    let mut b = petunia_mesh::Mesh::cube(2.0);
-    b.select_all();
-    b.translate_selected([1.0, 0.0, 0.0]);
-    b.deselect_all();
-    state.project.add("B", b);
-    let b_id = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
-
-    let before = state.project.assets[0].mesh.verts.len();
-    let undo_before = state.project.undo.depth().0;
-    assert!(state.dispatch(&BooleanOpCmd::new(BooleanOp::Union)).is_ok());
-    assert_eq!(
-        state.project.undo.depth().0,
-        undo_before + 1,
-        "Fuse é exatamente uma entrada de undo"
-    );
-    assert_eq!(state.project.assets.len(), 1, "B é consumido");
-    assert!(state.project.assets[0].mesh.verts.len() > before);
-    assert!(state.session.tools.boolean_operand.is_none());
-    assert_eq!(state.project.active, 0);
-    assert_eq!(state.project.assets[0].id, a_id);
-
-    // Undo restaura os dois objetos.
-    assert!(state.undo());
-    assert_eq!(state.project.assets.len(), 2);
-    assert!(state.project.assets.iter().any(|a| a.id == b_id));
-
-    // Cut: o operando precisa existir de novo.
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_ok()
-    );
-    assert_eq!(state.project.assets.len(), 1);
-    assert_eq!(state.project.assets[0].id, a_id);
-}
-
-#[test]
-fn test_boolean_refuses_the_active_asset_as_operand_and_missing_operand() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    let active = state.project.assets[0].id;
-
-    state.session.tools.boolean_operand = Some(active);
-    let err = state
-        .dispatch(&BooleanOpCmd::new(BooleanOp::Union))
-        .unwrap_err()
-        .to_string();
-    assert!(err.contains("active"), "veio: {err}");
-    assert_eq!(state.project.assets.len(), 1);
-
-    state.session.tools.boolean_operand = Some(uuid::Uuid::new_v4());
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_err()
-    );
-    assert_eq!(state.project.assets.len(), 1);
-}
-
-#[test]
-fn test_keep_parts_keeps_the_operand_in_the_scene() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
-
-    let mut b = petunia_mesh::Mesh::cube(2.0);
-    b.select_all();
-    b.translate_selected([1.6, 0.0, 0.0]);
-    b.deselect_all();
-    state.project.add("B", b);
-    let b_id = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
-    state.session.tools.boolean_keep_parts = true;
-
-    assert!(state.dispatch(&BooleanOpCmd::new(BooleanOp::Union)).is_ok());
-    assert_eq!(
-        state.project.assets.len(),
-        2,
-        "Keep Parts mantém o operando na cena"
-    );
-    assert!(state.project.assets.iter().any(|a| a.id == b_id));
-    assert_eq!(state.project.active, 0, "o ativo continua sendo A");
-    assert!(state.session.tools.boolean_operand.is_none());
-}
-
-#[test]
-fn test_boolean_cut_returns_quads_not_kernel_triangles_and_undoes_in_one_step() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = (petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0)).into();
-    let before_faces = state.project.assets[0].mesh.faces.len();
-    state
-        .project
-        .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
-    let hole = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(hole);
-
-    let undo_before = state.project.undo.depth().0;
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_ok()
-    );
-    assert_eq!(state.project.undo.depth().0, undo_before + 1);
-    let report = state
-        .session
-        .tools
-        .boolean_report
-        .clone()
-        .expect("relatório do cleanup");
-    let mesh = state.project.active_mesh().unwrap();
-    let quads = mesh.faces.iter().filter(|f| f.verts.len() == 4).count();
-    assert!(!report.fell_back, "{report:?}");
-    assert!(
-        quads >= 28,
-        "paredes do furo e laterais voltam a ser quads: {quads}"
-    );
-    assert!(
-        mesh.faces.len() < report.kernel_triangles,
-        "menos faces que os triângulos do kernel"
-    );
-    assert!(
-        state.ui.status.contains("quads"),
-        "status: {}",
-        state.ui.status
-    );
-
-    state.undo();
-    assert_eq!(state.project.assets.len(), 2, "o operando volta");
-    assert_eq!(state.project.assets[0].mesh.faces.len(), before_faces);
-}
-
-#[test]
-fn test_boolean_cleanup_can_be_turned_off_to_keep_the_kernel_triangles() {
-    use petunia_core::BooleanOpCmd;
-    use petunia_mesh::boolean::BooleanOp;
-
-    let mut state = AppState::new("en");
-    ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = (petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0)).into();
-    state
-        .project
-        .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
-    let hole = state.project.assets[1].id;
-    state.project.active = 0;
-    state.session.tools.boolean_operand = Some(hole);
-    state.session.tools.boolean_cleanup = false;
-
-    assert!(
-        state
-            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
-            .is_ok()
-    );
-    let mesh = state.project.active_mesh().unwrap();
-    assert!(mesh.faces.iter().all(|f| f.verts.len() == 3));
-    assert!(state.session.tools.boolean_report.is_none());
-}
-
-#[test]
 fn test_join_merges_both_topologies_without_a_boolean_kernel() {
     use petunia_core::JoinObjectsCmd;
 
@@ -1918,7 +1773,8 @@ fn test_join_merges_both_topologies_without_a_boolean_kernel() {
     let b_verts = state.project.assets[1].mesh.verts.len();
     let b_faces = state.project.assets[1].mesh.faces.len();
     state.project.active = 0;
-    state.session.tools.boolean_operand = Some(b_id);
+    let a_id = state.project.assets[0].id;
+    state.session.selection.assets = vec![a_id, b_id];
 
     let undo_before = state.project.undo.depth().0;
     assert!(state.dispatch(&JoinObjectsCmd).is_ok());
@@ -1942,6 +1798,23 @@ fn test_join_merges_both_topologies_without_a_boolean_kernel() {
         2,
         "undo restaura os dois objetos"
     );
+}
+
+#[test]
+fn test_join_needs_a_second_selected_object() {
+    use petunia_core::JoinObjectsCmd;
+
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    let a_id = state.project.assets[0].id;
+    state.project.add("B", petunia_mesh::Mesh::cube(2.0));
+    state.project.active = 0;
+    state.session.selection.assets = vec![a_id];
+    assert!(
+        state.dispatch(&JoinObjectsCmd).is_err(),
+        "sem outro objeto selecionado o Join é recusado"
+    );
+    assert_eq!(state.project.assets.len(), 2);
 }
 
 #[test]
@@ -2254,7 +2127,12 @@ fn test_commands_operate_with_application_selection() {
     assert!(!state.project.active_mesh().unwrap().faces[0].selected);
     let initial_faces = state.project.active_mesh().unwrap().faces.len();
 
-    state.dispatch(&ExtrudeSelectedCmd { dist: 1.0 }).unwrap();
+    state
+        .dispatch(&ExtrudeSelectedCmd {
+            dist: 1.0,
+            ..Default::default()
+        })
+        .unwrap();
     // A extrusão de uma face de um cubo adiciona paredes laterais (+4 faces)
     assert!(state.project.active_mesh().unwrap().faces.len() > initial_faces);
     assert!(!state.session.selection.faces.is_empty());
@@ -2647,4 +2525,871 @@ fn test_reference_pixels_stay_shared_without_copying_for_snapshots() {
     assert_eq!(authored.rgba[0], pixels[0]);
     assert_eq!(frozen.rgba[0], pixels[0]);
     assert_eq!(mirror.rgba[0], pixels[0]);
+}
+
+#[test]
+fn test_canonical_material_commands_registration() {
+    let dispatcher = CommandDispatcher::canonical();
+    for id in [
+        "material.create",
+        "material.duplicate",
+        "material.remove",
+        "material.edit",
+        "material.set_properties",
+        "material.assign_slot",
+        "model.create_material",
+        "model.duplicate_material",
+        "model.remove_material",
+        "model.set_material_properties",
+        "model.assign_material",
+        "model.assign_material_slot",
+    ] {
+        assert!(
+            dispatcher.contains(id),
+            "Command {id} must be registered in canonical dispatcher"
+        );
+        let meta = dispatcher.get_metadata(id).expect("metadata present");
+        assert_eq!(
+            meta.docs_topic,
+            Some(petunia_core::docs::DocsTopic::Materials)
+        );
+    }
+}
+
+#[test]
+fn test_canonical_object_metadata_and_modifier_commands_registration() {
+    let dispatcher = CommandDispatcher::canonical();
+    for (id, expected_topic) in [
+        (
+            "model.set_selection_color",
+            petunia_core::docs::DocsTopic::Interface,
+        ),
+        (
+            "object.set_selection_color",
+            petunia_core::docs::DocsTopic::Interface,
+        ),
+        ("modifier.apply", petunia_core::docs::DocsTopic::Modeling),
+        (
+            "model.apply_modifier",
+            petunia_core::docs::DocsTopic::Modeling,
+        ),
+    ] {
+        assert!(
+            dispatcher.contains(id),
+            "Command {id} must be registered in canonical dispatcher"
+        );
+        let meta = dispatcher.get_metadata(id).expect("metadata present");
+        assert_eq!(meta.docs_topic, Some(expected_topic));
+    }
+}
+
+#[test]
+fn test_material_crud_and_atomic_properties_with_undo_redo() {
+    use petunia_core::command::Command;
+    use petunia_core::{
+        AssignMaterialSlotCmd, CreateMaterialCmd, DuplicateMaterialCmd, RemoveMaterialCmd,
+        SetMaterialPropertiesCmd,
+    };
+    use petunia_project::ShaderProfile;
+
+    let mut state = AppState::new("en");
+    assert_eq!(state.project.project.materials.len(), 1);
+    let original_mat_id = state.project.project.materials[0].id;
+
+    // 1. CreateMaterialCmd
+    let create_cmd = CreateMaterialCmd {
+        name: "Gold".to_string(),
+    };
+    state.dispatch(&create_cmd).expect("create material");
+    assert_eq!(state.project.project.materials.len(), 2);
+    let gold_mat_id = state.project.project.materials[1].id;
+    assert_eq!(state.project.project.materials[1].name, "Gold");
+
+    // 2. SetMaterialPropertiesCmd atômico
+    let props_cmd = SetMaterialPropertiesCmd {
+        material: gold_mat_id,
+        roughness: Some(0.2),
+        metallic: Some(0.95),
+        emission_strength: Some(1.5),
+        profile: Some(ShaderProfile::Pbr),
+        ..Default::default()
+    };
+    state.dispatch(&props_cmd).expect("set material properties");
+    {
+        let gold = &state.project.project.materials[1];
+        assert_eq!(gold.roughness, 0.2);
+        assert_eq!(gold.metallic, 0.95);
+        assert_eq!(gold.emission_strength, 1.5);
+        assert_eq!(gold.profile, ShaderProfile::Pbr);
+    }
+
+    // 3. Teste NoChange quando nenhum valor muda
+    let res_no_change = state.dispatch(&props_cmd);
+    assert!(
+        matches!(res_no_change, Err(CommandError::NoChange(_))),
+        "Must return NoChange when values are identical"
+    );
+
+    // 4. Teste can_execute rejeita NaN / Inf
+    let bad_cmd = SetMaterialPropertiesCmd {
+        material: gold_mat_id,
+        roughness: Some(f32::NAN),
+        ..Default::default()
+    };
+    assert!(
+        bad_cmd.can_execute(&state.view()).is_err(),
+        "Must reject NaN values"
+    );
+
+    // 5. DuplicateMaterialCmd
+    let dup_cmd = DuplicateMaterialCmd {
+        material: gold_mat_id,
+    };
+    state.dispatch(&dup_cmd).expect("duplicate material");
+    assert_eq!(state.project.project.materials.len(), 3);
+    assert_eq!(state.project.project.materials[2].name, "Gold Copy");
+    assert_eq!(state.project.project.materials[2].metallic, 0.95);
+
+    // 6. Undo do Duplicate
+    assert!(state.undo(), "undo duplicate must succeed");
+    assert_eq!(state.project.project.materials.len(), 2);
+
+    // 7. Undo do SetMaterialProperties
+    assert!(state.undo(), "undo set properties must succeed");
+    {
+        let gold = &state.project.project.materials[1];
+        assert_ne!(gold.metallic, 0.95);
+    }
+
+    // 8. Redo do SetMaterialProperties
+    assert!(state.redo(), "redo set properties must succeed");
+    {
+        let gold = &state.project.project.materials[1];
+        assert_eq!(gold.metallic, 0.95);
+        assert_eq!(gold.roughness, 0.2);
+    }
+
+    // 9. AssignMaterialSlotCmd
+    let assign_cmd = AssignMaterialSlotCmd {
+        material_index: 1,
+        faces: None,
+    };
+    state.dispatch(&assign_cmd).expect("assign material slot");
+    assert_eq!(
+        state
+            .project
+            .assets
+            .get(state.project.active)
+            .and_then(|a| a.material_id),
+        Some(gold_mat_id)
+    );
+
+    // 10. Undo do AssignMaterialSlotCmd
+    assert!(state.undo(), "undo assign material slot must succeed");
+    assert_eq!(
+        state
+            .project
+            .assets
+            .get(state.project.active)
+            .and_then(|a| a.material_id),
+        Some(original_mat_id)
+    );
+
+    // 11. RemoveMaterialCmd
+    state
+        .dispatch(&RemoveMaterialCmd {
+            material: gold_mat_id,
+        })
+        .expect("remove material");
+    assert_eq!(state.project.project.materials.len(), 1);
+
+    // Não pode remover o último material
+    assert!(
+        state
+            .dispatch(&RemoveMaterialCmd {
+                material: original_mat_id,
+            })
+            .is_err(),
+        "Cannot remove last material"
+    );
+}
+
+#[test]
+fn test_solid_shape_builder_commands_and_undo_redo() {
+    let mut state = AppState::default();
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    state.project.assets[0].mesh = cube1.into();
+
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    state.project.assets.push(asset2);
+
+    let asset1_id = state.project.assets[0].id;
+    assert_eq!(state.project.assets.len(), 2);
+
+    let dispatcher = petunia_core::command::CommandDispatcher::canonical();
+    assert!(dispatcher.contains("model.shape_builder_solid"));
+    assert!(dispatcher.contains("solid.edit"));
+    assert!(dispatcher.contains("model.solid_unite"));
+    assert!(dispatcher.contains("model.solid_remove_overlap"));
+    assert!(dispatcher.contains("model.solid_extract_overlap"));
+
+    // 1. Validation: can_execute rejects missing or self operand
+    let cmd_no_op = petunia_core::SolidShapeEditCmd::unite();
+    assert!(
+        state.dispatch(&cmd_no_op).is_err(),
+        "missing operand must be rejected"
+    );
+
+    let cmd_self_op = petunia_core::SolidShapeEditCmd::unite_with_operand(asset1_id);
+    assert!(
+        state.dispatch(&cmd_self_op).is_err(),
+        "self operand must be rejected"
+    );
+
+    // 2. Extract Overlap: extracts shared volume into a 3rd asset
+    let initial_undo = state.project.undo.depth().0;
+    let cmd_extract = petunia_core::SolidShapeEditCmd::extract_overlap_with_operand(asset2_id);
+    state
+        .dispatch(&cmd_extract)
+        .expect("extract overlap should succeed");
+    assert_eq!(
+        state.project.assets.len(),
+        3,
+        "Extract should add a 3rd asset"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // Undo restores the 2 original assets
+    assert!(state.undo());
+    assert_eq!(state.project.assets.len(), 2);
+
+    // Redo re-extracts the 3rd asset
+    assert!(state.redo());
+    assert_eq!(state.project.assets.len(), 3);
+
+    // Return to 2 assets
+    assert!(state.undo());
+    assert_eq!(state.project.assets.len(), 2);
+
+    // 3. Remove Overlap: cuts overlap out of both cubes
+    let cmd_remove = petunia_core::SolidShapeEditCmd::remove_overlap_with_operand(asset2_id);
+    state
+        .dispatch(&cmd_remove)
+        .expect("remove overlap should succeed");
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // Both assets survive but have modified meshes (A - B and B - A)
+    assert_eq!(state.project.assets.len(), 2);
+    assert!(state.undo());
+    assert_eq!(state.project.undo.depth().0, initial_undo);
+
+    // 4. Solid Unite: merges all regions
+    let cmd_unite = petunia_core::SolidShapeEditCmd::unite_with_operand(asset2_id);
+    state
+        .dispatch(&cmd_unite)
+        .expect("solid unite should succeed");
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // Undo restores original state atomically
+    assert!(state.undo());
+    assert_eq!(state.project.undo.depth().0, initial_undo);
+    assert_eq!(state.project.assets.len(), 2);
+}
+
+#[test]
+fn test_solid_composition_commands_and_undo_redo() {
+    let mut state = AppState::default();
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    state.project.assets[0].mesh = cube1.into();
+    let base_id = state.project.assets[0].id;
+
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    state.project.assets.push(asset2);
+
+    let mut cube3 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube3.verts {
+        v.pos[1] += 1.0;
+    }
+    cube3.triangulate();
+    let asset3 = petunia_project::Asset::new("Cube3", cube3);
+    let asset3_id = asset3.id;
+    state.project.assets.push(asset3);
+
+    let dispatcher = petunia_core::command::CommandDispatcher::canonical();
+    assert!(dispatcher.contains("model.solid_composition_create"));
+    assert!(dispatcher.contains("solid.composition_create"));
+    assert!(dispatcher.contains("model.solid_composition_bake"));
+    assert!(dispatcher.contains("solid.bake"));
+    assert!(dispatcher.contains("model.solid_composition_toggle_step"));
+    assert!(dispatcher.contains("model.solid_composition_reorder_step"));
+
+    // 1. Validation: operands cannot be empty or contain base
+    let empty_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        Vec::new(),
+        petunia_core::SolidOperation::UniteAll,
+    );
+    assert!(
+        state.dispatch(&empty_cmd).is_err(),
+        "Empty operands must be rejected"
+    );
+
+    let self_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        vec![base_id],
+        petunia_core::SolidOperation::UniteAll,
+    );
+    assert!(
+        state.dispatch(&self_cmd).is_err(),
+        "Base as operand must be rejected"
+    );
+
+    // 2. Create composition with 2 operands
+    let initial_undo = state.project.undo.depth().0;
+    let create_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        vec![asset2_id, asset3_id],
+        petunia_core::SolidOperation::UniteAll,
+    );
+    state
+        .dispatch(&create_cmd)
+        .expect("Create solid composition should succeed");
+
+    assert!(
+        state.project.assets[0].is_composition(),
+        "Base asset must have composition recipe"
+    );
+    assert!(
+        !state.project.assets[1].visible,
+        "Secondary operand 1 must be hidden"
+    );
+    assert!(
+        !state.project.assets[2].visible,
+        "Secondary operand 2 must be hidden"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // Rejeição estrita de edição poligonal direta sem bake prévio ("Sem bake silencioso")
+    let subdivide_cmd = petunia_core::command::SubdivideSelectionCmd;
+    assert_eq!(
+        state.dispatch(&subdivide_cmd),
+        Err(CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+    let bevel_cmd = petunia_core::command::BevelCmd::default();
+    assert_eq!(
+        state.dispatch(&bevel_cmd),
+        Err(CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    let recipe = state.project.assets[0].composition.as_ref().unwrap();
+    assert_eq!(recipe.steps.len(), 2);
+    let step2_id = recipe.steps[1].id;
+
+    // 3. Toggle step (disable operand 3)
+    let toggle_cmd = petunia_core::ToggleSolidCompositionStepCmd::new(step2_id, false);
+    state
+        .dispatch(&toggle_cmd)
+        .expect("Toggle step should succeed");
+    assert_eq!(state.project.undo.depth().0, initial_undo + 2);
+    let recipe_after = state.project.assets[0].composition.as_ref().unwrap();
+    assert!(!recipe_after.steps[1].enabled);
+
+    // 4. Bake composition (converts to static mesh - "Sem bake silencioso")
+    let bake_cmd = petunia_core::BakeSolidCompositionCmd::new();
+    state
+        .dispatch(&bake_cmd)
+        .expect("Bake composition should succeed");
+    assert!(
+        !state.project.assets[0].is_composition(),
+        "Bake must consume the recipe and leave static mesh"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 3);
+
+    // Após bake explícito, edição poligonal direta não é mais bloqueada pelo guard de composição
+    assert_ne!(
+        state.dispatch(&subdivide_cmd),
+        Err(CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    // 5. Undo sequence
+    assert!(state.undo(), "Undo bake");
+    assert!(
+        state.project.assets[0].is_composition(),
+        "Undo must restore recipe"
+    );
+
+    assert!(state.undo(), "Undo toggle step");
+    let restored_recipe = state.project.assets[0].composition.as_ref().unwrap();
+    assert!(
+        restored_recipe.steps[1].enabled,
+        "Step 2 re-enabled by undo"
+    );
+
+    assert!(state.undo(), "Undo create composition");
+    assert!(
+        !state.project.assets[0].is_composition(),
+        "Undo must clear composition"
+    );
+    assert!(
+        state.project.assets[1].visible,
+        "Undo must restore operand 1 visibility"
+    );
+    assert!(
+        state.project.assets[2].visible,
+        "Undo must restore operand 2 visibility"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo);
+
+    // 6. Redo sequence
+    assert!(state.redo(), "Redo create composition");
+    assert!(state.project.assets[0].is_composition());
+}
+
+#[test]
+fn test_surface_construction_commands_and_undo_redo() {
+    let mut state = AppState::default();
+    let initial_undo = state.project.undo.depth().0;
+    let initial_faces = state.project.active_mesh().unwrap().faces.len();
+
+    // 1. AlignWorkplaneToFaceCmd validation
+    let out_of_bounds = petunia_core::AlignWorkplaneToFaceCmd::new(999);
+    assert_eq!(
+        state.dispatch(&out_of_bounds),
+        Err(CommandError::Execution(
+            "Face index out of bounds".to_string()
+        ))
+    );
+
+    let align_face_cmd = petunia_core::AlignWorkplaneToFaceCmd::new(4);
+    state
+        .dispatch(&align_face_cmd)
+        .expect("Align workplane to face 4 should succeed");
+    assert_eq!(
+        state.profile.workplane_kind,
+        petunia_core::state::WorkplaneKind::Face
+    );
+
+    // 2. AlignWorkplaneToSelectionCmd validation
+    state.selection.faces.clear();
+    let align_sel_cmd = petunia_core::AlignWorkplaneToSelectionCmd;
+    assert_eq!(
+        state.dispatch(&align_sel_cmd),
+        Err(CommandError::Execution(
+            "No face selected for workplane alignment".to_string()
+        ))
+    );
+
+    state.project.active_mesh_mut().unwrap().faces[4].selected = true;
+    state.sync_selection();
+    state
+        .dispatch(&align_sel_cmd)
+        .expect("Align workplane to selection should succeed");
+
+    // 3. ImprintProfileCmd with a contour carrying a hole onto the front face
+    let spline = SplineResource::from_polyline(
+        "OuterSquare",
+        &[
+            [-0.8, -0.8, 0.0],
+            [0.8, -0.8, 0.0],
+            [0.8, 0.8, 0.0],
+            [-0.8, 0.8, 0.0],
+        ],
+        true,
+    );
+    let spline_id = spline.id;
+    state.project.add_spline(spline).unwrap();
+
+    let mut profile = ProfileResource::new(
+        "AnnularProfile",
+        spline_id,
+        ProfileWorkplane {
+            origin: [0.0, 0.0, 1.0],
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        },
+    );
+    profile
+        .holes
+        .push(vec![[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]]);
+    let profile_id = profile.id;
+    state.project.add_profile(profile).unwrap();
+
+    let imprint_cmd = petunia_core::ImprintProfileCmd::new(profile_id);
+    state
+        .dispatch(&imprint_cmd)
+        .expect("Imprint profile on surface should succeed");
+
+    let faces_after_imprint = state.project.active_mesh().unwrap().faces.len();
+    assert!(
+        faces_after_imprint > initial_faces,
+        "Imprint must subdivide host face with annular region"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // 4. ContextualPushPullCmd on the embedded imprinted faces
+    let push_pull_cmd = petunia_core::ContextualPushPullCmd::new(0.5);
+    state
+        .dispatch(&push_pull_cmd)
+        .expect("Contextual push/pull on embedded imprinted face should succeed");
+
+    let mesh_after_push = state.project.active_mesh().unwrap();
+    assert!(
+        mesh_after_push
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.5).abs() < 1e-4)
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 2);
+
+    // 5. Curved/non-planar face rejection test ("superfícies curvas como extensão posterior")
+    let mut warped_mesh = petunia_mesh::Mesh::default();
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 1.0, 0.5)); // Z elevado, não-planar!
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 1.0, 0.0));
+    warped_mesh
+        .faces
+        .push(petunia_mesh::Face::new(vec![0, 1, 2, 3]));
+    let warped_asset = petunia_project::Asset::new("Warped", warped_mesh);
+    let warped_id = warped_asset.id;
+    state.project.assets.push(warped_asset);
+
+    let curved_cmd = petunia_core::AlignWorkplaneToFaceCmd::for_asset(warped_id, 0);
+    assert_eq!(
+        state.dispatch(&curved_cmd),
+        Err(CommandError::Execution(
+            "Face is curved or non-planar; curved surface construction is deferred to a subsequent extension".to_string()
+        ))
+    );
+
+    // 6. Undo/Redo sequence
+    assert!(state.undo(), "Undo contextual push/pull");
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(state.undo(), "Undo imprint profile");
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        initial_faces
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo);
+
+    assert!(state.redo(), "Redo imprint profile");
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(state.redo(), "Redo contextual push/pull");
+    assert!(
+        state
+            .project
+            .active_mesh()
+            .unwrap()
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.5).abs() < 1e-4)
+    );
+}
+
+#[test]
+fn test_modeling_feedback_and_ghost_invariants_h28() {
+    use petunia_core::modal::ModalKind;
+    use petunia_core::{Mesh, SelectMode, SelectionDomain};
+    use uuid::Uuid;
+
+    let mut state = petunia_core::AppState::default();
+    let cube = Mesh::cube(2.0);
+    let original_cube = cube.clone();
+    state.project.add("Target Cube", cube);
+    let cube_id = state.project.active().unwrap().id;
+
+    state.select_mode = SelectMode::Face;
+    state.selection_domain = SelectionDomain::Face;
+    // Seleciona a face superior (normal +Z)
+    if let Some(mesh) = state.project.active_mesh_mut() {
+        mesh.deselect_all();
+        mesh.faces[4].selected = true;
+    }
+
+    // --- MF-001: Extrude com preview de fonte fixa, distância signed e ghost mesh ---
+    state.begin_modal(ModalKind::Extrude).unwrap();
+    state
+        .update_modal(glam::Vec3::new(0.0, 0.0, 1.75), 1.75)
+        .unwrap();
+
+    let extrude_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Extrude");
+    assert_eq!(extrude_fb.operation_name, "Extrude");
+    assert!(extrude_fb.can_commit);
+    assert!(!extrude_fb.is_stale);
+    assert_eq!(extrude_fb.affected_region.faces_count, 1);
+    assert_eq!(extrude_fb.affected_region.vertices_count, 4);
+    assert!(extrude_fb.ghost_mesh.is_some());
+    let ghost = extrude_fb.ghost_mesh.as_ref().unwrap();
+    assert_eq!(ghost.verts.len(), original_cube.verts.len());
+    assert_eq!(ghost.faces.len(), original_cube.faces.len());
+    assert!(extrude_fb.hud_summary().contains("Extrude"));
+    assert!(extrude_fb.hud_summary().contains("1.750 m"));
+    assert!(extrude_fb.hud_summary().contains("[VALID]"));
+
+    state.cancel_modal();
+
+    // --- MF-002: Inset com limites de parâmetros e warnings de colapso geométrico ---
+    state.begin_modal(ModalKind::Inset).unwrap();
+    state.update_modal(glam::Vec3::ZERO, 0.90).unwrap();
+
+    let inset_warning_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Inset");
+    assert!(inset_warning_fb.has_warnings());
+    assert!(inset_warning_fb.can_commit);
+    assert!(
+        inset_warning_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "APPROACHING_LIMIT")
+    );
+    assert!(inset_warning_fb.hud_summary().contains("[WARNING]"));
+
+    // Excede o limite seguro (> 1.0)
+    state.update_modal(glam::Vec3::ZERO, 1.25).unwrap();
+    let inset_error_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Inset excedido");
+    assert!(inset_error_fb.has_errors());
+    assert!(!inset_error_fb.can_commit);
+    assert!(
+        inset_error_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "EXCEEDED_LIMIT")
+    );
+    assert!(inset_error_fb.hud_summary().contains("[BLOCKED]"));
+
+    state.cancel_modal();
+
+    // --- MF-002 / MF-006: Scale negativo com aviso de inversão de normais ---
+    state.begin_modal(ModalKind::Scale).unwrap();
+    state.update_modal(glam::Vec3::splat(-1.0), -1.0).unwrap();
+    let scale_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Scale");
+    assert!(scale_fb.has_warnings());
+    assert!(scale_fb.warnings.iter().any(|w| w.code == "NEGATIVE_SCALE"));
+    state.cancel_modal();
+
+    // --- MF-001 / MF-007: Stale revision guard impede commit de fonte defasada ---
+    state.begin_modal(ModalKind::Move).unwrap();
+    state
+        .update_modal(glam::Vec3::new(1.0, 0.0, 0.0), 1.0)
+        .unwrap();
+    let move_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Move");
+    assert!(!move_fb.is_stale);
+    assert!(move_fb.can_commit);
+
+    // Simula mutação concorrente/externa no documento durante o gesto
+    state.project.project.bump_topology();
+    let stale_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback após mutação externa");
+    assert!(stale_fb.is_stale);
+    assert!(!stale_fb.can_commit);
+    assert!(stale_fb.hud_summary().contains("[STALE]"));
+
+    // O commit modal deve recusar e restaurar a fonte com segurança
+    assert!(!state.commit_modal());
+    assert!(state.modal.is_none());
+
+    // --- MF-003 / MF-004: Preflight de Boolean e Mirror ---
+    state.project.add("Operand B", Mesh::cube(1.0));
+    let box_b_id = state.project.active().unwrap().id;
+
+    let self_bool_fb = state.preflight_boolean_feedback(cube_id, cube_id);
+    assert!(!self_bool_fb.can_commit);
+    assert!(
+        self_bool_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "SELF_BOOLEAN")
+    );
+
+    let valid_bool_fb = state.preflight_boolean_feedback(cube_id, box_b_id);
+    assert!(valid_bool_fb.can_commit);
+    assert_eq!(valid_bool_fb.operand_a, Some(cube_id));
+    assert_eq!(valid_bool_fb.operand_b, Some(box_b_id));
+
+    let mirror_fb = state.preflight_mirror_feedback(cube_id, [1.0, 0.0, 0.0], 2.5);
+    assert!(mirror_fb.can_commit);
+    assert_eq!(mirror_fb.dimensions[0].value, 2.5);
+    assert_eq!(mirror_fb.plane, Some([1.0, 0.0, 0.0, 2.5]));
+
+    // --- MF-005: Preflight de Sculpt ---
+    let sculpt_fb = state.preflight_sculpt_feedback(0.5, 0.75, [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]);
+    assert!(sculpt_fb.can_commit);
+    assert_eq!(sculpt_fb.dimensions[0].value, 0.5);
+    assert_eq!(sculpt_fb.dimensions[1].value, 0.75);
+
+    // --- MF-007: Preflight de Remesh com Skin Bind ---
+    let remesh_clean = state.preflight_remesh_skin_feedback(cube_id);
+    assert!(remesh_clean.can_commit);
+    assert!(!remesh_clean.has_warnings());
+
+    // Atribui skeleton/skin
+    let asset = state
+        .project
+        .project
+        .assets
+        .iter_mut()
+        .find(|a| a.id == cube_id)
+        .unwrap();
+    asset.skeleton_id = Some(Uuid::new_v4());
+
+    let remesh_skin = state.preflight_remesh_skin_feedback(cube_id);
+    assert!(remesh_skin.has_warnings());
+    assert!(
+        remesh_skin
+            .warnings
+            .iter()
+            .any(|w| w.code == "RIG_BIND_LOSS")
+    );
+
+    // --- MF-007 / MF-T08: Preflight de Seleção Parcial / Incompatível ---
+    if let Some(mesh) = state.project.active_mesh_mut() {
+        mesh.deselect_all();
+        mesh.verts[0].selected = true; // apenas vértice selecionado
+    }
+    let partial_fb = state.preflight_partial_selection_feedback("Face");
+    assert!(!partial_fb.can_commit);
+    assert!(
+        partial_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "INCOMPATIBLE_SELECTION")
+    );
+    assert!(!partial_fb.partial_selection.unwrap().is_compatible);
+}
+
+#[test]
+fn test_spatial_dimension_and_comparison_invariants_h29() {
+    let mut state = AppState::default();
+    let cube_id = state.project.active().unwrap().id;
+
+    // 1. Invariante VSP-003: Volume Frame World vs ObjectLocal sobre objeto rotacionado
+    state.project.active_mut().unwrap().transform = petunia_project::ObjectTransform::from_trs(
+        glam::Vec3::ZERO,
+        glam::Quat::from_rotation_z(std::f32::consts::PI * 0.25),
+        glam::Vec3::ONE,
+    );
+
+    let vf_world = state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::World,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame World");
+    let vf_local = state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame ObjectLocal");
+
+    assert!(
+        vf_world.volume > vf_local.volume + 5.0,
+        "World AABB cresce com a rotação em relação à OBB local"
+    );
+    assert!(
+        (vf_local.volume - 8.0).abs() < 1e-3,
+        "Volume local do cubo 2x2x2 deve ser 8.0"
+    );
+
+    // 2. Formatação dimensional sem inventar unidades em cenas genéricas
+    assert_eq!(vf_local.formatted_dimensions(), "2.000 × 2.000 × 2.000");
+
+    // 3. Dispatch de comando model.scale_to_dimension com Undo/Redo
+    let exec_res = state.scale_to_dimension(
+        cube_id,
+        0, // X
+        5.0,
+        false,
+        petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+    );
+    assert!(exec_res.is_ok());
+
+    let vf_scaled = state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .unwrap();
+    assert!((vf_scaled.size[0] - 5.0).abs() < 1e-3);
+
+    // 4. Consultas espaciais através da API de AppState
+    let query_dist = state
+        .query_spatial(
+            petunia_core::spatial_query::SpatialQueryKind::EuclideanDistance {
+                from: [0.0, 0.0, 0.0],
+                to: [0.0, 3.0, 4.0],
+            },
+        )
+        .expect("Query distância");
+    assert!((query_dist.distance - 5.0).abs() < 1e-4);
+
+    // 5. Invariante VSP-004: Companion View desacoplada
+    assert!(!state.is_companion_view_open());
+    state.open_companion_view();
+    assert!(state.is_companion_view_open());
+    assert!(state.companion_view_state().is_orthographic);
+    state.close_companion_view();
+    assert!(!state.is_companion_view_open());
+
+    // 6. Invariante VSP-004: X-Ray vs Select Through
+    state.set_show_xray(true);
+    assert!(state.show_xray);
+    assert!(
+        state.select_policy != petunia_core::SelectPolicy::Through,
+        "Ativar X-Ray visual nunca altera Select Through"
+    );
+    state.set_select_through(true);
+    state.set_show_xray(false);
+    assert!(!state.show_xray);
+    assert!(
+        state.select_policy == petunia_core::SelectPolicy::Through,
+        "Desativar X-Ray nunca altera Select Through"
+    );
 }

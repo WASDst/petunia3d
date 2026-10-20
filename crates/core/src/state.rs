@@ -1,7 +1,9 @@
 //! Estado global do editor (vive em `core`, sem conhecer backends).
 //! Renderers/módulos/UI operam sobre este estado + eventos.
 
+use crate::command::CommandError;
 use crate::context::{CommandContext, EditorView};
+use petunia_mesh::SolidOperation;
 use serde::{Deserialize, Serialize};
 
 use glam::Vec3;
@@ -12,7 +14,13 @@ use uuid::Uuid;
 
 use super::camera::Camera;
 use super::events::{AppEvent, EventBus};
-use super::selection::{SelectMode, Selection, SelectionDomain, Workspace};
+use super::selection::{
+    ActiveElement, SelectMode, Selection, SelectionDomain, SelectionFilters, SelectionRef,
+    Workspace,
+};
+
+/// Duração da transição de enquadramento (F / Home), sem movimento reduzido.
+pub const CAMERA_FRAME_SECONDS: f32 = 0.25;
 
 /// Modo de sombreamento da viewport.
 ///
@@ -566,17 +574,6 @@ pub struct ToolState {
     pub pending_modal: Option<crate::modal::ModalKind>,
     pub pointer_session: Option<crate::modal::PointerSession>,
     pub cut_session: Option<crate::cutting_session::CutSession>,
-    /// Operando B das operações booleanas (Fuse/Cut/Intersect): o outro ativo
-    /// escolhido pelo usuário, distinto do ativo atual (A).
-    pub boolean_operand: Option<uuid::Uuid>,
-    /// Modificador **Keep Parts**: mantém o operando na cena depois da operação,
-    /// em vez de consumi-lo.
-    pub boolean_keep_parts: bool,
-    /// Cleanup seguro do resultado (cap. 04): regiões coplanares viram quads,
-    /// n-gons e faixas. Desligado, mantém a triangulação crua do kernel.
-    pub boolean_cleanup: bool,
-    /// Relatório da última operação booleana (para status e testes).
-    pub boolean_report: Option<petunia_mesh::boolean_cleanup::CleanupReport>,
     pub mesh_preview: Option<crate::mesh_preview::MeshPreview>,
     pub paint_color: [f32; 3],
     pub paint_radius: f32,
@@ -619,6 +616,9 @@ pub struct ToolState {
     pub transform_rotation: [f32; 3],
     pub transform_scale: f32,
     pub extrude_dist: f32,
+    /// Modo da extrusão (C8): região, faces individuais ou ao longo das
+    /// normais de cada face.
+    pub extrude_mode: petunia_mesh::ExtrudeMode,
     /// Distância do Inset em unidades de mundo (não fator relativo).
     pub inset_distance: f32,
     /// Region (padrão) ou Individual.
@@ -644,6 +644,7 @@ pub struct ToolState {
     pub profile: ProfileState,
     /// Seleção UV (cantos, modo e Sync explícito) — website/docs/07-uv.
     pub uv_selection: crate::UvSelectionState,
+    pub uv_transform: Option<crate::UvTransformSession>,
     pub selected_annotation: Option<uuid::Uuid>,
     pub selected_measurement: Option<uuid::Uuid>,
     pub active_measurement: Option<MeasurementItem>,
@@ -653,6 +654,12 @@ pub struct ToolState {
     pub tool_activation: ToolActivation,
     /// Componente sob o cursor (preselection).
     pub hover: HoverTarget,
+    /// Ferramenta de origem antes de uma ativação temporária de transformação (G/R/S),
+    /// restaurada deterministicamente após commit ou cancel (H11).
+    pub temporary_modal_origin_tool: Option<String>,
+    /// Ferramenta de origem antes de uma ativação temporária do picker/eyedropper (Alt durante Paint),
+    /// restaurada deterministicamente após amostragem ou cancelamento (H16).
+    pub temporary_paint_origin_tool: Option<String>,
 }
 
 impl Default for ToolState {
@@ -670,10 +677,6 @@ impl ToolState {
             pending_modal: None,
             pointer_session: None,
             cut_session: None,
-            boolean_operand: None,
-            boolean_keep_parts: false,
-            boolean_cleanup: true,
-            boolean_report: None,
             mesh_preview: None,
             paint_color: [1.0, 0.2, 0.2],
             paint_radius: 0.8,
@@ -708,6 +711,7 @@ impl ToolState {
             transform_rotation: [0.0; 3],
             transform_scale: 1.0,
             extrude_dist: 0.5,
+            extrude_mode: petunia_mesh::ExtrudeMode::Region,
             inset_distance: 0.1,
             inset_mode: petunia_mesh::InsetMode::Region,
             bevel_amount: 0.15,
@@ -732,11 +736,61 @@ impl ToolState {
                 ..Default::default()
             },
             uv_selection: crate::UvSelectionState::default(),
+            uv_transform: None,
             selected_annotation: None,
             selected_measurement: None,
             active_measurement: None,
             active_annotation: None,
+            temporary_modal_origin_tool: None,
+            temporary_paint_origin_tool: None,
         }
+    }
+
+    /// Inicia uma transformação temporária guardando a ferramenta de origem (H11).
+    pub fn begin_temporary_transform(&mut self, target_tool: &str) {
+        if self.temporary_modal_origin_tool.is_none() {
+            self.temporary_modal_origin_tool = Some(self.active_tool.clone());
+        }
+        self.active_tool = target_tool.to_string();
+    }
+
+    /// Restaura a ferramenta de origem se uma transformação temporária estava ativa (H11).
+    pub fn restore_origin_tool(&mut self) -> Option<String> {
+        if let Some(origin) = self.temporary_modal_origin_tool.take() {
+            self.active_tool = origin.clone();
+            Some(origin)
+        } else {
+            None
+        }
+    }
+
+    /// Ferramenta de origem antes da transformação temporária, se ativa (H11).
+    pub fn temporary_modal_origin_tool(&self) -> Option<&str> {
+        self.temporary_modal_origin_tool.as_deref()
+    }
+
+    /// Inicia a seleção temporária do conta-gotas/picker de cor no Paint (H16).
+    pub fn begin_temporary_picker(&mut self) {
+        if self.temporary_paint_origin_tool.is_none() {
+            self.temporary_paint_origin_tool = Some(self.active_tool.clone());
+        }
+        self.active_tool = "picker".to_string();
+    }
+
+    /// Conclui ou cancela a amostragem do picker e restaura deterministicamente
+    /// a ferramenta Paint anterior sem criar passos de Undo (H16).
+    pub fn finish_picker_sampling(&mut self) -> Option<String> {
+        if let Some(origin) = self.temporary_paint_origin_tool.take() {
+            self.active_tool = origin.clone();
+            Some(origin)
+        } else {
+            None
+        }
+    }
+
+    /// Ferramenta de origem antes da amostragem do picker temporário (H16).
+    pub fn temporary_paint_origin_tool(&self) -> Option<&str> {
+        self.temporary_paint_origin_tool.as_deref()
     }
 
     pub fn active_tool_info(&self) -> ActiveTool {
@@ -758,6 +812,10 @@ impl ToolState {
             ActiveToolSessionKind::Pointer
         } else if self.cut_session.is_some() {
             ActiveToolSessionKind::Cut
+        } else if self.uv_transform.is_some() {
+            ActiveToolSessionKind::UvTransform
+        } else if self.paint_stroke.is_some() {
+            ActiveToolSessionKind::PaintStroke
         } else {
             ActiveToolSessionKind::None
         }
@@ -766,6 +824,85 @@ impl ToolState {
     pub fn is_session_active(&self) -> bool {
         self.active_session_kind() != ActiveToolSessionKind::None
     }
+
+    /// Descarta qualquer sessão de ferramenta ativa sem alterar configurações
+    /// persistentes nem histórico de Undo (A06).
+    pub fn cancel_active_session(&mut self) -> bool {
+        let had_session = self.is_session_active();
+        self.modal = None;
+        self.pending_modal = None;
+        self.pointer_session = None;
+        self.cut_session = None;
+        self.uv_transform = None;
+        self.paint_stroke = None;
+        self.mesh_preview = None;
+        had_session
+    }
+
+    /// Captura as configurações persistentes atuais das ferramentas (A06).
+    pub fn settings_snapshot(&self) -> ToolSettingsSnapshot {
+        ToolSettingsSnapshot {
+            extrude_dist: self.extrude_dist,
+            extrude_mode: self.extrude_mode,
+            inset_distance: self.inset_distance,
+            inset_mode: self.inset_mode,
+            bevel_amount: self.bevel_amount,
+            bevel_segments: self.bevel_segments,
+            bevel_clamp_overlap: self.bevel_clamp_overlap,
+            paint_color: self.paint_color,
+            paint_radius: self.paint_radius,
+            paint_strength: self.paint_strength,
+            brush_hardness: self.brush_hardness,
+            brush_flow: self.brush_flow,
+            brush_spacing: self.brush_spacing,
+            push_dist: self.push_dist,
+            merge_dist: self.merge_dist,
+            tool_activation: self.tool_activation,
+        }
+    }
+
+    /// Restaura as configurações persistentes das ferramentas (A06).
+    pub fn restore_settings(&mut self, settings: &ToolSettingsSnapshot) {
+        self.extrude_dist = settings.extrude_dist;
+        self.extrude_mode = settings.extrude_mode;
+        self.inset_distance = settings.inset_distance;
+        self.inset_mode = settings.inset_mode;
+        self.bevel_amount = settings.bevel_amount;
+        self.bevel_segments = settings.bevel_segments;
+        self.bevel_clamp_overlap = settings.bevel_clamp_overlap;
+        self.paint_color = settings.paint_color;
+        self.paint_radius = settings.paint_radius;
+        self.paint_strength = settings.paint_strength;
+        self.brush_hardness = settings.brush_hardness;
+        self.brush_flow = settings.brush_flow;
+        self.brush_spacing = settings.brush_spacing;
+        self.push_dist = settings.push_dist;
+        self.merge_dist = settings.merge_dist;
+        self.tool_activation = settings.tool_activation;
+    }
+}
+
+/// Instantâneo das configurações persistentes das ferramentas (A06).
+/// Isola parâmetros persistentes de qualquer sessão de ferramenta efêmera.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolSettingsSnapshot {
+    pub extrude_dist: f32,
+    /// Modo da extrusão (C8), lembrado entre sessões.
+    pub extrude_mode: petunia_mesh::ExtrudeMode,
+    pub inset_distance: f32,
+    pub inset_mode: petunia_mesh::InsetMode,
+    pub bevel_amount: f32,
+    pub bevel_segments: u32,
+    pub bevel_clamp_overlap: bool,
+    pub paint_color: [f32; 3],
+    pub paint_radius: f32,
+    pub paint_strength: f32,
+    pub brush_hardness: f32,
+    pub brush_flow: f32,
+    pub brush_spacing: f32,
+    pub push_dist: f32,
+    pub merge_dist: f32,
+    pub tool_activation: ToolActivation,
 }
 
 /// Ferramenta ativa e seu modo de ativação (website/docs/02-application/state-separation.md).
@@ -792,33 +929,164 @@ pub enum ActiveToolSessionKind {
     Modal,
     Pointer,
     Cut,
+    UvTransform,
+    PaintStroke,
 }
 
-/// Orientação de coordenadas para transformações (P3D-026).
+/// Orientação de coordenadas para transformações (P3D-026, SEL-003).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TransformOrientation {
     #[default]
     Global,
     Local,
+    Normal,
+    View,
+    Auto,
+    Custom,
 }
 
 impl TransformOrientation {
-    pub fn all() -> [Self; 2] {
-        [Self::Global, Self::Local]
+    pub fn all() -> [Self; 6] {
+        [
+            Self::Global,
+            Self::Local,
+            Self::Normal,
+            Self::View,
+            Self::Auto,
+            Self::Custom,
+        ]
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Global => "Global",
             Self::Local => "Local",
+            Self::Normal => "Normal",
+            Self::View => "View",
+            Self::Auto => "Auto",
+            Self::Custom => "Custom",
         }
+    }
+
+    /// Id estável para a GUI (B15). Auto e Custom não são oferecidos ainda.
+    pub fn id(&self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Local => "local",
+            Self::Normal => "normal",
+            Self::View => "view",
+            Self::Auto => "auto",
+            Self::Custom => "custom",
+        }
+    }
+
+    /// Orientações oferecidas no cabeçalho da vista (B15). O Cursor 3D não tem
+    /// rotação própria, então "Cursor" seria igual a Global e fica de fora.
+    pub fn offered() -> [Self; 4] {
+        [Self::Global, Self::Local, Self::Normal, Self::View]
+    }
+
+    pub fn from_offered_id(id: &str) -> Option<Self> {
+        Self::offered().into_iter().find(|o| o.id() == id)
     }
 
     pub fn key(&self) -> &'static str {
         match self {
             Self::Global => "orientation.global",
             Self::Local => "orientation.local",
+            Self::Normal => "orientation.normal",
+            Self::View => "orientation.view",
+            Self::Auto => "orientation.auto",
+            Self::Custom => "orientation.custom",
         }
+    }
+}
+
+/// Frame tridimensional de orientação para transformação (SEL-003).
+/// Define os três eixos ortonormais (X, Y, Z) em coordenadas de mundo.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TransformFrame {
+    pub x_axis: glam::Vec3,
+    pub y_axis: glam::Vec3,
+    pub z_axis: glam::Vec3,
+}
+
+impl Default for TransformFrame {
+    fn default() -> Self {
+        Self::global()
+    }
+}
+
+impl TransformFrame {
+    pub fn global() -> Self {
+        Self {
+            x_axis: glam::Vec3::X,
+            y_axis: glam::Vec3::Y,
+            z_axis: glam::Vec3::Z,
+        }
+    }
+
+    pub fn from_rotation(rotation: glam::Quat) -> Self {
+        Self {
+            x_axis: (rotation * glam::Vec3::X).normalize(),
+            y_axis: (rotation * glam::Vec3::Y).normalize(),
+            z_axis: (rotation * glam::Vec3::Z).normalize(),
+        }
+    }
+
+    pub fn from_z_axis(normal: glam::Vec3) -> Self {
+        let n = if normal.is_finite() && normal.length_squared() > 1e-8 {
+            normal.normalize()
+        } else {
+            glam::Vec3::Z
+        };
+        let tangent = n.any_orthonormal_vector();
+        let bitangent = n.cross(tangent).normalize();
+        Self {
+            x_axis: tangent,
+            y_axis: bitangent,
+            z_axis: n,
+        }
+    }
+
+    pub fn from_edge(p0: glam::Vec3, p1: glam::Vec3, up_hint: glam::Vec3) -> Self {
+        let delta = p1 - p0;
+        let tangent = if delta.is_finite() && delta.length_squared() > 1e-8 {
+            delta.normalize()
+        } else {
+            glam::Vec3::X
+        };
+        let normal = if up_hint.cross(tangent).length_squared() > 1e-6 {
+            up_hint.cross(tangent).cross(tangent).normalize()
+        } else {
+            tangent.any_orthonormal_vector()
+        };
+        let bitangent = tangent.cross(normal).normalize();
+        Self {
+            x_axis: tangent,
+            y_axis: bitangent,
+            z_axis: normal,
+        }
+    }
+
+    pub fn from_view(camera: &crate::Camera) -> Self {
+        Self {
+            x_axis: camera.right(),
+            y_axis: camera.up(),
+            z_axis: -camera.forward(),
+        }
+    }
+
+    pub fn axis(&self, index: usize) -> glam::Vec3 {
+        match index {
+            0 => self.x_axis,
+            1 => self.y_axis,
+            _ => self.z_axis,
+        }
+    }
+
+    pub fn plane_normal(&self, index: usize) -> glam::Vec3 {
+        self.axis(index)
     }
 }
 
@@ -864,21 +1132,65 @@ impl PivotPoint {
 /// Configurações do Grid 3D e guias axiais/isométricos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GridSettings {
+    /// Meia extensão da grade em metros (a grade cobre `-size..=size`).
     pub size: f32,
-    pub subdivisions: f32,
+    /// Lado de cada ladrilho em metros.
+    pub spacing: f32,
     pub opacity: f32,
     pub show_isometric_guide: bool,
     pub isometric_angle_deg: f32,
+    /// Eixos do mundo visíveis (X, Y, Z). O Y nasce oculto: a linha vertical
+    /// atravessa os objetos e polui a leitura (ADR-C16, B6).
+    pub axes: [bool; 3],
 }
 
 impl Default for GridSettings {
     fn default() -> Self {
         Self {
             size: 20.0,
-            subdivisions: 1.0,
-            opacity: 0.4,
+            spacing: 1.0,
+            opacity: 0.5,
             show_isometric_guide: false,
             isometric_angle_deg: 30.0,
+            axes: [true, false, true],
+        }
+    }
+}
+
+/// O que clique, caixa, laço, hover e snap alcançam (ADR-C16, B10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SelectPolicy {
+    /// Segue o que se vê: o Sólido respeita a oclusão; Raio-X e Wireframe
+    /// selecionam através (vê-se o componente de trás, alcança-se o de trás).
+    #[default]
+    Auto,
+    /// Só o visível, mesmo em Raio-X ou Wireframe.
+    VisibleOnly,
+    /// Através da malha, mesmo no Sólido.
+    Through,
+}
+
+impl SelectPolicy {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::VisibleOnly => "visible",
+            Self::Through => "through",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        [Self::Auto, Self::VisibleOnly, Self::Through]
+            .into_iter()
+            .find(|policy| policy.id() == id)
+    }
+
+    /// Efeito da política para um modo de exibição.
+    pub fn selects_through(self, show_xray: bool, shading: Shading) -> bool {
+        match self {
+            Self::Through => true,
+            Self::VisibleOnly => false,
+            Self::Auto => show_xray || shading == Shading::Wireframe,
         }
     }
 }
@@ -891,6 +1203,7 @@ pub struct ViewportSession {
     pub shading: Shading,
     pub textured: bool,
     pub cursor_3d: [f32; 3],
+    pub navigation_anchor: crate::camera::NavigationAnchor,
     pub locked_axes: [bool; 3],
     pub isolate_active: bool,
     pub isolate_prev_visibilities: Option<Vec<bool>>,
@@ -899,10 +1212,16 @@ pub struct ViewportSession {
     pub proportional_editing: bool,
     pub proportional_settings: crate::proportional::ProportionalSettings,
     pub transform_orientation: TransformOrientation,
+    pub custom_transform_frame: Option<TransformFrame>,
     pub pivot_point: PivotPoint,
+    /// Snapshot of an explicitly copied world-space transform center.
+    pub transform_center: Option<[f32; 3]>,
     pub edit_pivot: bool,
     pub show_overlays: bool,
     pub show_xray: bool,
+    /// Política de picking (B10). É estado próprio: ligar o Raio-X nunca a altera
+    /// (VSP-004); o efeito da política Automática é que segue o que se vê.
+    pub select_policy: SelectPolicy,
     pub xray_opacity: f32,
     pub show_triangulation: bool,
     pub show_nav_hud: bool,
@@ -929,6 +1248,7 @@ impl ViewportSession {
             shading: Shading::Solid,
             textured: false,
             cursor_3d: [0.0, 0.0, 0.0],
+            navigation_anchor: crate::camera::NavigationAnchor::default(),
             locked_axes: [false; 3],
             isolate_active: false,
             isolate_prev_visibilities: None,
@@ -937,10 +1257,13 @@ impl ViewportSession {
             proportional_editing: false,
             proportional_settings: crate::proportional::ProportionalSettings::default(),
             transform_orientation: TransformOrientation::Global,
+            custom_transform_frame: None,
             pivot_point: PivotPoint::MedianPoint,
+            transform_center: None,
             edit_pivot: false,
             show_overlays: true,
             show_xray: false,
+            select_policy: SelectPolicy::Auto,
             xray_opacity: 0.5,
             show_triangulation: false,
             show_nav_hud: true,
@@ -964,6 +1287,16 @@ impl From<&EditorSession> for ViewportSession {
 /// Gerenciador de sessões e configurações de ferramentas (website/docs/02-application/state-separation.md).
 pub type ToolSessionManager = ToolState;
 
+/// Estado de uma sessão do modo Editar pivô: serve para que Esc desfaça só o que
+/// a sessão fez e para devolver a ferramenta que estava ativa.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditPivotSession {
+    /// Profundidade do Undo quando a sessão começou.
+    pub undo_depth: usize,
+    /// Ferramenta ativa antes de a sessão ligar o Mover.
+    pub previous_tool: String,
+}
+
 /// 3. SESSÃO DO EDITOR: câmera, seleção, modos e viewport settings.
 pub struct EditorSession {
     /// Retângulo lógico da viewport e escala de pixels, informados pelo host.
@@ -979,18 +1312,37 @@ pub struct EditorSession {
     pub camera: Camera,
     pub camera_frame: Option<(Camera, Camera, f32)>,
     pub cursor_3d: [f32; 3],
+    pub navigation_anchor: crate::camera::NavigationAnchor,
     pub locked_axes: [bool; 3],
     pub isolate_active: bool,
     pub isolate_prev_visibilities: Option<Vec<bool>>,
+    /// Isolamento de pintura (C2): mantém os demais objetos visíveis em raio-X
+    /// em vez de escondê-los, para conservar contexto ao pintar.
+    pub paint_isolate_ghost: bool,
+    /// Raio-X anterior ao isolamento de pintura (restaurado ao desligar).
+    pub paint_isolate_prev_xray: Option<bool>,
+    /// Pedido de importação pendente (contador): o comando pede, o host
+    /// (interface) abre o diálogo. Comando programático nunca abre janela.
+    pub import_request: u64,
+    /// Filtro sugerido para o pedido de importação ("model", "obj", "gltf").
+    pub import_request_filter: String,
     pub snap_enabled: bool,
     pub snap_settings: crate::snap::SnapSettings,
     pub proportional_editing: bool,
     pub proportional_settings: crate::proportional::ProportionalSettings,
     pub transform_orientation: TransformOrientation,
+    pub custom_transform_frame: Option<TransformFrame>,
     pub pivot_point: PivotPoint,
+    /// Snapshot of an explicitly copied world-space transform center.
+    pub transform_center: Option<[f32; 3]>,
     pub edit_pivot: bool,
+    /// Sessão do modo Editar pivô em andamento (Enter confirma, Esc desfaz).
+    pub edit_pivot_session: Option<EditPivotSession>,
     pub show_overlays: bool,
     pub show_xray: bool,
+    /// Política de picking (B10). É estado próprio: ligar o Raio-X nunca a altera
+    /// (VSP-004); o efeito da política Automática é que segue o que se vê.
+    pub select_policy: SelectPolicy,
     /// Opacidade da geometria em X-Ray (0.1..=0.9). Ajustável pelo popover.
     pub xray_opacity: f32,
     pub show_triangulation: bool,
@@ -1012,6 +1364,14 @@ pub struct EditorSession {
     /// Instante (s) da reprodução das trilhas de variantes de decalque; `None`
     /// = parado (cada decalque mostra a variante escolhida). Não persistido.
     pub decal_time: Option<f32>,
+    /// Estado da Companion View secundária ortográfica desacoplada (VSP-004 / H29).
+    pub companion_view: crate::spatial_query::CompanionViewState,
+    /// Estado da seção transversal ativa (VSP-005 / H30).
+    pub active_section: Option<crate::section_analysis::SectionPlane>,
+    /// Perfil de assistência visual da viewport (VSP-001 / H33).
+    pub visual_assistance: crate::visual_assistance::VisualAssistanceProfile,
+    /// Configurações do modo Clay de visualização na viewport (VSP-002 / H33).
+    pub clay_settings: crate::visual_assistance::ClaySettings,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -1036,6 +1396,20 @@ impl Default for EditorSession {
 }
 
 impl EditorSession {
+    /// O picking atravessa a malha agora? (política + Raio-X/Wireframe atuais)
+    pub fn selects_through(&self) -> bool {
+        self.select_policy
+            .selects_through(self.show_xray, self.shading)
+    }
+
+    /// Pedido de importação para o host: o contador muda a cada pedido para
+    /// que a interface perceba "pedido novo" e abra o diálogo de arquivos.
+    /// O comando não abre janela — quem atende é a interface.
+    pub fn request_import(&mut self, filter: &str) {
+        self.import_request = self.import_request.wrapping_add(1);
+        self.import_request_filter = filter.to_string();
+    }
+
     pub fn new() -> Self {
         Self {
             viewport_rect: None,
@@ -1050,19 +1424,28 @@ impl EditorSession {
             camera: Camera::default(),
             camera_frame: None,
             cursor_3d: [0.0, 0.0, 0.0],
+            navigation_anchor: crate::camera::NavigationAnchor::default(),
             locked_axes: [false; 3],
             isolate_active: false,
             isolate_prev_visibilities: None,
+            paint_isolate_ghost: false,
+            paint_isolate_prev_xray: None,
+            import_request: 0,
+            import_request_filter: String::new(),
             // Snapping contextual por padrão (capítulo 01, "Smart Snap").
             snap_enabled: true,
             snap_settings: crate::snap::SnapSettings::default(),
             proportional_editing: false,
             proportional_settings: crate::proportional::ProportionalSettings::default(),
             transform_orientation: TransformOrientation::Global,
+            custom_transform_frame: None,
             pivot_point: PivotPoint::MedianPoint,
+            transform_center: None,
             edit_pivot: false,
+            edit_pivot_session: None,
             show_overlays: true,
             show_xray: false,
+            select_policy: SelectPolicy::Auto,
             xray_opacity: 0.42,
             show_triangulation: false,
             show_nav_hud: true,
@@ -1078,7 +1461,21 @@ impl EditorSession {
             last_primitive: None,
             animate: crate::animate_session::AnimateSession::default(),
             decal_time: None,
+            companion_view: crate::spatial_query::CompanionViewState::default(),
+            active_section: None,
+            visual_assistance: crate::visual_assistance::VisualAssistanceProfile::Assisted,
+            clay_settings: crate::visual_assistance::ClaySettings::default(),
         }
+    }
+
+    /// Explicit one-time copy. Moving the cursor afterwards does not alter this center.
+    pub fn copy_cursor_to_transform_center(&mut self) -> bool {
+        if !self.cursor_3d.iter().all(|v| v.is_finite()) {
+            return false;
+        }
+        self.transform_center = Some(self.cursor_3d);
+        self.pivot_point = PivotPoint::Cursor3D;
+        true
     }
 
     /// Visão derivada do estado de edição (P3D-015).
@@ -1137,7 +1534,12 @@ impl EditorSession {
     }
 
     pub fn sync_selection(&mut self, project: &Project, events: &mut EventBus) -> bool {
-        let mut sel = Selection::default();
+        let mut sel = Selection {
+            filters: self.selection.filters,
+            items: self.selection.items.clone(),
+            active_element: self.selection.active_element,
+            ..Default::default()
+        };
         if let Some(a) = project.assets.get(project.active) {
             sel.asset = Some(a.id);
             sel.assets = self
@@ -1167,6 +1569,70 @@ impl EditorSession {
                 .map(|(i, _)| i)
                 .collect();
             sel.edges = a.mesh.selected_edges.iter().copied().collect();
+
+            // Sincroniza items com as flags da malha do ativo e remove referências a assets inexistentes
+            sel.items.retain(|item| {
+                let obj_id = match item {
+                    SelectionRef::Object(id) => *id,
+                    SelectionRef::Vertex { object, .. } => *object,
+                    SelectionRef::Edge { object, .. } => *object,
+                    SelectionRef::Face { object, .. } => *object,
+                    SelectionRef::Shape { object, .. } => *object,
+                };
+                if !project.assets.iter().any(|asset| asset.id == obj_id) {
+                    return false;
+                }
+                match item {
+                    SelectionRef::Object(id) => sel.assets.contains(id),
+                    SelectionRef::Vertex { object, vertex } if *object == a.id => {
+                        sel.verts.contains(vertex)
+                    }
+                    SelectionRef::Edge { object, edge } if *object == a.id => {
+                        let k = if edge.0 < edge.1 {
+                            *edge
+                        } else {
+                            (edge.1, edge.0)
+                        };
+                        sel.edges.contains(&k)
+                    }
+                    SelectionRef::Face { object, face } if *object == a.id => {
+                        sel.faces.contains(face)
+                    }
+                    _ => true,
+                }
+            });
+            for &v in &sel.verts {
+                let r = SelectionRef::vertex(a.id, v);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            for &(e0, e1) in &sel.edges {
+                let r = SelectionRef::edge(a.id, e0, e1);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            for &f in &sel.faces {
+                let r = SelectionRef::face(a.id, f);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            for &obj_id in &sel.assets {
+                let r = SelectionRef::Object(obj_id);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            if sel.active_element.is_none()
+                || !sel
+                    .items
+                    .iter()
+                    .any(|i| sel.active_element.map(|ae| ae.item) == Some(*i))
+            {
+                sel.active_element = sel.items.last().copied().map(ActiveElement::new);
+            }
         }
         if self.selection == sel {
             return false;
@@ -1183,6 +1649,7 @@ impl EditorSession {
             shading: self.shading,
             textured: self.textured,
             cursor_3d: self.cursor_3d,
+            navigation_anchor: self.navigation_anchor,
             locked_axes: self.locked_axes,
             isolate_active: self.isolate_active,
             isolate_prev_visibilities: self.isolate_prev_visibilities.clone(),
@@ -1191,10 +1658,13 @@ impl EditorSession {
             proportional_editing: self.proportional_editing,
             proportional_settings: self.proportional_settings.clone(),
             transform_orientation: self.transform_orientation,
+            custom_transform_frame: self.custom_transform_frame,
             pivot_point: self.pivot_point,
+            transform_center: self.transform_center,
             edit_pivot: self.edit_pivot,
             show_overlays: self.show_overlays,
             show_xray: self.show_xray,
+            select_policy: self.select_policy,
             xray_opacity: self.xray_opacity,
             show_triangulation: self.show_triangulation,
             show_nav_hud: self.show_nav_hud,
@@ -1214,6 +1684,7 @@ impl EditorSession {
         self.shading = vs.shading;
         self.textured = vs.textured;
         self.cursor_3d = vs.cursor_3d;
+        self.navigation_anchor = vs.navigation_anchor;
         self.locked_axes = vs.locked_axes;
         self.isolate_active = vs.isolate_active;
         self.isolate_prev_visibilities = vs.isolate_prev_visibilities;
@@ -1222,10 +1693,13 @@ impl EditorSession {
         self.proportional_editing = vs.proportional_editing;
         self.proportional_settings = vs.proportional_settings;
         self.transform_orientation = vs.transform_orientation;
+        self.custom_transform_frame = vs.custom_transform_frame;
         self.pivot_point = vs.pivot_point;
+        self.transform_center = vs.transform_center;
         self.edit_pivot = vs.edit_pivot;
         self.show_overlays = vs.show_overlays;
         self.show_xray = vs.show_xray;
+        self.select_policy = vs.select_policy;
         self.xray_opacity = vs.xray_opacity;
         self.show_triangulation = vs.show_triangulation;
         self.show_nav_hud = vs.show_nav_hud;
@@ -1320,6 +1794,14 @@ pub struct UiState {
     pub multiselection_measure_tag: bool,
     pub selection_rgb: [u8; 3],
     pub selection_thickness: f32,
+    /// Comprimento das hastes dos gizmos (px lógicos, 48..=160).
+    pub gizmo_size: f32,
+    /// Espessura do traço dos gizmos (px lógicos, 1..=6).
+    pub gizmo_thickness: f32,
+    /// Alças do gizmo da ferramenta Selecionar: mover, girar, escalar (B11).
+    pub select_gizmo_handles: [bool; 3],
+    /// Opacidade do cubo de navegação (0,2..=1).
+    pub nav_cube_opacity: f32,
     pub inspector_detached: bool,
     /// Opções do diálogo de exportação (não pertencem ao documento).
     pub export_selected: Vec<Uuid>,
@@ -1433,6 +1915,10 @@ impl UiState {
             multiselection_measure_tag: true,
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
+            gizmo_size: 72.0,
+            gizmo_thickness: 2.0,
+            select_gizmo_handles: [true; 3],
+            nav_cube_opacity: 1.0,
             inspector_detached: false,
             export_selected: Vec::new(),
             export_gltf: true,
@@ -1519,20 +2005,17 @@ impl UiState {
     }
 
     /// Catálogo controlado de ações rápidas do Inspector MODEL.
-    pub const MODEL_QUICK_ACTION_CANDIDATES: [&'static str; 8] = [
+    pub const MODEL_QUICK_ACTION_CANDIDATES: [&'static str; 6] = [
         "model.subdivide",
-        "model.fuse",
-        "model.cut",
         "model.join",
-        "model.intersect",
         "model.merge",
         "model.slice",
         "model.loop_cut",
+        "model.knife",
     ];
 
     /// Conjunto padrão de ações rápidas, sem esconder capacidade essencial.
-    pub const MODEL_QUICK_ACTION_DEFAULTS: [&'static str; 4] =
-        ["model.subdivide", "model.fuse", "model.cut", "model.join"];
+    pub const MODEL_QUICK_ACTION_DEFAULTS: [&'static str; 2] = ["model.subdivide", "model.join"];
 
     /// Máximo de ações rápidas para preservar contexto em vez de volume.
     pub const MODEL_QUICK_ACTION_LIMIT: usize = 6;
@@ -2047,6 +2530,7 @@ impl AppState {
                 }
                 self.dispatch(&crate::command::ExtrudeSelectedCmd {
                     dist: self.tools.extrude_dist,
+                    mode: None,
                 })
             }
             "model.subdivide" => {
@@ -2134,6 +2618,14 @@ impl AppState {
         crate::command::CommandDispatcher::dispatch(self, cmd)
     }
 
+    /// Despacha um comando devolvendo o relatório DTO pós-commit com invalidações (A04).
+    pub fn dispatch_detailed(
+        &mut self,
+        cmd: &dyn crate::command::Command,
+    ) -> Result<crate::command::CommandExecutionReport, crate::command::CommandError> {
+        crate::command::CommandDispatcher::dispatch_detailed(self, cmd)
+    }
+
     /// Transação atômica (website/docs/13-extensions/lua-plugins-public-api.md,
     /// "Batch atômico"; website/docs/11-project/project-persistence.md, "Uma
     /// operação do usuário → uma transação"): tudo que `body` despachar vira
@@ -2166,6 +2658,38 @@ impl AppState {
             .get(id)
             .ok_or_else(|| crate::command::CommandError::UnknownCommand(id.to_string()))?;
         crate::command::CommandDispatcher::dispatch(self, cmd.as_ref())
+    }
+
+    /// Despacha um comando registrado por id devolvendo o relatório DTO pós-commit (A04).
+    pub fn dispatch_command_detailed(
+        &mut self,
+        id: &str,
+    ) -> Result<crate::command::CommandExecutionReport, crate::command::CommandError> {
+        let cmd = self
+            .commands
+            .get(id)
+            .ok_or_else(|| crate::command::CommandError::UnknownCommand(id.to_string()))?;
+        crate::command::CommandDispatcher::dispatch_detailed(self, cmd.as_ref())
+    }
+
+    /// Há alterações não salvas no projeto? (A única autoridade é o histórico).
+    pub fn is_dirty(&self) -> bool {
+        self.project.is_dirty()
+    }
+
+    /// Descarta a sessão ativa das ferramentas sem alterar histórico (A06).
+    pub fn cancel_active_tool_session(&mut self) -> bool {
+        self.session.tools.cancel_active_session()
+    }
+
+    /// Captura as configurações persistentes das ferramentas (A06).
+    pub fn tool_settings_snapshot(&self) -> ToolSettingsSnapshot {
+        self.session.tools.settings_snapshot()
+    }
+
+    /// Restaura as configurações persistentes das ferramentas (A06).
+    pub fn restore_tool_settings(&mut self, settings: &ToolSettingsSnapshot) {
+        self.session.tools.restore_settings(settings);
     }
 
     /// Carrega um projeto do disco e atualiza a sessão e os projetos recentes.
@@ -2206,6 +2730,39 @@ impl AppState {
         self.render.mark_dirty();
     }
 
+    /// Avança o enquadramento agendado por `frame_selection`/`frame_all` em `dt`
+    /// segundos (tique do host). Com movimento reduzido salta direto ao alvo.
+    /// Só toca alvo, distância e meia-altura ortográfica: órbita e projeção feitas
+    /// durante a transição são preservadas. `true` enquanto houver transição
+    /// (pede redesenho); `dt` não finito ou negativo não avança o relógio.
+    pub fn advance_camera_frame(&mut self, dt: f32) -> bool {
+        let Some((start, goal, elapsed)) = self.camera_frame.take() else {
+            return false;
+        };
+        let dt = if dt.is_finite() {
+            dt.clamp(0.0, 0.1)
+        } else {
+            0.0
+        };
+        let elapsed = elapsed + dt;
+        let t = if self.ui.reduced_motion {
+            1.0
+        } else {
+            (elapsed / CAMERA_FRAME_SECONDS).min(1.0)
+        };
+        let eased = t * t * (3.0 - 2.0 * t);
+        self.camera.target = start.target.lerp(goal.target, eased);
+        self.camera.distance = start.distance + (goal.distance - start.distance) * eased;
+        self.camera.ortho_half_h =
+            start.ortho_half_h + (goal.ortho_half_h - start.ortho_half_h) * eased;
+        self.camera.far = self.camera.far.max(goal.far);
+        if t < 1.0 {
+            self.camera_frame = Some((start, goal, elapsed));
+        }
+        self.mark_dirty();
+        true
+    }
+
     pub fn consume_dirty(&mut self) -> bool {
         self.render.consume_dirty()
     }
@@ -2213,6 +2770,36 @@ impl AppState {
     /// Limite canônico do nome de ativo exibido no Outliner e nos painéis.
     pub const fn asset_name_max_len() -> usize {
         ASSET_NAME_MAX_LEN
+    }
+
+    /// Diagnóstico tipado do motivo de bloqueio ou restrição das ferramentas Paint (Task H17).
+    pub fn paint_diagnostic(&self) -> Option<crate::brush::PaintBlockedReason> {
+        use crate::brush::PaintBlockedReason;
+        let Some(asset) = self.project.active() else {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        };
+        if asset.mesh.verts.is_empty() {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        }
+        if asset.mesh.faces.is_empty() || asset.mesh.faces.iter().all(|f| f.uv.is_empty()) {
+            return Some(PaintBlockedReason::MissingUvMap);
+        }
+        if let Some(stack) = &asset.paint_stack
+            && stack
+                .layers
+                .get(stack.active_layer)
+                .map(|l| l.locked)
+                .unwrap_or(false)
+        {
+            return Some(PaintBlockedReason::LayerLocked);
+        }
+        if self.tools.paint_isolate_selection && self.selection.faces.is_empty() {
+            return Some(PaintBlockedReason::MaskBlocksEverything);
+        }
+        if self.tools.active_tool == "clone" && self.tools.clone_source.is_none() {
+            return Some(PaintBlockedReason::MissingCloneSource);
+        }
+        None
     }
 }
 
@@ -2224,16 +2811,12 @@ impl CommandContext<'_> {
     /// Inicia uma criação com transação única de undo (Wave 8 — §10).
     ///
     /// Uma sessão anterior válida é confirmada silenciosamente (malha mantida).
-    /// Inicia uma criação com transação única de undo (Wave 8 — §10).
-    ///
-    /// Uma sessão anterior válida é confirmada silenciosamente (malha mantida).
     pub fn begin_primitive(
         &mut self,
         kind: crate::command::PrimitiveKind,
         name: Option<String>,
     ) -> bool {
         use crate::primitive_session::{PrimitiveDescriptor, PrimitiveDescriptorExt};
-        self.finalize_primitive_session();
         let descriptor = PrimitiveDescriptor::default_for(kind);
         self.begin_primitive_with(descriptor, name)
     }
@@ -2245,30 +2828,42 @@ impl CommandContext<'_> {
         name: Option<String>,
     ) -> bool {
         use crate::primitive_session::PrimitiveDescriptorExt;
+        // Validate before changing selection, the current creation session or Undo.
+        let mesh = match crate::primitive_session::build_primitive(descriptor) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error);
+                return false;
+            }
+        };
+        let cursor = Vec3::from(self.editor.cursor_3d);
+        if !cursor.is_finite()
+            || mesh.verts.iter().any(|v| !(cursor + v.vec()).is_finite())
+            || self.editor.tools.modal.is_some()
+            || self.editor.tools.uv_transform.is_some()
+        {
+            self.set_status("Cannot create primitive: invalid cursor or active transform");
+            return false;
+        }
         self.set_selection_domain(SelectionDomain::Object);
         self.finalize_primitive_session();
         let original_selection = self.editor.selection.clone();
-        let cursor_offset = self.editor.cursor_3d;
         let asset_name = name.unwrap_or_else(|| descriptor.kind().default_name().to_string());
         let undo_label = format!("add primitive: {asset_name}");
         self.checkpoint(&undo_label);
-        let mut mesh = descriptor.build();
-        for v in &mut mesh.verts {
-            v.pos[0] += cursor_offset[0];
-            v.pos[1] += cursor_offset[1];
-            v.pos[2] += cursor_offset[2];
-        }
         self.document.add(&asset_name, mesh);
         let Some(asset) = self.document.assets.last_mut() else {
             return false;
         };
         asset.parametric = Some(descriptor);
-        asset.origin = Some(cursor_offset);
+        asset.set_object_transform(petunia_project::ObjectTransform {
+            translation: cursor.to_array(),
+            ..Default::default()
+        });
         let asset_id = asset.id;
         self.editor.primitive_session = Some(crate::primitive_session::PrimitiveCreationSession {
             asset_id,
             descriptor,
-            cursor_offset,
             undo_label,
             original_selection,
         });
@@ -2287,20 +2882,23 @@ impl CommandContext<'_> {
             self.editor.primitive_session = None;
             return false;
         }
-        let (asset_id, cursor_offset) = match &self.editor.primitive_session {
-            Some(session) => (session.asset_id, session.cursor_offset),
-            None => return false,
-        };
-        let Some(asset) = self.document.assets.iter_mut().find(|a| a.id == asset_id) else {
-            self.editor.primitive_session = None;
+        if self.editor.tools.modal.is_some() || self.editor.tools.uv_transform.is_some() {
+            self.set_status("Finish the active transform before editing primitive parameters");
+            return false;
+        }
+        let Some(asset_id) = self.editor.primitive_session.as_ref().map(|s| s.asset_id) else {
             return false;
         };
-        let mut mesh = descriptor.build();
-        for v in &mut mesh.verts {
-            v.pos[0] += cursor_offset[0];
-            v.pos[1] += cursor_offset[1];
-            v.pos[2] += cursor_offset[2];
-        }
+        let Some(asset) = self.document.assets.iter_mut().find(|a| a.id == asset_id) else {
+            return false;
+        };
+        let mesh = match crate::primitive_session::regenerate_primitive(asset, descriptor) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error);
+                return false;
+            }
+        };
         asset.mesh = mesh.into();
         asset.parametric = Some(descriptor);
         if let Some(session) = self.editor.primitive_session.as_mut() {
@@ -2339,18 +2937,6 @@ impl CommandContext<'_> {
     ///
     /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
     /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
-    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
-    ///
-    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
-    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
-    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
-    ///
-    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
-    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
-    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
-    ///
-    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
-    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
     pub fn update_active_primitive(
         &mut self,
         descriptor: crate::primitive_session::PrimitiveDescriptor,
@@ -2360,30 +2946,24 @@ impl CommandContext<'_> {
             return self.update_primitive(descriptor);
         }
 
-        let Some(asset) = self.document.active_mut() else {
-            return false;
-        };
-        if !asset.is_parametric() {
+        if self.editor.tools.modal.is_some() || self.editor.tools.uv_transform.is_some() {
+            self.set_status("Finish the active transform before editing primitive parameters");
             return false;
         }
-
-        let origin = asset.origin.unwrap_or_else(|| {
-            let c = asset.mesh.center();
-            [c.x, c.y, c.z]
-        });
-
+        let Some(asset) = self.document.active() else {
+            return false;
+        };
+        let mesh = match crate::primitive_session::regenerate_primitive(asset, descriptor) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error);
+                return false;
+            }
+        };
         if create_checkpoint {
             let label = format!("edit primitive: {}", descriptor.kind_name());
             self.checkpoint(&label);
         }
-
-        let mut mesh = descriptor.build();
-        for v in &mut mesh.verts {
-            v.pos[0] += origin[0];
-            v.pos[1] += origin[1];
-            v.pos[2] += origin[2];
-        }
-
         let Some(asset) = self.document.active_mut() else {
             return false;
         };
@@ -2410,6 +2990,10 @@ impl CommandContext<'_> {
 
     /// Cancela a criação: desfaz até o ponto de inserção e restaura a seleção.
     pub fn cancel_primitive(&mut self) -> bool {
+        if !self.primitive_session_valid() {
+            self.editor.primitive_session = None;
+            return false;
+        }
         let Some(session) = self.editor.primitive_session.take() else {
             return false;
         };
@@ -2523,6 +3107,7 @@ impl CommandContext<'_> {
     /// atual e restaura os do destino. Projeto, seleção e undo são
     /// compartilhados — só a composição do shell muda.
     pub fn switch_workspace(&mut self, next: Workspace) {
+        self.editor.tools.uv_transform = None;
         let prev = self.editor.workspace;
         if prev == next {
             return;
@@ -2597,6 +3182,10 @@ impl CommandContext<'_> {
     }
 
     pub fn undo(&mut self) -> bool {
+        if self.editor.tools.uv_transform.take().is_some() {
+            self.mark_dirty();
+            return true;
+        }
         if self.editor.tools.mesh_preview.is_some() {
             self.finish_mesh_preview(true);
             return true;
@@ -2617,6 +3206,9 @@ impl CommandContext<'_> {
             self.document.palette = prev.palette.clone();
             self.document.project = prev;
             self.document.sync_reference_mirror();
+            self.editor
+                .animate
+                .clear_stale_clip_selection(&self.document.project);
             self.sync_selection();
             self.editor.tools.uv_selection.clear();
             self.emit_project_changed(ProjectChanges::ALL);
@@ -2628,6 +3220,10 @@ impl CommandContext<'_> {
     }
 
     pub fn redo(&mut self) -> bool {
+        if self.editor.tools.uv_transform.take().is_some() {
+            self.mark_dirty();
+            return true;
+        }
         if self.editor.tools.mesh_preview.is_some() {
             self.finish_mesh_preview(true);
             return true;
@@ -2648,6 +3244,9 @@ impl CommandContext<'_> {
             self.document.palette = next.palette.clone();
             self.document.project = next;
             self.document.sync_reference_mirror();
+            self.editor
+                .animate
+                .clear_stale_clip_selection(&self.document.project);
             self.sync_selection();
             self.editor.tools.uv_selection.clear();
             self.emit_project_changed(ProjectChanges::ALL);
@@ -2703,6 +3302,12 @@ impl CommandContext<'_> {
             return;
         }
         self.document.project.bump_changes(changes);
+        // Operation Graph: reavalia só os objetos cujas dependências mudaram (hash).
+        if changes
+            .intersects(ProjectChanges::GEOMETRY | ProjectChanges::UVS | ProjectChanges::TRANSFORMS)
+        {
+            self.document.project.refresh_op_graph();
+        }
         // Objetos com modifiers: a malha avaliada fica em cache para que
         // render, picking e hover a emprestem sem reavaliar nem clonar.
         if changes
@@ -2837,12 +3442,11 @@ impl CommandContext<'_> {
         if self.modal.is_some() || self.mesh_preview.is_some() || self.paint_stroke.is_some() {
             return;
         }
-        let Some(index) = index.filter(|&i| {
-            self.document
-                .assets
-                .get(i)
-                .is_some_and(|a| a.visible && !a.locked)
-        }) else {
+        // Oculto não é bloqueado: o objeto continua selecionável (Partes, nós) e
+        // transformável. Só `locked` recusa; selecionar tudo e clicar na vista
+        // continuam ignorando o que está oculto (não há o que apontar).
+        let Some(index) = index.filter(|&i| self.document.assets.get(i).is_some_and(|a| !a.locked))
+        else {
             if !extend {
                 self.document.active = usize::MAX;
                 self.editor.selection = Selection::default();
@@ -2853,12 +3457,17 @@ impl CommandContext<'_> {
         let id = self.document.assets[index].id;
         if !extend {
             self.editor.selection.assets.clear();
+            self.editor.selection.items.retain(|i| !i.is_object());
         }
         if extend && self.editor.selection.assets.contains(&id) {
             self.editor
                 .selection
                 .assets
                 .retain(|selected| *selected != id);
+            self.editor
+                .selection
+                .items
+                .retain(|selected| *selected != SelectionRef::Object(id));
             self.document.active = self
                 .editor
                 .selection
@@ -2868,27 +3477,27 @@ impl CommandContext<'_> {
                 .unwrap_or(usize::MAX);
         } else {
             self.editor.selection.assets.push(id);
+            if !self
+                .editor
+                .selection
+                .items
+                .contains(&SelectionRef::Object(id))
+            {
+                self.editor.selection.items.push(SelectionRef::Object(id));
+            }
             self.document.active = index;
         }
         self.editor.selection.asset = self.document.active().map(|a| a.id);
+        self.editor.selection.active_element = self
+            .editor
+            .selection
+            .items
+            .last()
+            .copied()
+            .map(ActiveElement::new);
         self.sync_selection();
     }
 
-    /// Define o estado de edição por via semântica (P3D-015).
-    ///
-    /// `EditMode` é derivado, então escrever nele significa:
-    /// `Object` → domínio `Object`; `Edit` → último domínio de componente;
-    /// `TexturePaint` → workspace PAINT. Não há estado paralelo a manter.
-    /// Define o estado de edição por via semântica (P3D-015).
-    ///
-    /// `EditMode` é derivado, então escrever nele significa:
-    /// `Object` → domínio `Object`; `Edit` → último domínio de componente;
-    /// `TexturePaint` → workspace PAINT. Não há estado paralelo a manter.
-    /// Define o estado de edição por via semântica (P3D-015).
-    ///
-    /// `EditMode` é derivado, então escrever nele significa:
-    /// `Object` → domínio `Object`; `Edit` → último domínio de componente;
-    /// `TexturePaint` → workspace PAINT. Não há estado paralelo a manter.
     /// Define o estado de edição por via semântica (P3D-015).
     ///
     /// `EditMode` é derivado, então escrever nele significa:
@@ -2912,16 +3521,8 @@ impl CommandContext<'_> {
     /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
     ///
     /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
-    /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
-    ///
-    /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
-    /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
-    ///
-    /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
-    /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
-    ///
-    /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
     pub fn set_selection_domain(&mut self, domain: SelectionDomain) {
+        self.editor.selection.filters = SelectionFilters::from_domain(domain);
         let previous = self.editor.selection_domain;
         let source = if previous == SelectionDomain::Object {
             self.editor.last_component_domain
@@ -3031,173 +3632,6 @@ impl CommandContext<'_> {
         } else {
             self.set_selection_domain(SelectionDomain::Object);
         }
-    }
-
-    /// Define a origem do objeto ativo para o centro da sua geometria.
-    pub fn set_origin_geometry(&mut self) -> Result<(), &'static str> {
-        let center = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            active.mesh.selection_center()
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(center);
-        }
-        self.document.undo.checkpoint_sized(
-            "Set Origin to Geometry",
-            &prev,
-            prev.estimated_bytes(),
-        );
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to geometry center.");
-        Ok(())
-    }
-
-    /// Define a origem do objeto ativo para a base mais baixa (Y mínimo) da geometria.
-    pub fn set_origin_bottom(&mut self) -> Result<(), &'static str> {
-        let bottom_origin = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            let mut min = glam::Vec3::splat(f32::MAX);
-            let mut max = glam::Vec3::splat(f32::MIN);
-            for v in &active.mesh.verts {
-                let p = v.vec();
-                min = min.min(p);
-                max = max.max(p);
-            }
-            if !min.is_finite() || !max.is_finite() {
-                self.set_status("Mesh vertices are non-finite");
-                return Err("Mesh vertices are non-finite");
-            }
-            [(min.x + max.x) * 0.5, min.y, (min.z + max.z) * 0.5]
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(bottom_origin);
-        }
-        self.document
-            .undo
-            .checkpoint_sized("Set Origin to Bottom", &prev, prev.estimated_bytes());
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to bottom.");
-        Ok(())
-    }
-
-    /// Define a origem do objeto ativo para a posição atual do 3D Cursor.
-    pub fn set_origin_cursor(&mut self) -> Result<(), &'static str> {
-        let cursor = self.editor.cursor_3d;
-        {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-        }
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(cursor);
-        }
-        self.document.undo.checkpoint_sized(
-            "Set Origin to 3D Cursor",
-            &prev,
-            prev.estimated_bytes(),
-        );
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to 3D Cursor.");
-        Ok(())
-    }
-
-    /// Define a origem do objeto ativo para a média da seleção atual.
-    pub fn set_origin_selection(&mut self) -> Result<(), &'static str> {
-        let center = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            active.mesh.selection_center()
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(center);
-        }
-        self.document.undo.checkpoint_sized(
-            "Set Origin to Selection",
-            &prev,
-            prev.estimated_bytes(),
-        );
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to selection.");
-        Ok(())
-    }
-
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    pub fn set_geometry_to_origin(&mut self) -> Result<(), &'static str> {
-        let (delta, target_origin) = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            let center = active.mesh.selection_center();
-            let target_origin = active.origin.unwrap_or([0.0, 0.0, 0.0]);
-            let delta = [
-                target_origin[0] - center[0],
-                target_origin[1] - center[1],
-                target_origin[2] - center[2],
-            ];
-            (delta, target_origin)
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            for v in &mut active.mesh.verts {
-                v.pos[0] += delta[0];
-                v.pos[1] += delta[1];
-                v.pos[2] += delta[2];
-            }
-            active.origin = Some(target_origin);
-        }
-        self.document
-            .undo
-            .checkpoint_sized("Geometry to Origin", &prev, prev.estimated_bytes());
-        self.mark_document_dirty();
-        self.emit_project_changed(ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS);
-        self.set_status("Geometry centered at origin.");
-        Ok(())
     }
 
     /// Alterna o modo de edição de pivô (Ajustar Pivô).
@@ -3564,163 +3998,790 @@ impl CommandContext<'_> {
         true
     }
 
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    /// Aplica uma operação booleana entre o ativo (A) e o operando (B).
-    ///
-    /// O resultado substitui a malha de A e B é removido da cena, que é o
-    /// comportamento canônico de Fuse/Cut sem o modificador Keep Parts.
-    pub fn apply_boolean(
+    /// Executa uma operação do ShapeBuilder sólido de dois operandos (H25) sob transação atômica.
+    pub fn apply_solid_shape_builder(
         &mut self,
-        op: petunia_mesh::boolean::BooleanOp,
-    ) -> Result<usize, petunia_mesh::boolean::BooleanError> {
-        use petunia_mesh::boolean::{BooleanError, boolean_meshes};
-        let operand_id = self
-            .editor
-            .tools
-            .boolean_operand
-            .ok_or(BooleanError::InvalidInput("no operand selected"))?;
+        explicit_operand: Option<uuid::Uuid>,
+        op: crate::solid_commands::SolidOperation,
+    ) -> Result<crate::solid_commands::SolidShapeBuilderReport, crate::command::CommandError> {
+        use crate::command::CommandError;
+        use crate::solid_commands::{SolidOperation, SolidShapeBuilderReport};
+        use petunia_mesh::solid_builder::{
+            CommittedObject, RegionGroupOrigin, RegionPlan, SolidRegionProvenance,
+        };
+
+        let operand_id = explicit_operand
+            .or_else(|| self.second_selected_asset())
+            .ok_or(CommandError::Execution("No operand selected".to_string()))?;
         let active_index = self.document.active;
         let operand_index = self
             .document
             .assets
             .iter()
             .position(|asset| asset.id == operand_id)
-            .ok_or(BooleanError::InvalidInput("operand no longer exists"))?;
+            .ok_or(CommandError::Execution(
+                "Operand no longer exists".to_string(),
+            ))?;
         if operand_index == active_index {
-            return Err(BooleanError::InvalidInput("operand is the active asset"));
+            return Err(CommandError::Execution(
+                "Operand cannot be the active object".to_string(),
+            ));
         }
-        // O kernel só aceita triângulos: `boolean_meshes_clean` triangula cópias dos
-        // operandos e, depois, funde de volta as regiões coplanares (cap. 04).
-        // O resultado vive no objeto ativo: o operando entra no frame dele.
+
         let a = self.document.assets[active_index].mesh.to_owned_value();
         let b = self.document.assets[operand_index]
             .mesh_in_frame_of(&self.document.assets[active_index]);
-        let operand_in_active = b.clone();
-        let (mut result, report) = if self.editor.tools.boolean_cleanup {
-            let (mesh, report) = petunia_mesh::boolean::boolean_meshes_clean(&a, &b, op)?;
-            (mesh, Some(report))
-        } else {
-            let (mut ta, mut tb) = (a, b);
-            ta.triangulate();
-            tb.triangulate();
-            (boolean_meshes(&ta, &tb, op)?, None)
-        };
-        let texture = if report.as_ref().is_some_and(|r| {
-            r.uv == petunia_mesh::boolean_cleanup::UvOutcome::Inherited && !r.fell_back
-        }) {
-            None
-        } else {
-            crate::boolean_texture::transfer(
-                &self.document.project,
-                &mut result,
-                &self.document.assets[active_index],
-                &self.document.assets[operand_index],
-                &operand_in_active,
-            )
-        };
-        if texture.is_none() && report.as_ref().is_none_or(|r| r.fell_back) {
-            result.layout_uv_charts(petunia_mesh::primitives::DEFAULT_UV_PADDING);
+
+        let mut plan = RegionPlan::build(&a, &b)
+            .map_err(|e| CommandError::Execution(format!("Boolean partition failed: {e}")))?;
+
+        match op {
+            SolidOperation::UniteAll => {
+                let all_ids: Vec<usize> = plan.regions.iter().map(|r| r.id).collect();
+                plan.unite(&all_ids);
+            }
+            SolidOperation::RemoveOverlap => {
+                let overlap_ids: Vec<usize> = plan
+                    .regions
+                    .iter()
+                    .filter(|r| r.provenance == SolidRegionProvenance::Overlap)
+                    .map(|r| r.id)
+                    .collect();
+                plan.remove(&overlap_ids);
+            }
+            SolidOperation::ExtractOverlap => {
+                let overlap_ids: Vec<usize> = plan
+                    .regions
+                    .iter()
+                    .filter(|r| r.provenance == SolidRegionProvenance::Overlap)
+                    .map(|r| r.id)
+                    .collect();
+                plan.extract(&overlap_ids);
+            }
         }
-        let verts = result.verts.len();
-        let mut report = report;
-        if texture.is_some()
-            && let Some(report) = &mut report
-        {
-            report.uv = petunia_mesh::boolean_cleanup::UvOutcome::Relaid;
-        }
-        self.editor.tools.boolean_report = report;
+
+        let results = plan
+            .commit(&a, &b)
+            .map_err(|e| CommandError::Execution(format!("Commit failed: {e}")))?;
 
         self.checkpoint(match op {
-            petunia_mesh::boolean::BooleanOp::Union => "fuse",
-            petunia_mesh::boolean::BooleanOp::Difference => "cut",
-            petunia_mesh::boolean::BooleanOp::Intersection => "intersect",
+            SolidOperation::UniteAll => "solid_unite_all",
+            SolidOperation::RemoveOverlap => "solid_remove_overlap",
+            SolidOperation::ExtractOverlap => "solid_extract_overlap",
         });
-        let albedo_name = self.t_id(petunia_config::TextId::new("surface.boolean_albedo"));
-        let material_id = texture
-            .as_ref()
-            .and_then(|transfer| transfer.material.clone())
-            .map(|m| self.document.project.add_material(m));
-        if let Some(asset) = self.document.assets.get_mut(active_index) {
-            asset.mesh = result.into();
-            asset.parametric = None;
-            if let Some(material_id) = material_id {
-                asset.material_id = Some(material_id);
-            }
-            if let Some(transfer) = texture {
-                let texture = transfer.albedo;
-                let name = albedo_name;
-                let mut stack = petunia_project::paint_layers::PaintLayerStack::new();
-                stack.add_layer(petunia_project::paint_layers::PaintLayer::new_raster(
-                    name,
-                    texture.clone(),
-                ));
-                asset.texture = Some(texture);
-                asset.paint_stack = Some(stack);
+
+        let mut report = SolidShapeBuilderReport {
+            regions_count: plan.regions.len(),
+            ..Default::default()
+        };
+
+        let active_transform = self.document.assets[active_index].transform;
+
+        for (group_idx, res) in results.into_iter().enumerate() {
+            match res {
+                CommittedObject::PreserveFirst => {
+                    report.preserved_first = true;
+                }
+                CommittedObject::PreserveSecond => {
+                    report.preserved_second = true;
+                }
+                CommittedObject::Empty => {
+                    let target_index = if group_idx == 0 && !report.preserved_first {
+                        Some(active_index)
+                    } else if group_idx == 1 && !report.preserved_second {
+                        Some(operand_index)
+                    } else {
+                        None
+                    };
+                    if let Some(asset) =
+                        target_index.and_then(|idx| self.document.assets.get_mut(idx))
+                    {
+                        asset.mesh = petunia_mesh::Mesh::default().into();
+                        asset.parametric = None;
+                    }
+                }
+                CommittedObject::Mesh { mesh, origin } => match origin {
+                    RegionGroupOrigin::FirstOperand => {
+                        if let Some(asset) = self.document.assets.get_mut(active_index) {
+                            asset.mesh = (*mesh).into();
+                            asset.parametric = None;
+                        }
+                    }
+                    RegionGroupOrigin::SecondOperand => {
+                        if let Some(asset) = self.document.assets.get_mut(operand_index) {
+                            asset.mesh = (*mesh).into();
+                            asset.parametric = None;
+                        }
+                    }
+                    RegionGroupOrigin::Created => {
+                        let name = format!("SolidResult_{}", report.created_objects + 1);
+                        let mut new_asset = petunia_project::Asset::new(&name, *mesh);
+                        new_asset.transform = active_transform;
+                        self.document.assets.push(new_asset);
+                        report.created_objects += 1;
+                    }
+                },
             }
         }
-        // Keep Parts mantém B na cena; sem o modificador ele é consumido, e
-        // remover antes do ativo desloca o índice.
-        if !self.editor.tools.boolean_keep_parts {
-            self.document.assets.remove(operand_index);
-            if operand_index < active_index {
-                self.document.active = active_index - 1;
-            }
-        }
-        self.editor.tools.boolean_operand = None;
+
         self.sync_selection();
         self.emit_mesh_changed();
         self.mark_dirty();
-        Ok(verts)
+        Ok(report)
     }
 
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    /// **Join**: funde o operando no ativo como um único objeto, sem kernel
-    /// booleano — a topologia dos dois é preservada lado a lado.
-    pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
-        let operand_id = self
-            .editor
-            .tools
-            .boolean_operand
-            .ok_or("Choose a boolean operand first")?;
+    /// Cria uma composição sólida reeditável a partir de fontes estáveis (H26).
+    pub fn create_solid_composition(
+        &mut self,
+        base_id: Option<Uuid>,
+        operands: &[Uuid],
+        op: SolidOperation,
+        budget: Option<petunia_mesh::ShapeBuilderBudget>,
+    ) -> Result<(), CommandError> {
+        let base_index = match base_id {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Base asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let base_uuid = self.document.assets[base_index].id;
+        if operands.contains(&base_uuid) {
+            return Err(CommandError::Execution(
+                "Base asset cannot be used as an operand".to_string(),
+            ));
+        }
+
+        let mut recipe = petunia_project::SolidCompositionRecipe::new(base_uuid);
+        if let Some(b) = budget {
+            recipe = recipe.with_budget(b);
+        }
+
+        for &op_id in operands {
+            if !self.document.assets.iter().any(|a| a.id == op_id) {
+                return Err(CommandError::Execution(format!(
+                    "Operand {op_id} not found"
+                )));
+            }
+            recipe.add_step(op_id, op);
+        }
+
+        let evaluated_mesh = recipe
+            .evaluate(&self.document.assets)
+            .map_err(|e| {
+                CommandError::Execution(format!("Solid composition evaluation failed: {e}"))
+            })?
+            .clone();
+
+        self.checkpoint("create_solid_composition");
+
+        if let Some(base_asset) = self.document.assets.get_mut(base_index) {
+            base_asset.mesh = evaluated_mesh.into();
+            base_asset.composition = Some(recipe);
+            base_asset.parametric = None;
+        }
+
+        // Deixar os operandos secundários ocultos para que apenas o composto seja exibido
+        for &op_id in operands {
+            if let Some(op_asset) = self.document.assets.iter_mut().find(|a| a.id == op_id) {
+                op_asset.visible = false;
+            }
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Converte explicitamente a composição sólida em malha poligonal editável (bake explícito, H26).
+    pub fn bake_solid_composition(&mut self, target: Option<Uuid>) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        if !self.document.assets[target_index].is_composition() {
+            return Err(CommandError::Execution(
+                "Target asset is not a solid composition".to_string(),
+            ));
+        }
+
+        self.checkpoint("bake_solid_composition");
+
+        if let Some(asset) = self.document.assets.get_mut(target_index) {
+            asset.bake_composition();
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Habilita ou desabilita um passo na receita de composição sólida.
+    pub fn toggle_solid_composition_step(
+        &mut self,
+        target: Option<Uuid>,
+        step_id: Uuid,
+        enabled: bool,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let Some(mut recipe) = self.document.assets[target_index].composition.clone() else {
+            return Err(CommandError::Execution(
+                "Target is not a solid composition".to_string(),
+            ));
+        };
+
+        if !recipe.toggle_step(step_id, enabled) {
+            return Err(CommandError::Execution(
+                "Step not found in recipe".to_string(),
+            ));
+        }
+
+        let evaluated_mesh = recipe
+            .evaluate(&self.document.assets)
+            .map_err(|e| CommandError::Execution(format!("Re-evaluation failed: {e}")))?
+            .clone();
+
+        self.checkpoint("toggle_solid_composition_step");
+
+        if let Some(asset) = self.document.assets.get_mut(target_index) {
+            asset.mesh = evaluated_mesh.into();
+            asset.composition = Some(recipe);
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Reordena passos na receita de composição sólida.
+    pub fn reorder_solid_composition_steps(
+        &mut self,
+        target: Option<Uuid>,
+        from: usize,
+        to: usize,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let Some(mut recipe) = self.document.assets[target_index].composition.clone() else {
+            return Err(CommandError::Execution(
+                "Target is not a solid composition".to_string(),
+            ));
+        };
+
+        if !recipe.reorder_step(from, to) {
+            return Err(CommandError::Execution(
+                "Failed to reorder steps".to_string(),
+            ));
+        }
+
+        let evaluated_mesh = recipe
+            .evaluate(&self.document.assets)
+            .map_err(|e| CommandError::Execution(format!("Re-evaluation failed: {e}")))?
+            .clone();
+
+        self.checkpoint("reorder_solid_composition_steps");
+
+        if let Some(asset) = self.document.assets.get_mut(target_index) {
+            asset.mesh = evaluated_mesh.into();
+            asset.composition = Some(recipe);
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Alinha o plano de trabalho de desenho à face de uma malha (H27).
+    pub fn align_workplane_to_face(
+        &mut self,
+        target: Option<Uuid>,
+        face_index: usize,
+    ) -> Result<(), CommandError> {
+        let asset = match target {
+            Some(id) => self.document.assets.iter().find(|a| a.id == id),
+            None => self.document.active(),
+        }
+        .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?;
+
+        let mesh = &asset.mesh;
+        let face = mesh.faces.get(face_index).ok_or_else(|| {
+            CommandError::Execution(format!("Face index {face_index} out of bounds"))
+        })?;
+        if face.verts.len() < 3 {
+            return Err(CommandError::Execution(
+                "Face has fewer than 3 vertices".to_string(),
+            ));
+        }
+        let local_normal = mesh.face_normal(face_index);
+        if !local_normal.is_finite() || local_normal.length_squared() < 1e-6 {
+            return Err(CommandError::Execution(
+                "Face normal is degenerate".to_string(),
+            ));
+        }
+        let local_center = mesh.face_centroid(face_index);
+        let local_v0 = mesh.verts[face.verts[0] as usize].vec();
+        let local_v1 = mesh.verts[face.verts[1] as usize].vec();
+
+        let world_center = asset.to_world_point(local_center);
+        let world_normal = asset
+            .world_matrix()
+            .inverse()
+            .transpose()
+            .transform_vector3(local_normal)
+            .normalize_or_zero();
+        let world_edge = asset.to_world_point(local_v1) - asset.to_world_point(local_v0);
+        let world_edge_dir = world_edge.normalize_or_zero();
+
+        let c_d = [
+            world_center.x as f64,
+            world_center.y as f64,
+            world_center.z as f64,
+        ];
+        let n_d = [
+            world_normal.x as f64,
+            world_normal.y as f64,
+            world_normal.z as f64,
+        ];
+        let e_d = if world_edge_dir != Vec3::ZERO {
+            [
+                world_edge_dir.x as f64,
+                world_edge_dir.y as f64,
+                world_edge_dir.z as f64,
+            ]
+        } else {
+            [1.0, 0.0, 0.0]
+        };
+
+        let wp =
+            petunia_project::ProfileWorkplane::from_face_and_edge(c_d, n_d, e_d).map_err(|e| {
+                CommandError::Execution(format!("Failed to construct workplane from face: {e}"))
+            })?;
+
+        self.profile.origin = wp.origin.map(|x| x as f32);
+        self.profile.right = wp.right.map(|x| x as f32);
+        self.profile.up = wp.up.map(|x| x as f32);
+        self.profile.normal = wp.normal.map(|x| x as f32);
+        self.profile.workplane_kind = WorkplaneKind::Face;
+        self.profile.workplane_locked = true;
+        self.profile.points.clear();
+        self.profile.nodes.clear();
+        self.profile.closed = false;
+
+        self.set_status(format!("Workplane aligned to face {face_index}"));
+        Ok(())
+    }
+
+    /// Alinha o plano de trabalho de desenho às faces selecionadas da malha ativa (H27).
+    pub fn align_workplane_to_selection(&mut self) -> Result<(), CommandError> {
+        let Some(active) = self.document.active() else {
+            return Err(CommandError::Execution("No active asset".to_string()));
+        };
+        let mesh = &active.mesh;
+        let selected_faces: Vec<usize> = mesh
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.selected)
+            .map(|(i, _)| i)
+            .collect();
+
+        if selected_faces.is_empty() {
+            return Err(CommandError::Execution(
+                "No face selected for workplane alignment".to_string(),
+            ));
+        }
+
+        if let [a, b] = selected_faces[..] {
+            let (na, nb) = (
+                mesh.face_normal(a).normalize_or_zero(),
+                mesh.face_normal(b).normalize_or_zero(),
+            );
+            let (ca, cb) = (mesh.face_centroid(a), mesh.face_centroid(b));
+            let gap = (cb - ca).dot(na);
+            if na != Vec3::ZERO && na.dot(nb).abs() > 0.999 && gap.abs() > 1.0e-5 {
+                let face_a = &mesh.faces[a];
+                let center = ca + na * (gap * 0.5);
+                let world_center = active.to_world_point(center);
+                let world_normal = active.to_world_point(ca + na) - active.to_world_point(ca);
+                let world_edge = if face_a.verts.len() >= 2 {
+                    active.to_world_point(mesh.verts[face_a.verts[1] as usize].vec())
+                        - active.to_world_point(mesh.verts[face_a.verts[0] as usize].vec())
+                } else {
+                    Vec3::X
+                };
+
+                let to_f64 = |v: Vec3| [v.x as f64, v.y as f64, v.z as f64];
+                let wp = petunia_project::ProfileWorkplane::from_face_and_edge(
+                    to_f64(world_center),
+                    to_f64(world_normal.normalize_or_zero()),
+                    to_f64(world_edge.normalize_or_zero()),
+                )
+                .map_err(|e| {
+                    CommandError::Execution(format!("Failed to align to opposing faces: {e}"))
+                })?;
+
+                self.profile.origin = wp.origin.map(|x| x as f32);
+                self.profile.right = wp.right.map(|x| x as f32);
+                self.profile.up = wp.up.map(|x| x as f32);
+                self.profile.normal = wp.normal.map(|x| x as f32);
+                self.profile.workplane_kind = WorkplaneKind::Face;
+                self.profile.workplane_locked = true;
+                self.profile.points.clear();
+                self.profile.nodes.clear();
+                self.profile.closed = false;
+                self.set_status("Workplane aligned to gap between selected faces");
+                return Ok(());
+            }
+        }
+
+        let fi = selected_faces[0];
+        let asset_id = active.id;
+        self.align_workplane_to_face(Some(asset_id), fi)
+    }
+
+    /// Grava um perfil (com contorno e furos) sobre a superfície coplanar da malha (H27).
+    pub fn imprint_profile_on_surface(
+        &mut self,
+        profile_id: Uuid,
+        target: Option<Uuid>,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let profile = self
+            .document
+            .project
+            .get_profile(profile_id)
+            .ok_or_else(|| CommandError::Execution("Profile not found".to_string()))?
+            .clone();
+
+        let spline = self
+            .document
+            .project
+            .get_spline(profile.spline_id)
+            .ok_or_else(|| CommandError::Execution("Spline not found".to_string()))?
+            .clone();
+
+        let table = spline
+            .arc_length_table(1.0e-3)
+            .map_err(|e| CommandError::Execution(format!("Spline arc length failed: {e}")))?;
+        let polyline = table.polyline();
+        if polyline.len() < 3 {
+            return Err(CommandError::Execution(
+                "Profile polyline has fewer than 3 vertices".to_string(),
+            ));
+        }
+
+        let asset = &self.document.assets[target_index];
+        if asset.locked {
+            return Err(CommandError::Execution(
+                "Target asset is locked".to_string(),
+            ));
+        }
+
+        let wp = profile.workplane;
+        let origin = glam::DVec3::from_array(wp.origin).as_vec3();
+        let right = glam::DVec3::from_array(wp.right).as_vec3();
+        let up = glam::DVec3::from_array(wp.up).as_vec3();
+        let normal = glam::DVec3::from_array(wp.normal).as_vec3();
+
+        let outer_local: Vec<Vec3> = polyline
+            .iter()
+            .map(|p| {
+                let world_p = origin + right * p[0] as f32 + up * p[1] as f32;
+                asset.to_local_point(world_p)
+            })
+            .collect();
+
+        let holes_local: Vec<Vec<Vec3>> = profile
+            .holes
+            .iter()
+            .map(|hole| {
+                hole.iter()
+                    .map(|p| {
+                        let world_p = origin + right * p[0] as f32 + up * p[1] as f32;
+                        asset.to_local_point(world_p)
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let local_plane_point = asset.to_local_point(origin);
+        let local_plane_normal = asset
+            .world_matrix()
+            .transpose()
+            .transform_vector3(normal)
+            .normalize_or_zero();
+
+        let (new_mesh, inside_faces) = petunia_mesh::imprint::imprint_region_general(
+            &asset.mesh,
+            &outer_local,
+            &holes_local,
+            local_plane_point,
+            local_plane_normal,
+        )
+        .map_err(|e| CommandError::Execution(format!("Imprint failed: {e}")))?;
+
+        self.checkpoint("imprint_profile_on_surface");
+
+        if let Some(target_asset) = self.document.assets.get_mut(target_index) {
+            target_asset.mesh = new_mesh.into();
+            target_asset.parametric = None;
+        }
+
+        self.editor.selection.faces.clear();
+        for &fi in &inside_faces {
+            self.editor.selection.select_face(fi);
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        self.set_status(format!(
+            "Imprinted profile with {} inner faces",
+            inside_faces.len()
+        ));
+        Ok(())
+    }
+
+    /// Executa Push/Pull contextual sobre as faces selecionadas (H27).
+    pub fn contextual_push_pull(
+        &mut self,
+        target: Option<Uuid>,
+        distance: f32,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let asset = &self.document.assets[target_index];
+        if asset.locked {
+            return Err(CommandError::Execution(
+                "Target asset is locked".to_string(),
+            ));
+        }
+
+        let mesh = &asset.mesh;
+        let selected_faces: Vec<usize> = mesh
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.selected)
+            .map(|(i, _)| i)
+            .collect();
+
+        if selected_faces.is_empty() {
+            return Err(CommandError::Execution(
+                "No faces selected for push/pull".to_string(),
+            ));
+        }
+
+        // Teste contextual: a região selecionada é embutida (coplanares vizinhas não selecionadas)?
+        let mut is_embedded = false;
+        'check: for &fi in &selected_faces {
+            let n_fi = mesh.face_normal(fi).normalize_or_zero();
+            let face = &mesh.faces[fi];
+            let m = face.verts.len();
+            for k in 0..m {
+                let v0 = face.verts[k];
+                let v1 = face.verts[(k + 1) % m];
+                for (other_i, other_face) in mesh.faces.iter().enumerate() {
+                    if other_face.selected {
+                        continue;
+                    }
+                    let other_has_edge = (0..other_face.verts.len()).any(|ok| {
+                        let ov0 = other_face.verts[ok];
+                        let ov1 = other_face.verts[(ok + 1) % other_face.verts.len()];
+                        (ov0 == v0 && ov1 == v1) || (ov0 == v1 && ov1 == v0)
+                    });
+                    if other_has_edge {
+                        let other_normal = mesh.face_normal(other_i).normalize_or_zero();
+                        if other_normal.dot(n_fi) > 0.999 {
+                            is_embedded = true;
+                            break 'check;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.checkpoint("contextual_push_pull");
+
+        let target_asset = self.document.assets.get_mut(target_index).unwrap();
+        let mut new_mesh = target_asset.mesh.to_owned_value();
+
+        if is_embedded {
+            new_mesh.extrude_selected(distance);
+        } else {
+            new_mesh.push_pull(distance);
+        }
+
+        target_asset.mesh = new_mesh.into();
+        target_asset.parametric = None;
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        self.set_status(format!(
+            "Contextual push/pull ({}) applied with distance {distance:.3}",
+            if is_embedded {
+                "extrude"
+            } else {
+                "boundary-stretch"
+            }
+        ));
+        Ok(())
+    }
+
+    /// Outro objeto selecionado, distinto do ativo: o operando implícito das
+    /// operações de dois objetos (Join, Shape Builder sólido).
+    pub fn second_selected_asset(&self) -> Option<uuid::Uuid> {
+        let active = self.document.active().map(|asset| asset.id);
+        self.editor
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .find(|id| Some(*id) != active && self.document.assets.iter().any(|a| a.id == *id))
+    }
+
+    /// **Join**: funde os demais objetos selecionados no ativo como um único
+    /// objeto, sem kernel booleano — a topologia de todos é preservada lado a
+    /// lado. Uma única entrada de Undo.
+    pub fn join_selected_into_active(&mut self) -> Result<usize, &'static str> {
         let active_index = self.document.active;
-        let operand_index = self
+        let active_id = self
+            .document
+            .assets
+            .get(active_index)
+            .map(|asset| asset.id)
+            .ok_or("No active mesh")?;
+        let others: Vec<uuid::Uuid> = self
+            .editor
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .filter(|id| *id != active_id)
+            .collect();
+        let sources: Vec<(uuid::Uuid, petunia_mesh::Mesh)> = others
+            .iter()
+            .filter_map(|id| {
+                let asset = self.document.assets.iter().find(|a| a.id == *id)?;
+                (!asset.locked).then(|| {
+                    (
+                        *id,
+                        asset.mesh_in_frame_of(&self.document.assets[active_index]),
+                    )
+                })
+            })
+            .collect();
+        if sources.is_empty() {
+            return Err("Select the objects to join and keep one active");
+        }
+        self.checkpoint("join");
+        let mut added = 0usize;
+        for (_, other) in &sources {
+            added += other.verts.len();
+            if let Some(asset) = self.document.assets.get_mut(active_index) {
+                asset.mesh.join(other);
+            }
+        }
+        self.document
+            .assets
+            .retain(|asset| !sources.iter().any(|(id, _)| *id == asset.id));
+        self.document.active = self
             .document
             .assets
             .iter()
-            .position(|asset| asset.id == operand_id)
-            .ok_or("The boolean operand no longer exists")?;
-        if operand_index == active_index {
-            return Err("The boolean operand cannot be the active object");
-        }
-        // O operando passa a viver no frame do ativo (aparência preservada).
-        let other = self.document.assets[operand_index]
-            .mesh_in_frame_of(&self.document.assets[active_index]);
-        let added = other.verts.len();
-        self.checkpoint("join");
-        if let Some(asset) = self.document.assets.get_mut(active_index) {
-            asset.mesh.join(&other);
-        }
-        self.document.assets.remove(operand_index);
-        if operand_index < active_index {
-            self.document.active = active_index - 1;
-        }
-        self.editor.tools.boolean_operand = None;
+            .position(|asset| asset.id == active_id)
+            .unwrap_or(0);
+        self.editor.selection.assets.retain(|id| *id == active_id);
         self.sync_selection();
         self.emit_mesh_changed();
         self.mark_dirty();
@@ -3859,25 +4920,10 @@ impl CommandContext<'_> {
     /// Canonical Application API entry: UI / CLI / FFI / MCP / Lua all land here.
     /// Cria uma nova instância de um asset da biblioteca na posição do 3D Cursor.
     pub fn instantiate_asset_at_cursor(&mut self, asset_index: usize) -> bool {
-        if let Some(asset) = self.document.assets.get(asset_index) {
-            let mut new_asset = asset.duplicate();
-            let cursor = self.editor.cursor_3d;
-            for v in &mut new_asset.mesh.verts {
-                v.pos[0] += cursor[0];
-                v.pos[1] += cursor[1];
-                v.pos[2] += cursor[2];
-            }
-            let name = new_asset.name.clone();
-            self.checkpoint("instantiate asset");
-            self.document.assets.push(new_asset);
-            self.document.active = self.document.assets.len() - 1;
-            self.sync_selection();
-            self.emit_mesh_changed();
-            self.set_status(format!("Asset '{}' instanciado na cena", name));
-            self.mark_dirty();
-            return true;
-        }
-        false
+        let Some(id) = self.document.assets.get(asset_index).map(|a| a.id) else {
+            return false;
+        };
+        self.instantiate_asset_by_id(id, None)
     }
 
     /// Cria uma nova instância de um asset da biblioteca na posição especificada ou no 3D Cursor.
@@ -3886,31 +4932,28 @@ impl CommandContext<'_> {
         asset_id: uuid::Uuid,
         position: Option<[f32; 3]>,
     ) -> bool {
-        if let Some(pos) = self.document.assets.iter().position(|a| a.id == asset_id) {
-            self.set_selection_domain(SelectionDomain::Object);
-            let mut new_asset = self.document.assets[pos].duplicate();
-            let target_pos = position.unwrap_or(self.editor.cursor_3d);
-            let center = new_asset.mesh.selection_center();
-            for v in &mut new_asset.mesh.verts {
-                v.pos[0] += target_pos[0] - center[0];
-                v.pos[1] += target_pos[1] - center[1];
-                v.pos[2] += target_pos[2] - center[2];
+        let command = crate::command::InstantiateAssetCmd { asset_id, position };
+        match crate::CommandDispatcher::run(self, &command) {
+            Ok(()) => true,
+            Err(error) => {
+                self.set_status(error.to_string());
+                false
             }
-            new_asset.origin = Some(target_pos);
-            let name = new_asset.name.clone();
-            self.checkpoint("instantiate asset");
-            self.document.assets.push(new_asset);
-            self.document.active = self.document.assets.len() - 1;
-            self.sync_selection();
-            self.emit_mesh_changed();
-            self.set_status(format!("Asset '{}' instanciado na cena", name));
-            self.mark_dirty();
-            return true;
         }
-        false
     }
 
-    /// Alterna o modo de isolamento da seleção atual (Local View / Isolate).
+    /// Ids que o isolamento mantém visíveis: a seleção de objetos e o ativo.
+    fn isolation_keep(&self) -> std::collections::HashSet<uuid::Uuid> {
+        let mut keep: std::collections::HashSet<uuid::Uuid> =
+            self.editor.selection.assets.iter().copied().collect();
+        if let Some(active) = self.document.active() {
+            keep.insert(active.id);
+        }
+        keep
+    }
+
+    /// Alterna o modo de isolamento da seleção atual (Local View / Isolate):
+    /// só os objetos selecionados (e o ativo) permanecem visíveis.
     pub fn toggle_isolate(&mut self) {
         if self.editor.isolate_active {
             // Restaura as visibilidades anteriores
@@ -3928,40 +4971,55 @@ impl CommandContext<'_> {
             self.editor.isolate_active = false;
             self.set_status("Modo de isolamento desativado".to_string());
         } else {
-            // Salva as visibilidades atuais e isola o ativo
+            // Salva as visibilidades atuais e isola a seleção
+            let keep = self.isolation_keep();
             let prev: Vec<bool> = self.document.assets.iter().map(|a| a.visible).collect();
             self.editor.isolate_prev_visibilities = Some(prev);
-            let active = self.document.active;
-            for (i, asset) in self.document.assets.iter_mut().enumerate() {
-                asset.visible = i == active;
+            for asset in &mut self.document.assets {
+                asset.visible = keep.contains(&asset.id);
             }
             self.editor.isolate_active = true;
+            let isolated = keep.len();
             let name = self
                 .document
                 .active()
                 .map(|a| a.name.clone())
                 .unwrap_or_else(|| "Ativo".to_string());
-            self.set_status(format!("Objeto '{name}' isolado na cena"));
+            self.set_status(if isolated > 1 {
+                format!("{isolated} objetos isolados na cena")
+            } else {
+                format!("Objeto '{name}' isolado na cena")
+            });
         }
         self.mark_dirty();
     }
 
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
-    ///
-    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
-    /// escondido. As visibilidades originais continuam guardadas para o
-    /// desfazer do isolamento.
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
-    ///
-    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
-    /// escondido. As visibilidades originais continuam guardadas para o
-    /// desfazer do isolamento.
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
-    ///
-    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
-    /// escondido. As visibilidades originais continuam guardadas para o
-    /// desfazer do isolamento.
-    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
+    /// Isolamento voltado à pintura (C2): os demais objetos ficam em raio-X,
+    /// não escondidos, para que o artista conserve a referência de contexto.
+    /// Alternar de novo restaura o raio-X anterior. Convive com o isolamento
+    /// normal: ao ligar, ele é desfeito para não esconder objetos.
+    pub fn toggle_paint_isolate_ghost(&mut self) {
+        if self.editor.paint_isolate_ghost {
+            if let Some(previous) = self.editor.paint_isolate_prev_xray.take() {
+                self.editor.show_xray = previous;
+            }
+            self.editor.paint_isolate_ghost = false;
+            self.set_status("Isolamento de pintura desativado".to_string());
+        } else {
+            if self.editor.isolate_active {
+                self.toggle_isolate();
+            }
+            self.editor.paint_isolate_prev_xray = Some(self.editor.show_xray);
+            self.editor.show_xray = true;
+            self.editor.paint_isolate_ghost = true;
+            self.set_status(
+                "Isolamento de pintura: demais objetos em raio-X (fantasma)".to_string(),
+            );
+        }
+        self.mark_dirty();
+    }
+
+    /// Mantém o isolamento na seleção depois de trocar de objeto.
     ///
     /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
     /// escondido. As visibilidades originais continuam guardadas para o
@@ -3970,9 +5028,9 @@ impl CommandContext<'_> {
         if !self.editor.isolate_active {
             return;
         }
-        let active = self.document.active;
-        for (i, asset) in self.document.assets.iter_mut().enumerate() {
-            asset.visible = i == active;
+        let keep = self.isolation_keep();
+        for asset in &mut self.document.assets {
+            asset.visible = keep.contains(&asset.id);
         }
         self.mark_dirty();
     }
@@ -4057,9 +5115,8 @@ impl<'a> EditorView<'a> {
             None => false,
             Some(session) => {
                 self.document
-                    .assets
-                    .iter()
-                    .any(|a| a.id == session.asset_id)
+                    .active()
+                    .is_some_and(|asset| asset.id == session.asset_id && asset.parametric.is_some())
                     && self.document.undo.undo_label() == Some(session.undo_label.as_str())
             }
         }
@@ -4068,6 +5125,11 @@ impl<'a> EditorView<'a> {
     /// O asset ativo é uma primitiva paramétrica viva?
     pub fn active_is_parametric(self) -> bool {
         self.document.active().is_some_and(|a| a.is_parametric())
+    }
+
+    /// O asset ativo é uma composição sólida reeditável?
+    pub fn active_is_composition(self) -> bool {
+        self.document.active().is_some_and(|a| a.is_composition())
     }
 
     /// Retorna o descritor paramétrico do asset ativo, se houver.
@@ -4101,14 +5163,14 @@ impl<'a> EditorView<'a> {
 
     /// Calcula a posição no espaço de mundo do pivô selecionado (P3D-027).
     pub fn calculate_pivot(self, pivot: PivotPoint) -> glam::Vec3 {
+        if self.editor.edit_pivot {
+            return self
+                .document
+                .active()
+                .map_or(glam::Vec3::ZERO, petunia_project::Asset::origin_world);
+        }
         if self.selection_domain() == SelectionDomain::Object && pivot != PivotPoint::Cursor3D {
-            if let Some(active) = self.document.active()
-                && let Some(origin) = active.origin
-                && self.editor.selection.assets.len() <= 1
-            {
-                return glam::Vec3::from(origin);
-            }
-            let points: Vec<_> = self
+            let assets: Vec<_> = self
                 .document
                 .assets
                 .iter()
@@ -4120,32 +5182,44 @@ impl<'a> EditorView<'a> {
                                 .active()
                                 .is_some_and(|active| active.id == a.id))
                 })
-                .flat_map(|a| a.world_positions())
                 .collect();
-            if !points.is_empty() {
-                if pivot == PivotPoint::BoundingBoxCenter {
-                    let min = points
-                        .iter()
-                        .copied()
-                        .fold(glam::Vec3::splat(f32::INFINITY), glam::Vec3::min);
-                    let max = points
-                        .iter()
-                        .copied()
-                        .fold(glam::Vec3::splat(f32::NEG_INFINITY), glam::Vec3::max);
-                    return (min + max) * 0.5;
-                }
-                return points.iter().sum::<glam::Vec3>() / points.len() as f32;
+            if pivot == PivotPoint::IndividualOrigins {
+                return self
+                    .document
+                    .active()
+                    .map_or(glam::Vec3::ZERO, petunia_project::Asset::origin_world);
             }
+            if pivot == PivotPoint::MedianPoint && !assets.is_empty() {
+                return (assets
+                    .iter()
+                    .map(|a| a.origin_world().as_dvec3())
+                    .sum::<glam::DVec3>()
+                    / assets.len() as f64)
+                    .as_vec3();
+            }
+            let points = assets
+                .iter()
+                .flat_map(|a| a.world_positions())
+                .filter(|p| p.is_finite());
+            let (min, max) = points.fold(
+                (
+                    glam::Vec3::splat(f32::INFINITY),
+                    glam::Vec3::splat(f32::NEG_INFINITY),
+                ),
+                |(min, max), p| (min.min(p), max.max(p)),
+            );
+            return if min.is_finite() && max.is_finite() {
+                min * 0.5 + max * 0.5
+            } else {
+                glam::Vec3::ZERO
+            };
         }
         match pivot {
-            PivotPoint::Cursor3D => glam::Vec3::from(self.cursor_3d),
+            PivotPoint::Cursor3D => self
+                .transform_center
+                .map_or_else(|| glam::Vec3::from(self.cursor_3d), glam::Vec3::from),
             PivotPoint::BoundingBoxCenter => {
-                if self.selection_domain() == SelectionDomain::Object
-                    && let Some(active) = self.document.active()
-                    && let Some(origin) = active.origin
-                {
-                    glam::Vec3::from(origin)
-                } else if let Some(active) = self.document.active() {
+                if let Some(active) = self.document.active() {
                     let mut min = glam::Vec3::splat(f32::MAX);
                     let mut max = glam::Vec3::splat(f32::MIN);
                     let mut count = 0;
@@ -4167,18 +5241,213 @@ impl<'a> EditorView<'a> {
                 }
             }
             PivotPoint::MedianPoint | PivotPoint::IndividualOrigins => {
-                if self.selection_domain() == SelectionDomain::Object
-                    && let Some(active) = self.document.active()
-                    && let Some(origin) = active.origin
-                {
-                    glam::Vec3::from(origin)
-                } else if let Some(active) = self.document.active() {
+                if let Some(active) = self.document.active() {
                     active.to_world_point(glam::Vec3::from(active.mesh.selection_center()))
                 } else {
                     glam::Vec3::from(self.cursor_3d)
                 }
             }
         }
+    }
+
+    /// Calcula o referencial tridimensional de orientação para transformações (SEL-003).
+    pub fn calculate_transform_frame(self, orientation: TransformOrientation) -> TransformFrame {
+        match orientation {
+            TransformOrientation::Global => TransformFrame::global(),
+            TransformOrientation::View => TransformFrame::from_view(&self.editor.camera),
+            TransformOrientation::Custom => self
+                .editor
+                .custom_transform_frame
+                .unwrap_or_else(TransformFrame::global),
+            TransformOrientation::Local => {
+                if let Some(active) = self.document.active() {
+                    TransformFrame::from_rotation(active.transform.rotation())
+                } else if let Some(first_id) = self.editor.selection.assets.first() {
+                    if let Some(asset) = self.document.assets.iter().find(|a| a.id == *first_id) {
+                        TransformFrame::from_rotation(asset.transform.rotation())
+                    } else {
+                        TransformFrame::global()
+                    }
+                } else {
+                    TransformFrame::global()
+                }
+            }
+            TransformOrientation::Normal => self
+                .calculate_normal_transform_frame()
+                .unwrap_or_else(TransformFrame::global),
+            TransformOrientation::Auto => {
+                // SEL-003:
+                // Default automático:
+                // Se houver active_element:
+                if let Some(active_elem) = self.editor.selection.active_element.as_ref() {
+                    match active_elem.item {
+                        SelectionRef::Face { object, face } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                                && let Some(normal) = Self::compute_asset_face_normal(asset, face)
+                            {
+                                return TransformFrame::from_z_axis(normal);
+                            }
+                        }
+                        SelectionRef::Edge { object, edge } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                                && let Some((p0, p1)) =
+                                    Self::compute_asset_edge_positions(asset, edge.0, edge.1)
+                            {
+                                return TransformFrame::from_edge(p0, p1, glam::Vec3::Y);
+                            }
+                        }
+                        SelectionRef::Vertex { object, vertex } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                                && let Some(normal) =
+                                    Self::compute_asset_vertex_normal(asset, vertex)
+                            {
+                                return TransformFrame::from_z_axis(normal);
+                            }
+                        }
+                        SelectionRef::Object(id) => {
+                            if let Some(asset) = self.document.assets.iter().find(|a| a.id == id) {
+                                return TransformFrame::from_rotation(asset.transform.rotation());
+                            }
+                        }
+                        SelectionRef::Shape { object, .. } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                            {
+                                return TransformFrame::from_rotation(asset.transform.rotation());
+                            }
+                        }
+                    }
+                }
+
+                // Se houver seleção de componente na malha ativa:
+                if let Some(frame) = self.calculate_normal_transform_frame() {
+                    return frame;
+                }
+
+                // Domínio de Objeto:
+                let selected_assets: Vec<_> = self
+                    .document
+                    .assets
+                    .iter()
+                    .filter(|a| {
+                        !a.locked
+                            && (self.editor.selection.assets.contains(&a.id)
+                                || self
+                                    .document
+                                    .active()
+                                    .is_some_and(|active| active.id == a.id))
+                    })
+                    .collect();
+
+                if selected_assets.len() == 1 {
+                    TransformFrame::from_rotation(selected_assets[0].transform.rotation())
+                } else {
+                    TransformFrame::global()
+                }
+            }
+        }
+    }
+
+    fn calculate_normal_transform_frame(self) -> Option<TransformFrame> {
+        let active = self.document.active()?;
+        // 1. Faces selecionadas: média das normais em espaço de mundo
+        if !self.editor.selection.faces.is_empty() {
+            let mut normal_acc = glam::Vec3::ZERO;
+            let normal_mat = active.world_matrix().inverse().transpose();
+            for &face_idx in &self.editor.selection.faces {
+                if face_idx < active.mesh.faces.len() {
+                    let local_norm = active.mesh.face_normal(face_idx);
+                    let world_norm = normal_mat.transform_vector3(local_norm);
+                    if world_norm.is_finite() {
+                        normal_acc += world_norm;
+                    }
+                }
+            }
+            if normal_acc.is_finite() && normal_acc.length_squared() > 1e-6 {
+                return Some(TransformFrame::from_z_axis(normal_acc.normalize()));
+            }
+        }
+
+        // 2. Arestas selecionadas: tangente da primeira aresta selecionada
+        if let Some(&(a, b)) = self.editor.selection.edges.first()
+            && let Some((p0, p1)) = Self::compute_asset_edge_positions(active, a, b)
+        {
+            return Some(TransformFrame::from_edge(p0, p1, glam::Vec3::Y));
+        }
+
+        // 3. Vértices selecionados: média das normais dos vértices em mundo
+        if !self.editor.selection.verts.is_empty() {
+            let mut normal_acc = glam::Vec3::ZERO;
+            for &v_idx in &self.editor.selection.verts {
+                if let Some(norm) = Self::compute_asset_vertex_normal(active, v_idx) {
+                    normal_acc += norm;
+                }
+            }
+            if normal_acc.is_finite() && normal_acc.length_squared() > 1e-6 {
+                return Some(TransformFrame::from_z_axis(normal_acc.normalize()));
+            }
+        }
+
+        None
+    }
+
+    fn compute_asset_face_normal(
+        asset: &petunia_project::Asset,
+        face_idx: usize,
+    ) -> Option<glam::Vec3> {
+        if face_idx < asset.mesh.faces.len() {
+            let local_norm = asset.mesh.face_normal(face_idx);
+            let normal_mat = asset.world_matrix().inverse().transpose();
+            let world_norm = normal_mat.transform_vector3(local_norm);
+            if world_norm.is_finite() && world_norm.length_squared() > 1e-6 {
+                return Some(world_norm.normalize());
+            }
+        }
+        None
+    }
+
+    fn compute_asset_edge_positions(
+        asset: &petunia_project::Asset,
+        a: u32,
+        b: u32,
+    ) -> Option<(glam::Vec3, glam::Vec3)> {
+        let v_a = asset.mesh.verts.get(a as usize)?;
+        let v_b = asset.mesh.verts.get(b as usize)?;
+        let p0 = asset.to_world_point(v_a.vec());
+        let p1 = asset.to_world_point(v_b.vec());
+        if p0.is_finite() && p1.is_finite() {
+            Some((p0, p1))
+        } else {
+            None
+        }
+    }
+
+    fn compute_asset_vertex_normal(
+        asset: &petunia_project::Asset,
+        vertex_idx: u32,
+    ) -> Option<glam::Vec3> {
+        if (vertex_idx as usize) < asset.mesh.verts.len() {
+            let mut acc = glam::Vec3::ZERO;
+            for (fi, f) in asset.mesh.faces.iter().enumerate() {
+                if f.verts.contains(&vertex_idx) {
+                    let local_norm = asset.mesh.face_normal(fi);
+                    if local_norm.is_finite() {
+                        acc += local_norm;
+                    }
+                }
+            }
+            if acc.length_squared() > 1e-6 {
+                let normal_mat = asset.world_matrix().inverse().transpose();
+                let world_norm = normal_mat.transform_vector3(acc);
+                if world_norm.is_finite() && world_norm.length_squared() > 1e-6 {
+                    return Some(world_norm.normalize());
+                }
+            }
+        }
+        None
     }
 
     /// Ponto de articulação (head) do osso selecionado na pose avaliada atual.
@@ -4255,6 +5524,90 @@ impl<'a> EditorView<'a> {
         Some(fb)
     }
 
+    /// Constrói o descritor de feedback de modelagem da operação modal ativa (H28 / MF-001 a MF-008).
+    pub fn current_modeling_feedback(self) -> Option<crate::modeling_feedback::OperationFeedback> {
+        let modal = self.modal.as_ref()?;
+        let current_revision = self.document.project.revision_id();
+        let active_asset = self.document.project.active();
+        let target_id = active_asset.map(|a| a.id);
+        let target_name = active_asset.map(|a| a.name.as_str());
+        let active_mesh = self.document.project.active_mesh();
+        Some(modal.feedback(current_revision, target_id, target_name, active_mesh))
+    }
+
+    /// Computa o Volume Frame orientado de um objeto de cena no frame desejado (VSP-003 / H29).
+    pub fn query_volume_frame(
+        self,
+        asset_id: uuid::Uuid,
+        frame: crate::spatial_query::SpatialFrameKind,
+        rep: crate::spatial_query::GeometryRepresentation,
+    ) -> Option<crate::spatial_query::VolumeFrame> {
+        crate::spatial_query::SpatialQueryInspector::compute_volume_frame(
+            &self.document.project,
+            asset_id,
+            frame,
+            rep,
+        )
+    }
+
+    /// Executa uma consulta espacial pura sobre o projeto (VSP-004 / H29).
+    pub fn query_spatial(
+        self,
+        query: crate::spatial_query::SpatialQueryKind,
+    ) -> Result<crate::spatial_query::SpatialQueryResult, crate::command::CommandError> {
+        crate::spatial_query::SpatialQueryInspector::execute_query(&self.document.project, query)
+    }
+
+    /// Executa corte analítico não-destrutivo por plano (Section Inspector — VSP-005 / H30).
+    pub fn query_section(
+        self,
+        asset_id: uuid::Uuid,
+        plane: &crate::section_analysis::SectionPlane,
+    ) -> Result<crate::section_analysis::SectionResult, crate::command::CommandError> {
+        let asset = self
+            .document
+            .project
+            .assets
+            .iter()
+            .find(|a| a.id == asset_id)
+            .ok_or_else(|| {
+                crate::command::CommandError::Execution(format!("Asset {} not found", asset_id))
+            })?;
+        let mesh_cow = asset.evaluated_mesh_ref();
+        Ok(
+            crate::section_analysis::SectionInspector::intersect_mesh_plane(
+                asset_id,
+                mesh_cow.as_ref(),
+                Some(&asset.transform),
+                plane,
+            ),
+        )
+    }
+
+    /// Executa uma sonda direcional de espessura de parede (Thickness Probe — VSP-005 / H30).
+    pub fn probe_thickness(
+        self,
+        asset_id: uuid::Uuid,
+        query: &crate::section_analysis::ThicknessProbeQuery,
+    ) -> Result<crate::section_analysis::ThicknessProbeResult, crate::command::CommandError> {
+        let asset = self
+            .document
+            .project
+            .assets
+            .iter()
+            .find(|a| a.id == asset_id)
+            .ok_or_else(|| {
+                crate::command::CommandError::Execution(format!("Asset {} not found", asset_id))
+            })?;
+        let mesh_cow = asset.evaluated_mesh_ref();
+        Ok(crate::section_analysis::SectionInspector::probe_thickness(
+            asset_id,
+            mesh_cow.as_ref(),
+            Some(&asset.transform),
+            query,
+        ))
+    }
+
     /// Descriptor canônico do pincel (iniciativa Paint — P3D-056/057).
     ///
     /// Fonte única da verdade: une os campos legados de sessão (`canvas_brush`,
@@ -4306,6 +5659,36 @@ impl<'a> EditorView<'a> {
     /// Verifica se o asset ativo está bloqueado contra transformações.
     pub fn is_active_locked(self) -> bool {
         self.document.is_active_locked()
+    }
+
+    /// Diagnóstico tipado do motivo de bloqueio ou restrição das ferramentas Paint (Task H17).
+    pub fn paint_diagnostic(self) -> Option<crate::brush::PaintBlockedReason> {
+        use crate::brush::PaintBlockedReason;
+        let Some(asset) = self.document.project.active() else {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        };
+        if asset.mesh.verts.is_empty() {
+            return Some(PaintBlockedReason::NoActiveMesh);
+        }
+        if asset.mesh.faces.is_empty() || asset.mesh.faces.iter().all(|f| f.uv.is_empty()) {
+            return Some(PaintBlockedReason::MissingUvMap);
+        }
+        if let Some(stack) = &asset.paint_stack
+            && stack
+                .layers
+                .get(stack.active_layer)
+                .map(|l| l.locked)
+                .unwrap_or(false)
+        {
+            return Some(PaintBlockedReason::LayerLocked);
+        }
+        if self.editor.tools.paint_isolate_selection && self.editor.selection.faces.is_empty() {
+            return Some(PaintBlockedReason::MaskBlocksEverything);
+        }
+        if self.editor.tools.active_tool == "clone" && self.editor.tools.clone_source.is_none() {
+            return Some(PaintBlockedReason::MissingCloneSource);
+        }
+        None
     }
 }
 
@@ -4370,12 +5753,7 @@ mod model_quick_action_tests {
         let state = AppState::new("en");
         assert_eq!(
             state.ui.model_quick_action_ids(),
-            vec![
-                "model.subdivide".to_string(),
-                "model.fuse".to_string(),
-                "model.cut".to_string(),
-                "model.join".to_string(),
-            ]
+            vec!["model.subdivide".to_string(), "model.join".to_string()]
         );
     }
 
@@ -4386,6 +5764,10 @@ mod model_quick_action_tests {
             !state
                 .ui
                 .set_model_quick_action_pinned("model.unknown", true)
+        );
+        assert!(
+            !state.ui.set_model_quick_action_pinned("model.fuse", true),
+            "booleanas diretas não existem mais"
         );
         assert!(state.ui.set_model_quick_action_pinned("model.merge", true));
         assert!(!state.ui.set_model_quick_action_pinned("model.merge", true));
@@ -4399,25 +5781,140 @@ mod model_quick_action_tests {
             state.ui.model_quick_action_ids(),
             vec![
                 "model.subdivide".to_string(),
-                "model.fuse".to_string(),
-                "model.cut".to_string(),
                 "model.join".to_string(),
                 "model.merge".to_string(),
                 "model.slice".to_string(),
             ]
         );
-        assert!(
-            !state
-                .ui
-                .set_model_quick_action_pinned("model.intersect", true)
-        );
-        assert!(state.ui.set_model_quick_action_pinned("model.merge", false));
-        assert!(
-            state
-                .ui
-                .set_model_quick_action_pinned("model.intersect", true)
-        );
         assert!(state.ui.reset_model_quick_actions());
         assert!(!state.ui.reset_model_quick_actions());
+    }
+}
+
+#[cfg(test)]
+mod operation_mode_tests {
+    use super::*;
+
+    /// Duas faces quadradas que compartilham a aresta 2–3.
+    fn two_adjacent_quads() -> petunia_mesh::Mesh {
+        let mut mesh = petunia_mesh::Mesh::default();
+        for corner in [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, -1.0],
+            [1.0, 0.0, -1.0],
+        ] {
+            mesh.verts
+                .push(petunia_mesh::Vertex::new(corner[0], corner[1], corner[2]));
+        }
+        let mut a = petunia_mesh::Face::new(vec![0, 1, 2, 3]);
+        a.selected = true;
+        let mut b = petunia_mesh::Face::new(vec![3, 2, 5, 4]);
+        b.selected = true;
+        mesh.faces.push(a);
+        mesh.faces.push(b);
+        mesh
+    }
+
+    fn state_with_two_faces() -> AppState {
+        let mut state = AppState::new("en");
+        state.set_edit_mode(EditMode::Edit);
+        state.project.add("teste", two_adjacent_quads());
+        state.sync_selection();
+        state
+    }
+
+    #[test]
+    fn the_extrude_command_follows_the_tool_mode() {
+        // Região: os vértices do topo são compartilhados (6 vértices novos).
+        let mut state = state_with_two_faces();
+        state.tools.extrude_mode = petunia_mesh::ExtrudeMode::Region;
+        state
+            .dispatch(&crate::command::ExtrudeSelectedCmd {
+                dist: 0.5,
+                mode: None,
+            })
+            .expect("extrusão da região");
+        assert_eq!(
+            state.project.assets[state.project.active].mesh.verts.len(),
+            6 + 6
+        );
+
+        // Individual: cada face duplica o topo (4 + 4 vértices novos).
+        let mut state = state_with_two_faces();
+        state.tools.extrude_mode = petunia_mesh::ExtrudeMode::Individual;
+        state
+            .dispatch(&crate::command::ExtrudeSelectedCmd {
+                dist: 0.5,
+                mode: None,
+            })
+            .expect("extrusão individual");
+        assert_eq!(
+            state.project.assets[state.project.active].mesh.verts.len(),
+            6 + 8
+        );
+
+        // O comando pode forçar o modo, ignorando o da ferramenta.
+        let mut state = state_with_two_faces();
+        state.tools.extrude_mode = petunia_mesh::ExtrudeMode::Region;
+        state
+            .dispatch(&crate::command::ExtrudeSelectedCmd {
+                dist: 0.5,
+                mode: Some(petunia_mesh::ExtrudeMode::AlongNormals),
+            })
+            .expect("extrusão ao longo das normais");
+        assert_eq!(
+            state.project.assets[state.project.active].mesh.verts.len(),
+            6 + 8
+        );
+    }
+}
+
+#[cfg(test)]
+mod paint_isolation_tests {
+    use super::*;
+
+    #[test]
+    fn paint_isolate_ghost_toggles_xray_and_restores_it() {
+        let mut state = AppState::new("en");
+        assert!(!state.session.paint_isolate_ghost);
+        assert!(!state.session.show_xray);
+
+        state.toggle_paint_isolate_ghost();
+        assert!(state.session.paint_isolate_ghost);
+        assert!(
+            state.session.show_xray,
+            "fantasma mantém o contexto com raio-X em vez de esconder objetos"
+        );
+        assert_eq!(state.session.paint_isolate_prev_xray, Some(false));
+
+        state.toggle_paint_isolate_ghost();
+        assert!(!state.session.paint_isolate_ghost);
+        assert!(!state.session.show_xray, "o raio-X anterior volta");
+        assert_eq!(state.session.paint_isolate_prev_xray, None);
+    }
+
+    #[test]
+    fn paint_isolate_ghost_keeps_the_users_xray_and_undoes_normal_isolate() {
+        let mut state = AppState::new("en");
+        state.session.show_xray = true;
+        state.session.isolate_active = true;
+        state.session.isolate_prev_visibilities = Some(Vec::new());
+
+        state.toggle_paint_isolate_ghost();
+        assert!(state.session.paint_isolate_ghost);
+        assert!(state.session.show_xray);
+        assert!(
+            !state.session.isolate_active,
+            "o isolamento normal sairia escondendo objetos; a pintura usa fantasma"
+        );
+        assert_eq!(state.session.paint_isolate_prev_xray, Some(true));
+
+        state.toggle_paint_isolate_ghost();
+        assert!(state.session.show_xray, "o raio-X do usuário é preservado");
+        assert!(!state.session.paint_isolate_ghost);
+        assert_eq!(state.session.paint_isolate_prev_xray, None);
     }
 }

@@ -47,7 +47,7 @@ fn hits_along_face(state: &AppState, face: usize, count: usize) -> Vec<(usize, V
 
 #[test]
 fn every_call_of_a_stroke_lays_paint() {
-    let mut state = AppState::default();
+    let mut state = AppState::new("en");
     state.paint_color = [1.0, 0.0, 0.0];
     let mut settings = state.brush_settings();
     settings.size_px = 12.8;

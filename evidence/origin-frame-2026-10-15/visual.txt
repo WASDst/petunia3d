@@ -1,0 +1,3 @@
+   Compiling petunia_editor v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/editor)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.11s
+     Running `target/debug/examples/origin_frame_feedback evidence/origin-frame-2026-10-15`

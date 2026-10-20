@@ -82,15 +82,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-dependencies = [
- "derive_arbitrary",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,17 +730,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
-name = "derive_arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "difflib"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -765,17 +745,6 @@ dependencies = [
  "block2",
  "libc",
  "objc2",
-]
-
-[[package]]
-name = "displaydoc"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.5",
 ]
 
 [[package]]
@@ -1102,6 +1071,9 @@ name = "glam"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e05e7e6723e3455f4818c7b26e855439f7546cf617ef669d1adedb8669e5cb9"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "glob"
@@ -1683,6 +1655,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1837,6 +1821,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
+ "petunia_config",
  "petunia_core",
  "petunia_mesh",
  "petunia_module_assets",
@@ -1846,7 +1831,9 @@ dependencies = [
  "petunia_plugins",
  "petunia_project",
  "petunia_render",
+ "postcard",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1941,6 +1928,7 @@ name = "petunia_mcp"
 version = "0.1.0"
 dependencies = [
  "petunia_core",
+ "petunia_plugins",
  "petunia_project",
  "rmcp",
  "schemars",
@@ -1963,6 +1951,7 @@ dependencies = [
  "manifold-rust",
  "proptest",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "xatlas-rs-v2",
 ]
@@ -2013,6 +2002,7 @@ version = "0.1.0"
 dependencies = [
  "mlua",
  "petunia_core",
+ "petunia_project",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -2051,6 +2041,7 @@ dependencies = [
  "glam",
  "glow",
  "glutin",
+ "image",
  "petunia_config",
  "petunia_core",
  "petunia_mesh",
@@ -3128,6 +3119,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3621,18 +3618,16 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "2.4.2"
+version = "9.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
 dependencies = [
- "arbitrary",
  "crc32fast",
- "crossbeam-utils",
- "displaydoc",
  "flate2",
  "indexmap",
  "memchr",
- "thiserror 2.0.20",
+ "nix",
+ "typed-path",
  "zopfli",
 ]
 

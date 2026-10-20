@@ -42,7 +42,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Id do material no slot ativo do Inspector.
-    fn active_material_id(&self) -> Option<uuid::Uuid> {
+    pub fn active_material_id(&self) -> Option<uuid::Uuid> {
         let slot = usize::try_from(self.active_material_slot.max(0)).ok()?;
         self.state.project.project.materials.get(slot).map(|m| m.id)
     }
@@ -161,6 +161,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         };
         self.edit_active_material(petunia_core::MaterialEdit::Profile(profile))
+    }
+
+    /// Altera atomicamente múltiplas propriedades PBR do material ativo por
+    /// `SetMaterialPropertiesCmd`, gerando uma única entrada de Undo.
+    pub fn set_active_material_properties(
+        &mut self,
+        roughness: Option<f32>,
+        metallic: Option<f32>,
+        emission_strength: Option<f32>,
+        profile: Option<ShaderProfile>,
+    ) -> bool {
+        let Some(material) = self.active_material_id() else {
+            return false;
+        };
+        let cmd = petunia_core::SetMaterialPropertiesCmd {
+            material,
+            roughness,
+            metallic,
+            emission_strength,
+            profile,
+            ..Default::default()
+        };
+        self.dispatch_material(&cmd)
     }
 
     pub fn set_active_material_alpha_mode(&mut self, mode: i32) -> bool {

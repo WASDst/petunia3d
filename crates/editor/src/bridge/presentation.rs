@@ -60,6 +60,110 @@ fn effect_params(effect: &petunia_project::paint_layers::PaintEffect) -> Vec<Pai
     }
 }
 
+/// Tipo estável de um efeito (o painel escolhe rótulo/ícone por ele).
+fn paint_effect_kind(effect: &petunia_project::paint_layers::PaintEffect) -> &'static str {
+    use petunia_project::paint_layers::PaintEffect;
+    match effect {
+        PaintEffect::Pixelate { .. } => "Pixelate",
+        PaintEffect::Posterize { .. } => "Posterize",
+        PaintEffect::Invert => "Invert",
+        PaintEffect::Grain { .. } => "Grain",
+        PaintEffect::Levels { .. } => "Levels",
+        PaintEffect::BrightnessContrast { .. } => "BrightnessContrast",
+        PaintEffect::HueSaturation { .. } => "HueSaturation",
+    }
+}
+
+fn paint_effect_model(
+    effect: &petunia_project::paint_layers::LayerEffect,
+) -> PaintLayerEffectModel {
+    let kind = paint_effect_kind(&effect.effect);
+    PaintLayerEffectModel {
+        id: effect.id.to_string(),
+        kind: kind.to_string(),
+        label: kind.to_string(),
+        enabled: effect.enabled,
+        opacity: effect.opacity,
+        has_mask: effect.mask.is_some(),
+        mask_enabled: effect.mask.as_ref().is_some_and(|mask| mask.enabled),
+        mask_inverted: effect.mask.as_ref().is_some_and(|mask| mask.inverted),
+        params: effect_params(&effect.effect),
+    }
+}
+
+fn hex_color(color: [u8; 4]) -> String {
+    format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2])
+}
+
+fn paint_active_layer_model(
+    layer: &petunia_project::paint_layers::PaintLayer,
+) -> PaintActiveLayerModel {
+    use petunia_project::paint_layers::{LayerKind, PaintTarget};
+    let kind = if layer.is_group {
+        "group"
+    } else {
+        match layer.kind {
+            LayerKind::Raster(_) => "raster",
+            LayerKind::Decal(_) => "decal",
+            LayerKind::Effect(_) => "effect",
+            LayerKind::Gradient(_) => "gradient",
+        }
+    };
+    let kind_label = match kind {
+        "group" => "Group",
+        "decal" => "Decal",
+        "effect" => "Effect",
+        "gradient" => "Gradient",
+        _ => "Raster",
+    };
+    let (paint_target, paint_target_effect) = match layer.paint_target {
+        PaintTarget::Content => ("content", String::new()),
+        PaintTarget::LayerMask => ("layer", String::new()),
+        PaintTarget::EffectMask(id) => ("effect", id.to_string()),
+    };
+    let (gradient_kind, gradient_repeat, gradient_start, gradient_end, gradient_stops) =
+        match &layer.kind {
+            LayerKind::Gradient(fill) => (
+                fill.kind.id().to_string(),
+                fill.repeat,
+                fill.start,
+                fill.end,
+                fill.stops
+                    .iter()
+                    .map(|stop| PaintGradientStopModel {
+                        position: stop.position,
+                        color: hex_color(stop.color),
+                    })
+                    .collect(),
+            ),
+            _ => (
+                "linear".to_string(),
+                false,
+                [0.0, 0.5],
+                [1.0, 0.5],
+                Vec::new(),
+            ),
+        };
+    PaintActiveLayerModel {
+        id: layer.id.to_string(),
+        name: layer.name.clone(),
+        kind: kind.to_string(),
+        kind_label: kind_label.to_string(),
+        is_group: layer.is_group,
+        paint_target: paint_target.to_string(),
+        paint_target_effect,
+        has_mask: layer.mask.is_some(),
+        mask_enabled: layer.mask.as_ref().is_some_and(|mask| mask.enabled),
+        mask_inverted: layer.mask.as_ref().is_some_and(|mask| mask.inverted),
+        effects: layer.effects.iter().map(paint_effect_model).collect(),
+        gradient_kind,
+        gradient_repeat,
+        gradient_start,
+        gradient_end,
+        gradient_stops,
+    }
+}
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn view_model(&self) -> ShellViewModel {
         puffin::profile_function!();
@@ -123,6 +227,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 tris: 0,
                 has_custom_color: false,
                 custom_color_rgb: self.state.ui.selection_rgb,
+                collection: String::new(),
             });
         }
 
@@ -152,16 +257,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.paint_pip = self.paint_pip;
         vm.split_preset = self.split.preset_id().to_string();
         vm.prefab_items = self.prefab_item_models();
-        vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        vm.gizmo = self.projected_gizmo();
         if self.viewport.draws_gizmo() {
             vm.gizmo.clear_handle_geometry();
         }
-        vm.selection_overlay = compute_selection_overlay(
-            &self.state,
-            self.viewport_size[0],
-            self.viewport_size[1],
-            self.viewport.draws_component_guides(),
-        );
         vm.add_menu_open = self.add_menu_open;
         if let Some(draft) = &self.rename_draft {
             vm.rename_active = true;
@@ -288,8 +387,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.measure_dy = measure.dy;
         vm.measure_dz = measure.dz;
         vm.measure_angle_deg = measure.angle_deg;
+        vm.measure_pending = self.state.session.tools.active_measurement.is_some();
+        // Medidas já gravadas: ficam desenhadas junto com a medida em andamento.
+        let (stored_commands, stored_tags) =
+            compute_stored_measures(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        if !stored_commands.is_empty() {
+            vm.measure_visible = true;
+            if !vm.measure_commands.is_empty() {
+                vm.measure_commands.push(' ');
+            }
+            vm.measure_commands.push_str(&stored_commands);
+        }
         vm.measure_hud_text = measure.hud_text;
         vm.measure_tags = measure.tags;
+        vm.measure_tags.extend(stored_tags);
 
         vm.micro_inspector_open = self.micro_inspector_open;
         vm.micro_inspector_x = self.micro_inspector_pos[0];
@@ -336,23 +447,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
         }
-        if let Some(operand) = self.state.session.tools.boolean_operand {
-            if let Some(asset) = self
-                .state
-                .project
-                .assets
-                .iter()
-                .find(|asset| asset.id == operand)
-            {
-                vm.boolean_operand_name = asset.name.clone();
-            } else {
-                vm.boolean_operand_name = "missing".to_string();
-            }
-        }
-        vm.boolean_keep_parts = self.state.session.tools.boolean_keep_parts;
-        vm.boolean_cleanup = self.state.session.tools.boolean_cleanup;
-        vm.boolean_ready = self.state.session.tools.boolean_operand.is_some()
-            && self.state.project.active_mesh().is_some();
         if let Some(kind) = self.menu_open {
             vm.menu_open = kind.id().to_string();
         }
@@ -408,9 +502,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_quick_action_reset = translated(petunia_config::text_id::UI_QUICK_ACTION_RESET);
         vm.label_quick_action_done = translated(petunia_config::text_id::UI_QUICK_ACTION_DONE);
         vm.label_action_subdivide = translated(petunia_config::text_id::UI_ACTION_SUBDIVIDE);
-        vm.label_action_fuse = translated(petunia_config::text_id::UI_ACTION_FUSE);
-        vm.label_action_cut = translated(petunia_config::text_id::UI_ACTION_CUT);
-        vm.label_action_intersect = translated(petunia_config::text_id::UI_ACTION_INTERSECT);
         vm.label_action_join = translated(petunia_config::text_id::UI_ACTION_JOIN);
         vm.label_action_merge = translated(petunia_config::text_id::UI_ACTION_MERGE);
         vm.label_action_slice = translated(petunia_config::text_id::UI_ACTION_SLICE);
@@ -855,6 +946,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         petunia_project::paint_layers::LayerKind::Raster(_) => "Raster",
                         petunia_project::paint_layers::LayerKind::Decal(_) => "Decal",
                         petunia_project::paint_layers::LayerKind::Effect(_) => "Effect",
+                        petunia_project::paint_layers::LayerKind::Gradient(_) => "Gradient",
                     }
                     .to_string(),
                     kind: if layer.is_group {
@@ -864,20 +956,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             petunia_project::paint_layers::LayerKind::Raster(_) => "raster",
                             petunia_project::paint_layers::LayerKind::Decal(_) => "decal",
                             petunia_project::paint_layers::LayerKind::Effect(_) => "effect",
+                            petunia_project::paint_layers::LayerKind::Gradient(_) => "gradient",
                         }
                     }
                     .to_string(),
+                    has_mask: layer.mask.is_some(),
+                    effect_count: layer.effects.len() as i32,
                     blend: layer.blend as i32,
                     depth: depth_of(layer),
                 })
                 .collect();
+            vm.paint_active_layer = stack
+                .active()
+                .map(paint_active_layer_model)
+                .unwrap_or_default();
             let (width, height) = self
                 .state
                 .project
                 .assets
                 .get(self.state.project.active)
                 .and_then(|asset| asset.paint_stack.as_ref())
-                .and_then(|stack| stack.active().and_then(|layer| layer.canvas()))
+                .and_then(|stack| stack.active())
+                .and_then(|layer| layer.paint_canvas().or_else(|| layer.canvas()))
                 .map(|canvas| (canvas.w, canvas.h))
                 .unwrap_or((0, 0));
             vm.paint_layer_count =
@@ -896,9 +996,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 is_group: false,
                 kind_label: "Raster".to_string(),
                 kind: "raster".to_string(),
+                has_mask: false,
+                effect_count: 0,
                 blend: 0,
                 depth: 0,
             }];
+            vm.paint_active_layer = PaintActiveLayerModel {
+                name: "Base".to_string(),
+                kind: "raster".to_string(),
+                kind_label: "Raster".to_string(),
+                paint_target: "content".to_string(),
+                gradient_kind: "linear".to_string(),
+                gradient_start: [0.0, 0.5],
+                gradient_end: [1.0, 0.5],
+                ..PaintActiveLayerModel::default()
+            };
             vm.paint_layer_count = match &asset.texture {
                 Some(canvas) => format!("1 layer(s)  ·  {} × {}", canvas.w, canvas.h),
                 None => "1 layer(s)".to_string(),
@@ -944,7 +1056,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Perfil DRAW, POLY, Loop Cut e ferramentas de modelagem.
     fn project_modeling(&self, vm: &mut ShellViewModel) {
         vm.profile_active = self.state.session.workspace == Workspace::Model
-            && self.modeling_mode == ModelingMode::Draw
             && (self.state.session.tools.active_tool == "draw_profile"
                 || self.active_profile_id.is_some());
         vm.profile_point_count = self.active_profile_point_count() as i32;
@@ -1251,6 +1362,55 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.tool_modal_step = kind.step();
             vm.tool_modal_min = minimum;
             vm.tool_modal_max = maximum;
+            // C8: modos da operação com vários elementos (extrusão/inset).
+            vm.tool_modal_modes = self.operation_modes(kind);
+            vm.tool_modal_mode = self.current_operation_mode(kind);
+        }
+    }
+
+    /// Modos que a operação corrente oferece (C8). Vazio para as operações sem
+    /// modo (a escolha não aparece no HUD).
+    fn operation_modes(&self, kind: ToolModalKind) -> Vec<ToolModeModel> {
+        let label = |id: petunia_config::i18n::TextId| self.state.t_id(id);
+        match kind {
+            ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual => {
+                vec![
+                    ToolModeModel {
+                        id: "region".to_string(),
+                        label: label(petunia_config::text_id::TOOLS_MODE_REGION),
+                    },
+                    ToolModeModel {
+                        id: "individual".to_string(),
+                        label: label(petunia_config::text_id::TOOLS_MODE_INDIVIDUAL),
+                    },
+                    ToolModeModel {
+                        id: "along_normals".to_string(),
+                        label: label(petunia_config::text_id::TOOLS_MODE_ALONG_NORMALS),
+                    },
+                ]
+            }
+            ToolModalKind::Inset => vec![
+                ToolModeModel {
+                    id: "region".to_string(),
+                    label: label(petunia_config::text_id::TOOLS_MODE_REGION),
+                },
+                ToolModeModel {
+                    id: "individual".to_string(),
+                    label: label(petunia_config::text_id::TOOLS_MODE_INDIVIDUAL),
+                },
+            ],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Modo atual da operação (C8).
+    fn current_operation_mode(&self, kind: ToolModalKind) -> String {
+        match kind {
+            ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual => {
+                self.state.tools.extrude_mode.id().to_string()
+            }
+            ToolModalKind::Inset => self.state.tools.inset_mode.id().to_string(),
+            _ => String::new(),
         }
     }
 
@@ -1393,11 +1553,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.subdivide" => self
                 .state
                 .t_id(petunia_config::text_id::UI_ACTION_SUBDIVIDE),
-            "model.fuse" => self.state.t_id(petunia_config::text_id::UI_ACTION_FUSE),
-            "model.cut" => self.state.t_id(petunia_config::text_id::UI_ACTION_CUT),
-            "model.intersect" => self
-                .state
-                .t_id(petunia_config::text_id::UI_ACTION_INTERSECT),
             "model.join" => self.state.t_id(petunia_config::text_id::UI_ACTION_JOIN),
             "model.merge" => self.state.t_id(petunia_config::text_id::UI_ACTION_MERGE),
             "model.slice" => self.state.t_id(petunia_config::text_id::UI_ACTION_SLICE),

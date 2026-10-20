@@ -10,7 +10,7 @@ use glam::{Vec2, Vec3};
 use petunia_core::{PathfinderOp, RegionHit, RegionPlane, ShapeEdit, ShapeEditCmd, ShapePlane};
 use petunia_mesh::arrangement::{Region2, region_at};
 
-use crate::{ModelingMode, PetuniaViewport, SlintUiBridge, ToolGesture};
+use crate::{PetuniaViewport, SlintUiBridge, ToolGesture};
 use petunia_core::Workspace;
 
 /// Passo (px) entre amostras ao longo do caminho do ponteiro: pequeno o bastante
@@ -39,10 +39,9 @@ pub(crate) struct ShapeHit {
 }
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
-    /// Só o DRAW oferece o Shape Builder.
+    /// Shape Builder is available in both modeling presets.
     fn shape_builder_available(&self) -> bool {
         self.state.workspace == Workspace::Model
-            && self.modeling_mode == ModelingMode::Draw
             && self.profile_volume_mode.is_none()
             && self.state.modal.is_none()
             && self.state.mesh_preview.is_none()
@@ -218,7 +217,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         } else {
             ShapeEdit::Merge { samples }
         };
-        let command = ShapeEditCmd { plane, edit };
+        let command = ShapeEditCmd {
+            plane,
+            operands: None,
+            edit,
+        };
         match self.state.dispatch(&command) {
             Ok(()) => {
                 self.after_shape_edit();
@@ -277,6 +280,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         });
         let command = ShapeEditCmd {
             plane,
+            operands: None,
             edit: ShapeEdit::Pathfinder(op),
         };
         match self.state.dispatch(&command) {

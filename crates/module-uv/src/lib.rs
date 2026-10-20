@@ -2,9 +2,8 @@
 //!
 //! Camada fina sobre a Application: algoritmos vivem em `petunia_mesh`, a
 //! seleção UV (cantos, modo, Sync explícito) em `petunia_core::UvSelectionState`
-//! e as mutações discretas em comandos com Undo. O que resta aqui são atalhos
-//! de compatibilidade para a UI legada e o preview direto de gestos contínuos
-//! (o chamador abre o Undo do gesto uma vez).
+//! e as mutações discretas em comandos com Undo. Continuous gestures use the
+//! explicit core UV session; compatibility helpers never bypass the dispatcher.
 
 use petunia_core::{
     AppEvent, AppState, Module, PinOp, SeamOp, UnwrapAutoCmd, UvEqualizeTexelDensityCmd,
@@ -31,22 +30,39 @@ impl UvModule {
         }
     }
 
-    /// Preview direto de um gesto contínuo sobre os cantos selecionados, sem
-    /// checkpoint: quem chama abre o Undo no início do gesto (um gesto = um
-    /// Undo). Pins não bloqueiam o gesto explícito. Retorna os cantos movidos.
+    /// Compatibility entry point: update an explicit UV preview when active,
+    /// otherwise dispatch one discrete command with Undo. Never mutate the mesh directly.
     pub fn transform_selected(state: &mut AppState, transform: UvTransform) -> usize {
         let corners = state.uv_selection.corner_set();
-        let moved = state
-            .project
-            .active_mesh_mut()
-            .map_or(0, |m| m.transform_uv_corners(&corners, transform));
-        if moved > 0 {
-            state.emit_uv_changed();
+        let count = state.project.active_mesh().map_or(0, |mesh| {
+            corners
+                .iter()
+                .filter(|corner| {
+                    mesh.faces
+                        .get(corner.face)
+                        .and_then(|face| face.uv.get(corner.corner))
+                        .is_some()
+                })
+                .count()
+        });
+        if count == 0 {
+            return 0;
         }
-        moved
+        let result = if state.session.tools.uv_transform.is_some() {
+            state.update_uv_transform(transform)
+        } else {
+            state.dispatch(&petunia_core::UvTransformCmd { transform })
+        };
+        match result {
+            Ok(()) => count,
+            Err(error) => {
+                state.set_status(error.to_string());
+                0
+            }
+        }
     }
 
-    /// Move os cantos UV selecionados (preview direto; ver `transform_selected`).
+    /// Move selected UV corners through the preview/command boundary.
     pub fn move_selected(state: &mut AppState, du: f32, dv: f32) {
         Self::transform_selected(state, UvTransform::Translate(glam::Vec2::new(du, dv)));
     }
