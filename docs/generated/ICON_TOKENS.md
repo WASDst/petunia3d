@@ -14,7 +14,7 @@ description: Catálogo canônico de identificadores de ícones IconId (P3D-119)
 > **Single Source of Truth (P3D-086, P3D-119)**
 > Ícones no Petunia3D são endereçados por tokens semânticos `IconId`, derivados do pack SVG `assets/icons/petunia-outline/svg/<grupo>/<id>.svg` que o shell Qt carrega via `PetuniaIcons::get` (variantes outline/filled trocadas em tempo de execução, sem afetar a lógica).
 
-Total de tokens no pack de ícones: **277**.
+Total de tokens no pack de ícones: **287**.
 
 | Identificador Textual (`IconId`) | Grupo Semântico |
 | :--- | :--- |
@@ -144,18 +144,28 @@ Total de tokens no pack de ícones: **277**.
 | `paint` | painting |
 | `paint_2d` | painting |
 | `paint_3d` | painting |
+| `paint_airbrush` | painting |
+| `paint_blur` | painting |
 | `paint_brush` | painting |
+| `paint_burn` | painting |
 | `paint_clone` | painting |
 | `paint_decal` | painting |
+| `paint_dodge` | painting |
 | `paint_eraser` | painting |
 | `paint_fill` | painting |
+| `paint_gradient` | painting |
+| `paint_gradient_radial` | painting |
 | `paint_layer` | painting |
 | `paint_line` | painting |
 | `paint_mask` | painting |
 | `paint_palette` | painting |
+| `paint_path` | painting |
 | `paint_picker` | painting |
+| `paint_pixel` | painting |
+| `paint_projection` | painting |
 | `paint_rect` | painting |
 | `paint_smudge` | painting |
+| `paint_spray` | painting |
 | `add_primitive` | primitives |
 | `capsule` | primitives |
 | `circle` | primitives |

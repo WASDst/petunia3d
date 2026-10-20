@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **2037**.
+Total de chaves de localização cadastradas: **2073**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -256,6 +256,32 @@ Total de chaves de localização cadastradas: **2037**.
 | `dock.side_by_side` | Side by side | Lado a lado |
 | `dock.stacked` | Stacked | Empilhados |
 | `draw.shape_name` | Shape | Forma |
+| `draw_status.a_curve_needs_at_least_two_points` | A curve needs at least two points | Uma curva precisa de pelo menos dois pontos |
+| `draw_status.choose_a_compatible_shape_close_it_explicitly_before_extrusion` | Choose a compatible shape; close it explicitly before extrusion | Escolha uma forma compatível e feche o contorno antes de extrudar |
+| `draw_status.close_the_shape_explicitly_to_extrude` | Close the shape explicitly to extrude | Feche o contorno antes de extrudar |
+| `draw_status.confirm_or_cancel_the_current_gesture_before_changing_construction_plane` | Confirm or cancel the current gesture before changing construction plane | Confirme ou cancele o gesto atual antes de trocar o plano de construção |
+| `draw_status.confirm_or_cancel_the_volume_preview` | Confirm or cancel the volume preview | Confirme ou cancele a prévia de volume |
+| `draw_status.curve_kept_editable_choose_a_volume_operation_explicitly` | Curve kept editable. Choose a volume operation explicitly | Curva mantida editável. Escolha uma operação de volume para continuar |
+| `draw_status.draw_the_shape_enter_dimensions_for_precision_confirm_to_create_esc_to_cancel` | Draw the shape; enter dimensions for precision. Confirm to create, Esc to cancel | Desenhe a forma ou digite suas dimensões. Confirme para criar; Esc cancela |
+| `draw_status.first_solid_only` | First solid only | Somente o primeiro sólido |
+| `draw_status.generator_source_changed_preview_discarded` | Generator source changed; preview discarded | A fonte do gerador mudou. A prévia foi descartada |
+| `draw_status.hover_an_axis_or_angle_guide_before_locking_inference` | Hover an axis or angle guide before locking inference | Posicione o cursor sobre uma guia de eixo ou ângulo antes de travar a inferência |
+| `draw_status.inference_locked` | Inference locked | Inferência travada |
+| `draw_status.inference_unlocked` | Inference unlocked | Inferência liberada |
+| `draw_status.no_compatible_construction_plane_in_this_selection` | No compatible construction plane in this selection | A seleção não define um plano de construção compatível |
+| `draw_status.parametric_volume_created_the_source_shape_remains_editable` | Parametric volume created; the source shape remains editable | Volume paramétrico criado. A forma de origem continua editável |
+| `draw_status.region_geometry_changed_cancel_and_restart_the_preview` | Region geometry changed; cancel and restart the preview | A geometria da região mudou. Cancele e reinicie a prévia |
+| `draw_status.second_solid_only` | Second solid only | Somente o segundo sólido |
+| `draw_status.select_exactly_two_solid_objects` | Select exactly two solid objects | Selecione exatamente dois objetos sólidos |
+| `draw_status.select_or_draw_a_shape` | Select or draw a shape | Selecione ou desenhe uma forma |
+| `draw_status.shape_builder_cancelled_both_source_objects_are_unchanged` | Shape Builder cancelled; both source objects are unchanged | Shape Builder cancelado. Os dois objetos de origem foram preservados |
+| `draw_status.shape_builder_choose_unite_remove_or_extract_select_regions_and_confirm` | Shape Builder: choose Unite, Remove or Extract; select regions and confirm | Shape Builder: escolha Unir, Remover ou Extrair; selecione regiões e confirme |
+| `draw_status.shape_is_locked_or_hidden` | Shape is locked or hidden | A forma está bloqueada ou oculta |
+| `draw_status.shared_volume` | Shared volume | Volume comum |
+| `draw_status.solid_source_changed_cancel_and_restart_shape_builder` | Solid source changed; cancel and restart Shape Builder | Os sólidos de origem mudaram. Cancele e reinicie o Shape Builder |
+| `draw_status.source_changed_cancel_and_restart_this_volume_preview` | Source changed; cancel and restart this volume preview | A fonte mudou. Cancele e reinicie esta prévia de volume |
+| `draw_status.sweep_requires_an_explicit_spline_path` | Sweep requires an explicit spline path | Sweep exige a escolha explícita de uma curva de caminho |
+| `draw_status.volume_preview_cancelled_source_shape_preserved` | Volume preview cancelled; source shape preserved | Prévia de volume cancelada. Forma de origem preservada |
 | `edit.redo` | Redo | Refazer |
 | `edit.undo` | Undo | Desfazer |
 | `empty.no_selection` | Nothing selected | Nada selecionado |
@@ -1459,12 +1485,19 @@ Total de chaves de localização cadastradas: **2037**.
 | `sl.x_ray_enabled` | X-Ray enabled | X-Ray ativado |
 | `sl.x_ray_off` | X-Ray off | X-Ray desligado |
 | `sl.x_ray_on` | X-Ray on | X-Ray ligado |
+| `snap.edge` | Edge | Aresta |
+| `snap.face` | Face | Face |
+| `snap.grid` | Grid | Grade |
+| `snap.increment` | Increment | Incremento |
+| `snap.smart` | Smart | Inteligente |
+| `snap.vertex` | Point | Ponto |
 | `snap_kind.angle` | Angle | Ângulo |
 | `snap_kind.axis_x` | Along X axis | Paralelo ao eixo X |
 | `snap_kind.axis_y` | Along Y axis | Paralelo ao eixo Y |
 | `snap_kind.axis_z` | Along Z axis | Paralelo ao eixo Z |
 | `snap_kind.face_center` | Face center | Centro da face |
 | `snap_kind.grid` | Grid | Grade |
+| `snap_kind.increment` | Increment | Incremento |
 | `snap_kind.intersection` | Intersection | Interseção |
 | `snap_kind.midpoint` | Midpoint | Ponto médio |
 | `snap_kind.on_edge` | On edge | Na aresta |
@@ -1477,8 +1510,6 @@ Total de chaves de localização cadastradas: **2037**.
 | `status.active_tool` | Active tool: {tool} | Ferramenta ativa: {tool} |
 | `status.added` | Added {0} | {0} adicionado |
 | `status.asset_not_found_in_project_library` | Asset not found in project library | Ativo não encontrado na biblioteca do projeto |
-| `status.boolean_operand_cleared` | Boolean operand cleared | Operando booleano removido |
-| `status.boolean_operand_set_fuse_cut_or_intersect` | Boolean operand set: Fuse, Cut or Intersect now applies | Operando booleano definido: Fuse, Cut ou Intersect agora se aplica |
 | `status.brush` | Brush: {name} | Pincel: {name} |
 | `status.brush_hardness` | Brush hardness: {0}% | Dureza do pincel: {0}% |
 | `status.brush_lock` | Brush lock: {lock} | Trava do pincel: {lock} |
@@ -1563,6 +1594,7 @@ Total de chaves de localização cadastradas: **2037**.
 | `status.loop_cut_topology_refused_at_commit` | Loop Cut: topology refused at commit | Loop Cut: topologia recusada na confirmação |
 | `status.no_active_mesh_to_paint` | No active mesh to paint | Nenhuma malha ativa para pintar |
 | `status.no_face_under_the_cursor` | No face under the cursor | Nenhuma face sob o cursor |
+| `status.no_mesh_imported` | no mesh found in {0} | nenhuma malha encontrada em {0} |
 | `status.nothing_under_the_cursor` | Nothing under the cursor | Nada sob o cursor |
 | `status.nudge` | Nudge [{dx}, {dy}, {dz}] | Deslocar [{dx}, {dy}, {dz}] |
 | `status.object_duplicated` | Object duplicated. | Objeto duplicado. |
@@ -1611,7 +1643,6 @@ Total de chaves de localização cadastradas: **2037**.
 | `status.selection_cleared` | Selection cleared. | Seleção limpa. |
 | `status.selection_inverted` | Selection inverted. | Seleção invertida. |
 | `status.selection_mode` | Selection mode: {0} | Modo de seleção: {0} |
-| `status.set_as_boolean_operand` | Set as boolean operand | Definido como operando booleano |
 | `status.shading` | Shading: {0} | Sombreamento: {0} |
 | `status.shape_anchored_release_to_commit` | Shape anchored: release to commit | Forma ancorada: solte para confirmar |
 | `status.shape_builder_cancelled` | Shape Builder cancelled | Shape Builder cancelado |
@@ -1741,7 +1772,11 @@ Total de chaves de localização cadastradas: **2037**.
 | `tools.cursor_3d` | 3D Cursor | Cursor 3D |
 | `tools.decal` | Decal | Decalque |
 | `tools.dissolve` | Dissolve | Dissolver |
+| `tools.draw_circle` | Circle | Círculo |
+| `tools.draw_ellipse` | Ellipse | Elipse |
+| `tools.draw_polygon` | Polygon | Polígono |
 | `tools.draw_profile` | Profile | Perfil |
+| `tools.draw_rectangle` | Rectangle | Retângulo |
 | `tools.ellipse` | Ellipse | Elipse |
 | `tools.eraser` | Eraser | Borracha |
 | `tools.extrude` | Extrude | Extrudar |
@@ -1757,7 +1792,11 @@ Total de chaves de localização cadastradas: **2037**.
 | `tools.measure` | Measure | Medir |
 | `tools.merge` | Merge | Fundir |
 | `tools.mirror` | Mirror | Espelho |
+| `tools.mode_along_normals` | Along normals | Ao longo das normais |
+| `tools.mode_individual` | Individual | Individual |
+| `tools.mode_region` | Region | Região |
 | `tools.move` | Move | Mover |
+| `tools.operation_mode` | Operation mode | Modo da operação |
 | `tools.paint` | Paint | Pintar |
 | `tools.picker` | Picker | Conta-gotas |
 | `tools.pivot` | Pivot | Pivô |
@@ -1801,9 +1840,6 @@ Total de chaves de localização cadastradas: **2037**.
 | `transform.unlink` | Unlink axes | Desligar eixos |
 | `ui.accent_color` | Interface accent color | Cor de destaque da interface |
 | `ui.accent_color_hint` | Active buttons, tools and focus. The selection in the viewport has its own color below. | Botões e ferramentas ativos e foco. A seleção na viewport tem a própria cor, abaixo. |
-| `ui.action_cut` | Cut | Cortar |
-| `ui.action_fuse` | Fuse | Fundir |
-| `ui.action_intersect` | Intersect | Interseção |
 | `ui.action_join` | Join | Juntar |
 | `ui.action_loop_cut` | Loop Cut | Loop Cut |
 | `ui.action_merge` | Merge | Mesclar |

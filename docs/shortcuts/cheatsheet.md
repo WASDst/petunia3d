@@ -60,9 +60,10 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
-| `model.make_face` | <kbd>F</kbd> |
+| `model.make_face` | <kbd>Shift+F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
+| `model.pie_select_domain` | <kbd>Alt+D</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
 | `model.push_pull` | <kbd>P</kbd> |
 | `model.rotate` | <kbd>R</kbd> |
@@ -75,6 +76,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.shape_builder` | <kbd>Shift+M</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.toggle_edit_pivot` | <kbd>Insert</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
 
@@ -87,16 +89,23 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `paint.eraser` | <kbd>E</kbd> |
 | `paint.fill` | <kbd>G</kbd> |
 | `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.hardness_decrease` | <kbd>Shift+[</kbd> |
+| `paint.hardness_increase` | <kbd>Shift+]</kbd> |
 | `paint.isolate` | <kbd>/</kbd> |
 | `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `paint.rectangle` | <kbd>R</kbd> |
 | `paint.select` | <kbd>V</kbd> |
+| `paint.size_decrease` | <kbd>[</kbd> |
+| `paint.size_increase` | <kbd>]</kbd> |
 
 ## UV
 
 | Ação | Atalho |
 | :--- | :---: |
+| `uv.move` | <kbd>G</kbd> |
+| `uv.rotate` | <kbd>R</kbd> |
+| `uv.scale` | <kbd>S</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 
 ## Visualização & Câmera
@@ -115,6 +124,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
 | `view.isolate` | <kbd>Numpad /</kbd> |
+| `view.pie_view` | <kbd>Alt+V</kbd> |
 | `view.reset_camera` | <kbd>Shift+Home</kbd> |
 | `view.toggle_projection` | <kbd>O</kbd> |
 | `view.toggle_wireframe` | <kbd>Z</kbd> |
