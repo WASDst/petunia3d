@@ -327,11 +327,19 @@ mod tests {
     }
 
     #[test]
-    fn intervening_operation_invalidates_session() {
+    fn intervening_mesh_edit_requires_explicit_conversion() {
         use crate::command::SubdivideSelectionCmd;
         let mut state = AppState::new("en");
         assert!(state.begin_primitive(PrimitiveKind::Cube, None));
-        // Outra operação com checkpoint no meio: sessão vira malha comum.
+        // Generated geometry cannot be mutated or implicitly baked.
+        let depth = state.project.undo.depth();
+        assert!(state.project.active_mesh_mut().is_none());
+        assert!(state.dispatch(&SubdivideSelectionCmd).is_err());
+        assert!(state.project.active().unwrap().geometry_source.is_some());
+        assert!(state.primitive_session_valid());
+        assert_eq!(state.project.undo.depth(), depth);
+        // Explicit conversion starts its own reversible operation.
+        assert!(state.freeze_active_primitive());
         state.project.active_mesh_mut().unwrap().faces[0].selected = true;
         assert!(state.dispatch(&SubdivideSelectionCmd).is_ok());
         assert!(!state.primitive_session_valid());
@@ -392,7 +400,7 @@ mod tests {
         let id = state.session.primitive_session.as_ref().unwrap().asset_id;
         let asset = state.project.assets.iter().find(|a| a.id == id).unwrap();
         let fresh = PrimitiveDescriptor::default_for(kind).build();
-        assert_eq!(asset.mesh.verts.len(), fresh.verts.len());
+        assert_eq!(asset.source_mesh().verts.len(), fresh.verts.len());
         assert!(state.confirm_primitive());
     }
 

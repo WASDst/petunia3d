@@ -45,9 +45,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.set_status(error.to_string());
                 return false;
             }
-            self.active_profile_id = Some(profile_id);
+            self.state.select_object(None, false);
+            self.state.session.active_shape = Some(profile_id);
         }
-        self.profile_selected_point = None;
+        self.state.session.planar_selection.point = None;
         self.profile_drag_target = None;
         self.profile_edit_gesture = None;
         self.state.session.tools.active_tool = "draw_profile".to_string();
@@ -56,42 +57,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn profile_dimension_gesture(&mut self, phase: i32) {
         if phase == 0 {
-            if self.profile_dimension_gesture.is_none()
-                && self.profile_transform_gesture.is_none()
-                && self.profile_volume_mode.is_none()
-                && let Some((profile, spline)) = self.active_profile_resources()
-                && profile.primitive_frame(spline).is_some()
-            {
-                self.profile_dimension_gesture = Some((profile.clone(), spline.clone()));
+            if self.profile_volume_mode.is_none() && self.profile_transform_gesture.is_none() {
+                self.begin_profile_authoring_preview();
             }
-            return;
+        } else if phase == 1 {
+            self.commit_profile_authoring_preview();
+        } else {
+            self.cancel_profile_authoring_preview();
         }
-        let Some((before_profile, before_spline)) = self.profile_dimension_gesture.take() else {
-            return;
-        };
-        let current = self
-            .active_profile_resources()
-            .map(|(p, s)| (p.clone(), s.clone()));
-        if let Some(p) = self
-            .state
-            .project
-            .project
-            .get_profile_mut(before_profile.id)
-        {
-            *p = before_profile;
-        }
-        if let Some(s) = self.state.project.project.get_spline_mut(before_spline.id) {
-            *s = before_spline;
-        }
-        if phase == 1
-            && let Some((profile, spline)) = current
-        {
-            let _ = self
-                .state
-                .dispatch(&draw_shapes::TransformProfileCmd { profile, spline });
-        }
-        self.state
-            .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
     }
 
     pub fn set_profile_dimensions(&mut self, width: f32, height: f32, segments: usize) -> bool {
@@ -116,14 +89,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return false;
         }
-        if self.profile_dimension_gesture.is_some() {
-            let mut next = next;
-            next.revision = spline.revision.wrapping_add(1);
-            if let Some(target) = self.state.project.project.get_spline_mut(next.id) {
-                *target = next;
+        if let Some(draft) = self.profile_authoring_preview.as_mut() {
+            draft.spline = next;
+            if matches!(self.tool_gesture, Some(ToolGesture::PlanarPrimitive { .. })) {
+                self.planar_primitive_numeric = true;
             }
-            self.state
-                .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
+            self.refresh_profile_authoring_preview();
+            self.state.mark_dirty();
             return true;
         }
         let accepted = self
@@ -134,7 +106,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             })
             .is_ok();
         if accepted {
-            self.profile_selected_point = None;
+            self.state.session.planar_selection.point = None;
             self.state.render.mark_dirty();
         }
         accepted
@@ -142,16 +114,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn add_profile_rectangle(&mut self, width: f32, height: f32) -> bool {
         self.cancel_profile_volume();
-        let width = if width.is_finite() && width > 0.0 {
-            width
-        } else {
-            2.0
-        };
-        let height = if height.is_finite() && height > 0.0 {
-            height
-        } else {
-            1.5
-        };
+        if !width.is_finite()
+            || !height.is_finite()
+            || width <= 0.0
+            || height <= 0.0
+            || width > 100_000.0
+            || height > 100_000.0
+        {
+            return false;
+        }
         let half_width = f64::from(width) * 0.5;
         let half_height = f64::from(height) * 0.5;
         if !self.replace_profile_shape(
@@ -181,12 +152,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn add_profile_circle(&mut self, radius: f32, segments: usize) -> bool {
         self.cancel_profile_volume();
-        let radius = if radius.is_finite() && radius > 0.0 {
-            radius
-        } else {
-            1.0
-        };
-        let segments = segments.clamp(6, 64);
+        if !radius.is_finite()
+            || radius <= 0.0
+            || radius > 100_000.0
+            || !(6..=512).contains(&segments)
+        {
+            return false;
+        }
         let points = (0..segments)
             .map(|index| {
                 let angle = std::f64::consts::TAU * index as f64 / segments as f64;

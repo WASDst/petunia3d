@@ -429,11 +429,19 @@ impl ProjectState {
     }
 
     pub fn scene_tris(&self) -> usize {
-        self.project.assets.iter().map(|a| a.mesh.tri_count()).sum()
+        self.project
+            .assets
+            .iter()
+            .map(|a| a.source_mesh().tri_count())
+            .sum()
     }
 
     pub fn scene_verts(&self) -> usize {
-        self.project.assets.iter().map(|a| a.mesh.verts.len()).sum()
+        self.project
+            .assets
+            .iter()
+            .map(|a| a.source_mesh().verts.len())
+            .sum()
     }
 
     pub fn is_active_locked(&self) -> bool {
@@ -1198,6 +1206,9 @@ impl SelectPolicy {
 /// Estado de sessão da viewport (website/docs/02-application/state-separation.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ViewportSession {
+    pub active_workplane: crate::WorkplaneSession,
+    pub planar_saved_camera: Option<Camera>,
+    pub draw_planar_navigation: bool,
     pub camera: Camera,
     pub camera_frame: Option<(Camera, Camera, f32)>,
     pub shading: Shading,
@@ -1207,6 +1218,7 @@ pub struct ViewportSession {
     pub locked_axes: [bool; 3],
     pub isolate_active: bool,
     pub isolate_prev_visibilities: Option<Vec<bool>>,
+    /// Snap ligado (a preferência vive na sessão, não no documento).
     pub snap_enabled: bool,
     pub snap_settings: crate::snap::SnapSettings,
     pub proportional_editing: bool,
@@ -1243,6 +1255,9 @@ impl Default for ViewportSession {
 impl ViewportSession {
     pub fn new() -> Self {
         Self {
+            active_workplane: crate::WorkplaneSession::default(),
+            planar_saved_camera: None,
+            draw_planar_navigation: true,
             camera: Camera::default(),
             camera_frame: None,
             shading: Shading::Solid,
@@ -1299,6 +1314,11 @@ pub struct EditPivotSession {
 
 /// 3. SESSÃO DO EDITOR: câmera, seleção, modos e viewport settings.
 pub struct EditorSession {
+    pub planar_saved_camera: Option<Camera>,
+    pub draw_planar_navigation: bool,
+    pub active_workplane: crate::WorkplaneSession,
+    pub active_shape: Option<uuid::Uuid>,
+    pub planar_selection: petunia_project::profile::PlanarSelection,
     /// Retângulo lógico da viewport e escala de pixels, informados pelo host.
     pub viewport_rect: Option<crate::viewport::LogicalRect>,
     pub viewport_pixels_per_point: f32,
@@ -1412,6 +1432,11 @@ impl EditorSession {
 
     pub fn new() -> Self {
         Self {
+            active_workplane: crate::WorkplaneSession::default(),
+            planar_saved_camera: None,
+            draw_planar_navigation: true,
+            active_shape: None,
+            planar_selection: petunia_project::profile::PlanarSelection::default(),
             viewport_rect: None,
             viewport_pixels_per_point: 1.0,
             selection: Selection::default(),
@@ -1644,6 +1669,9 @@ impl EditorSession {
 
     pub fn viewport_session(&self) -> ViewportSession {
         ViewportSession {
+            active_workplane: self.active_workplane,
+            planar_saved_camera: self.planar_saved_camera.clone(),
+            draw_planar_navigation: self.draw_planar_navigation,
             camera: self.camera.clone(),
             camera_frame: self.camera_frame.clone(),
             shading: self.shading,
@@ -1679,6 +1707,9 @@ impl EditorSession {
     }
 
     pub fn set_viewport_session(&mut self, vs: ViewportSession) {
+        self.active_workplane = vs.active_workplane;
+        self.planar_saved_camera = vs.planar_saved_camera;
+        self.draw_planar_navigation = vs.draw_planar_navigation;
         self.camera = vs.camera;
         self.camera_frame = vs.camera_frame;
         self.shading = vs.shading;
@@ -1688,7 +1719,6 @@ impl EditorSession {
         self.locked_axes = vs.locked_axes;
         self.isolate_active = vs.isolate_active;
         self.isolate_prev_visibilities = vs.isolate_prev_visibilities;
-        self.snap_enabled = vs.snap_enabled;
         self.snap_settings = vs.snap_settings;
         self.proportional_editing = vs.proportional_editing;
         self.proportional_settings = vs.proportional_settings;
@@ -2848,18 +2878,31 @@ impl CommandContext<'_> {
         self.set_selection_domain(SelectionDomain::Object);
         self.finalize_primitive_session();
         let original_selection = self.editor.selection.clone();
+        // A primitiva nasce no cursor 3D (a geraç��o usa o mesmo ponto).
+        let cursor_offset = self.editor.cursor_3d;
         let asset_name = name.unwrap_or_else(|| descriptor.kind().default_name().to_string());
         let undo_label = format!("add primitive: {asset_name}");
+        let generator = petunia_project::GeometryGenerator::new(
+            petunia_project::GeometryGeneratorKind::Primitive(descriptor),
+        );
+        let mesh = match generator.evaluate(&self.document.project) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error.to_string());
+                return false;
+            }
+        };
         self.checkpoint(&undo_label);
-        self.document.add(&asset_name, mesh);
+        self.document
+            .add(&asset_name, petunia_mesh::Mesh::default());
         let Some(asset) = self.document.assets.last_mut() else {
             return false;
         };
-        asset.parametric = Some(descriptor);
-        asset.set_object_transform(petunia_project::ObjectTransform {
-            translation: cursor.to_array(),
-            ..Default::default()
-        });
+        asset.geometry_source = Some(generator);
+        asset.generated_mesh = mesh.into();
+        asset.transform.translation = cursor_offset;
+        asset.position = cursor_offset;
+        asset.origin = Some([0.0; 3]);
         let asset_id = asset.id;
         self.editor.primitive_session = Some(crate::primitive_session::PrimitiveCreationSession {
             asset_id,
@@ -2886,21 +2929,35 @@ impl CommandContext<'_> {
             self.set_status("Finish the active transform before editing primitive parameters");
             return false;
         }
-        let Some(asset_id) = self.editor.primitive_session.as_ref().map(|s| s.asset_id) else {
+        let asset_id = match &self.editor.primitive_session {
+            Some(session) => session.asset_id,
+            None => return false,
+        };
+        let Some(asset) = self
+            .document
+            .assets
+            .iter()
+            .find(|a| a.id == asset_id && !a.locked)
+        else {
             return false;
+        };
+        let Some(mut generator) = asset.geometry_source.clone() else {
+            return false;
+        };
+        generator.kind = petunia_project::GeometryGeneratorKind::Primitive(descriptor);
+        generator.revision = generator.revision.wrapping_add(1);
+        let mesh = match generator.evaluate(&self.document.project) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error.to_string());
+                return false;
+            }
         };
         let Some(asset) = self.document.assets.iter_mut().find(|a| a.id == asset_id) else {
             return false;
         };
-        let mesh = match crate::primitive_session::regenerate_primitive(asset, descriptor) {
-            Ok(mesh) => mesh,
-            Err(error) => {
-                self.set_status(error);
-                return false;
-            }
-        };
-        asset.mesh = mesh.into();
-        asset.parametric = Some(descriptor);
+        asset.geometry_source = Some(generator);
+        asset.generated_mesh = mesh.into();
         if let Some(session) = self.editor.primitive_session.as_mut() {
             session.descriptor = descriptor;
         }
@@ -2910,6 +2967,15 @@ impl CommandContext<'_> {
 
     /// Congela transparentemente a primitiva paramétrica do asset ativo em malha estática.
     pub fn freeze_active_primitive(&mut self) -> bool {
+        if let Some(asset) = self.document.active()
+            && let Some(source) = asset.geometry_source.as_ref()
+        {
+            let command = crate::MakeGeneratedEditableCmd {
+                object_id: asset.id,
+                expected_revision: source.revision,
+            };
+            return crate::CommandDispatcher::dispatch_context(self, &command).is_ok();
+        }
         if self.freeze_active_primitive_for_command() {
             self.emit_mesh_changed();
             self.mark_dirty();
@@ -2935,6 +3001,20 @@ impl CommandContext<'_> {
 
     /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
     ///
+    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
+    ///
+    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
+    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
+    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
+    ///
+    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
+    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
+    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
+    ///
+    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
+    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
+    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
+    ///
     /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
     /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
     pub fn update_active_primitive(
@@ -2945,25 +3025,74 @@ impl CommandContext<'_> {
         if self.primitive_session_valid() {
             return self.update_primitive(descriptor);
         }
-
         if self.editor.tools.modal.is_some() || self.editor.tools.uv_transform.is_some() {
             self.set_status("Finish the active transform before editing primitive parameters");
             return false;
         }
-        let Some(asset) = self.document.active() else {
-            return false;
-        };
-        let mesh = match crate::primitive_session::regenerate_primitive(asset, descriptor) {
-            Ok(mesh) => mesh,
-            Err(error) => {
-                self.set_status(error);
+
+        if let Some(asset) = self.document.active().filter(|a| {
+            matches!(
+                a.geometry_source.as_ref().map(|g| &g.kind),
+                Some(petunia_project::GeometryGeneratorKind::Primitive(_))
+            )
+        }) {
+            if asset.locked {
                 return false;
             }
+            let Some(mut generator) = asset.geometry_source.clone() else {
+                return false;
+            };
+            generator.kind = petunia_project::GeometryGeneratorKind::Primitive(descriptor);
+            let command = crate::UpdateGeometryGeneratorCmd {
+                object_id: asset.id,
+                expected_revision: generator.revision,
+                generator,
+            };
+            if create_checkpoint {
+                return crate::CommandDispatcher::dispatch_context(self, &command).is_ok();
+            }
+            let mesh = match command.generator.evaluate(&self.document.project) {
+                Ok(mesh) => mesh,
+                Err(error) => {
+                    self.set_status(error.to_string());
+                    return false;
+                }
+            };
+            let Some(asset) = self.document.active_mut() else {
+                return false;
+            };
+            let mut source = command.generator;
+            source.revision = source.revision.wrapping_add(1);
+            asset.geometry_source = Some(source);
+            asset.generated_mesh = mesh.into();
+            self.emit_mesh_changed();
+            self.mark_dirty();
+            return true;
+        }
+        let Some(asset) = self.document.active_mut() else {
+            return false;
         };
+        if !asset.is_parametric() {
+            return false;
+        }
+
+        let origin = asset.origin.unwrap_or_else(|| {
+            let c = asset.mesh.center();
+            [c.x, c.y, c.z]
+        });
+
         if create_checkpoint {
             let label = format!("edit primitive: {}", descriptor.kind_name());
             self.checkpoint(&label);
         }
+
+        let mut mesh = descriptor.build();
+        for v in &mut mesh.verts {
+            v.pos[0] += origin[0];
+            v.pos[1] += origin[1];
+            v.pos[2] += origin[2];
+        }
+
         let Some(asset) = self.document.active_mut() else {
             return false;
         };
@@ -3161,6 +3290,8 @@ impl CommandContext<'_> {
     /// Checkpoint de undo ANTES de mutar o projeto + evento.
     pub fn checkpoint(&mut self, label: &str) {
         self.document.project.history_selection = self.editor.selection.assets.clone();
+        self.document.project.history_active_shape = self.editor.active_shape;
+        self.document.project.history_planar_selection = self.editor.planar_selection.clone();
         self.document.checkpoint(label);
         self.mark_dirty();
     }
@@ -3172,6 +3303,10 @@ impl CommandContext<'_> {
         let revision_clock = self.document.project.revision_clock();
         snapshot.rebase_revisions_after_restore(revision_clock);
         self.editor.selection.assets = snapshot.history_selection.clone();
+        self.editor.planar_selection = snapshot.history_planar_selection.clone();
+        self.editor.active_shape = snapshot
+            .history_active_shape
+            .filter(|id| snapshot.get_profile(*id).is_some());
         self.document.palette = snapshot.palette.clone();
         self.document.project = snapshot;
         self.document.sync_reference_mirror();
@@ -3197,12 +3332,18 @@ impl CommandContext<'_> {
         if self.cancel_modal() {
             return true;
         }
+        self.document.project.history_active_shape = self.editor.active_shape;
+        self.document.project.history_planar_selection = self.editor.planar_selection.clone();
         let cur = self.document.project.clone();
         let bytes = cur.estimated_bytes();
         let revision_clock = cur.revision_clock();
         if let Some(mut prev) = self.document.undo.undo_sized(cur, bytes) {
             prev.rebase_revisions_after_restore(revision_clock);
             self.editor.selection.assets = prev.history_selection.clone();
+            self.editor.planar_selection = prev.history_planar_selection.clone();
+            self.editor.active_shape = prev
+                .history_active_shape
+                .filter(|id| prev.get_profile(*id).is_some());
             self.document.palette = prev.palette.clone();
             self.document.project = prev;
             self.document.sync_reference_mirror();
@@ -3235,12 +3376,18 @@ impl CommandContext<'_> {
         if self.cancel_modal() {
             return true;
         }
+        self.document.project.history_active_shape = self.editor.active_shape;
+        self.document.project.history_planar_selection = self.editor.planar_selection.clone();
         let cur = self.document.project.clone();
         let bytes = cur.estimated_bytes();
         let revision_clock = cur.revision_clock();
         if let Some(mut next) = self.document.undo.redo_sized(cur, bytes) {
             next.rebase_revisions_after_restore(revision_clock);
             self.editor.selection.assets = next.history_selection.clone();
+            self.editor.planar_selection = next.history_planar_selection.clone();
+            self.editor.active_shape = next
+                .history_active_shape
+                .filter(|id| next.get_profile(*id).is_some());
             self.document.palette = next.palette.clone();
             self.document.project = next;
             self.document.sync_reference_mirror();
@@ -3300,6 +3447,13 @@ impl CommandContext<'_> {
     pub fn emit_project_changed(&mut self, changes: ProjectChanges) {
         if changes.is_empty() {
             return;
+        }
+        let mut changes = changes;
+        if changes.intersects(
+            ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL | ProjectChanges::TRANSFORMS,
+        ) && self.document.project.refresh_generated_geometry()
+        {
+            changes |= ProjectChanges::GEOMETRY;
         }
         self.document.project.bump_changes(changes);
         // Operation Graph: reavalia só os objetos cujas dependências mudaram (hash).
@@ -3418,6 +3572,8 @@ impl CommandContext<'_> {
             .editor
             .sync_selection(&self.document.project, self.events);
         self.document.project.history_selection = self.editor.selection.assets.clone();
+        self.document.project.history_active_shape = self.editor.active_shape;
+        self.document.project.history_planar_selection = self.editor.planar_selection.clone();
         if changed {
             // Sync Selection 3D → UV, só quando o usuário o mantém ligado.
             if let Some(asset) = self
@@ -5124,7 +5280,9 @@ impl<'a> EditorView<'a> {
 
     /// O asset ativo é uma primitiva paramétrica viva?
     pub fn active_is_parametric(self) -> bool {
-        self.document.active().is_some_and(|a| a.is_parametric())
+        self.document
+            .active()
+            .is_some_and(|a| a.primitive_descriptor().is_some())
     }
 
     /// O asset ativo é uma composição sólida reeditável?
@@ -5136,7 +5294,9 @@ impl<'a> EditorView<'a> {
     pub fn active_primitive_descriptor(
         self,
     ) -> Option<crate::primitive_session::PrimitiveDescriptor> {
-        self.document.active().and_then(|a| a.parametric)
+        self.document
+            .active()
+            .and_then(|a| a.primitive_descriptor())
     }
 
     /// Retorna se o eixo especificado (0 = X, 1 = Y, 2 = Z) está travado na atividade de edição atual.
@@ -5224,7 +5384,7 @@ impl<'a> EditorView<'a> {
                     let mut max = glam::Vec3::splat(f32::MIN);
                     let mut count = 0;
                     let world = active.world_positions();
-                    for (v, p) in active.mesh.verts.iter().zip(world) {
+                    for (v, p) in active.source_mesh().verts.iter().zip(world) {
                         if v.selected || self.editor.selection_domain == SelectionDomain::Object {
                             min = min.min(p);
                             max = max.max(p);
@@ -5241,8 +5401,13 @@ impl<'a> EditorView<'a> {
                 }
             }
             PivotPoint::MedianPoint | PivotPoint::IndividualOrigins => {
-                if let Some(active) = self.document.active() {
-                    active.to_world_point(glam::Vec3::from(active.mesh.selection_center()))
+                if self.selection_domain() == SelectionDomain::Object
+                    && let Some(active) = self.document.active()
+                    && let Some(origin) = active.origin
+                {
+                    glam::Vec3::from(origin)
+                } else if let Some(active) = self.document.active() {
+                    active.to_world_point(glam::Vec3::from(active.source_mesh().selection_center()))
                 } else {
                     glam::Vec3::from(self.cursor_3d)
                 }

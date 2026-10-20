@@ -115,6 +115,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         // Os booleans recebidos aqui descrevem teclas físicas pressionadas.
         // O significado (precision/snap/extend/alternate) vem do keymap ativo.
         let held = Mods2 { ctrl, shift, alt };
+        let inference_held = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_INFERENCE_LOCK)
+            .held_in(held);
+        self.update_draw_inference_hold(inference_held);
         let precision = self
             .state
             .ui

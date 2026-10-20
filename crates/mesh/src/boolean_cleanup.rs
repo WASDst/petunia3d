@@ -496,6 +496,61 @@ pub fn cleanup_boolean_result(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupR
     (out, report)
 }
 
+/// Solid Shape Builder policy: retain both sources' face-corner UVs and
+/// material slots, including when topology cleanup falls back to triangles.
+/// Only genuinely generated faces receive a deterministic local projection.
+pub fn cleanup_boolean_surfaces(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupReport) {
+    let (mut mesh, mut report) = cleanup_boolean_result(raw, a, b);
+    let sources = surface_sources(&mesh, a, b);
+    for (index, origin) in sources.iter().enumerate() {
+        let Some(face) = mesh.faces.get(index) else {
+            continue;
+        };
+        let positions: Vec<_> = face
+            .verts
+            .iter()
+            .filter_map(|v| mesh.verts.get(*v as usize).map(|v| v.vec()))
+            .collect();
+        let (uv, slot) = if let Some((side, source_face)) = origin {
+            let source = if *side == 0 { a } else { b };
+            (
+                positions
+                    .iter()
+                    .map(|p| inherited_uv(source, *source_face, *p))
+                    .collect(),
+                source.faces.get(*source_face).and_then(|f| f.material_slot),
+            )
+        } else {
+            let normal = mesh.face_normal(index).abs();
+            (
+                positions
+                    .iter()
+                    .map(|p| {
+                        if normal.x >= normal.y && normal.x >= normal.z {
+                            [p.y, p.z]
+                        } else if normal.y >= normal.z {
+                            [p.x, p.z]
+                        } else {
+                            [p.x, p.y]
+                        }
+                    })
+                    .collect(),
+                None,
+            )
+        };
+        if let Some(face) = mesh.faces.get_mut(index) {
+            face.uv = uv;
+            face.material_slot = slot;
+        }
+    }
+    report.uv = if sources.iter().all(Option::is_some) {
+        UvOutcome::Inherited
+    } else {
+        UvOutcome::Relaid
+    };
+    (mesh, report)
+}
+
 /// Classifies output faces for transferring textures across a changed UV atlas.
 /// Classification is independent of cleanup, including the safe fallback.
 pub fn surface_sources(result: &Mesh, a: &Mesh, b: &Mesh) -> Vec<Option<(u8, usize)>> {

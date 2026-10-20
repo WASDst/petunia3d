@@ -238,7 +238,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     ),
                 };
                 let mut snapped_kind = None;
-                if snap || self.state.session.snap_enabled {
+                if snap || self.state.session.snap_settings.enabled {
                     let target = self.state.session.snap_settings.target;
                     let mut mask = petunia_core::SnapMask::for_target(target);
                     // Move não tem plano de grade inequívoco em 3D: a grade vira

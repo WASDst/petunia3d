@@ -268,3 +268,24 @@ mod preview_tests;
 
 mod draw_batch;
 pub use draw_batch::DrawBatchCmd;
+
+mod boolean_texture;
+
+pub mod geometry_generators;
+pub use geometry_generators::{
+    CreateGeometryGeneratorCmd, MakeGeneratedEditableCmd, UpdateGeometryGeneratorCmd,
+};
+
+pub mod workplane;
+pub use workplane::{WorkplaneMode, WorkplaneSession};
+
+pub use geometry_generators::CreateRegionGeneratorCmd;
+
+pub use geometry_generators::EditPlanarShapeCmd;
+
+pub mod solid_shape_builder;
+pub use solid_shape_builder::{
+    CommitSolidShapeBuilderCmd, SolidShapeBuilderSession, SolidShapeIntent,
+};
+
+pub use geometry_generators::SetPlanarShapeFlagsCmd;

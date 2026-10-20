@@ -223,7 +223,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return false;
             };
             self.cancel_active_operation();
-            self.active_profile_id = None;
+            self.state.session.active_shape = None;
             self.state.select_object(Some(index), extend);
             self.reset_transform_fields();
             true

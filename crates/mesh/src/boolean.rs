@@ -42,6 +42,22 @@ pub struct BooleanPartition {
     pub second_only: BooleanSolid,
 }
 
+/// Regiões disjuntas dos dois operandos (o que o Shape Builder consome).
+#[derive(Clone, Debug)]
+pub struct SolidPartition {
+    pub regions: Vec<SolidRegion>,
+}
+
+/// Particiona dois sólidos em regiões disjuntas (com proveniência).
+///
+/// Recusa operandos abertos ou não-manifoldes; a subtração é feita uma vez,
+/// sem reparo ou remesh.
+pub fn partition_solids(first: &Mesh, second: &Mesh) -> Result<SolidPartition, BooleanError> {
+    let prepared = PreparedBooleanOperands::new(first, second)?;
+    let regions = prepared.decompose_regions(first, second)?;
+    Ok(SolidPartition { regions })
+}
+
 impl PreparedBooleanOperands {
     pub fn new(a: &Mesh, b: &Mesh) -> Result<Self, BooleanError> {
         let a = to_provider(a).ok_or(BooleanError::InvalidInput("mesh A"))?;
@@ -86,7 +102,7 @@ impl PreparedBooleanOperands {
 
         for (class, solid) in [
             (SolidRegionClass::FirstOnly, partition.first_only),
-            (SolidRegionClass::Overlap, partition.overlap),
+            (SolidRegionClass::Intersection, partition.overlap),
             (SolidRegionClass::SecondOnly, partition.second_only),
         ] {
             let components = solid.connected_regions()?;
@@ -174,7 +190,7 @@ impl PreparedBooleanOperands {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SolidRegionClass {
     FirstOnly,
-    Overlap,
+    Intersection,
     SecondOnly,
 }
 
@@ -252,7 +268,7 @@ impl RegionPlan {
             match r.class {
                 SolidRegionClass::FirstOnly => group_a.push(r.id),
                 SolidRegionClass::SecondOnly => group_b.push(r.id),
-                SolidRegionClass::Overlap => {
+                SolidRegionClass::Intersection => {
                     group_a.push(r.id);
                     group_b.push(r.id);
                 }
@@ -572,4 +588,195 @@ mod tests {
         let union = a.union(&b);
         assert!((union.volume() - 2.0).abs() < 1e-6);
     }
+}
+
+const MAX_SOLID_TRIANGLES: usize = 200_000;
+const MAX_SOLID_COMPONENTS: usize = 128;
+
+
+fn validate_solid_operand(mesh: &Mesh) -> Result<(), BooleanError> {
+    mesh.validate_invariants()
+        .map_err(|_| BooleanError::InvalidInput("mesh invariants"))?;
+    if mesh.faces.is_empty()
+        || mesh.faces.len() > MAX_SOLID_TRIANGLES
+        || mesh.verts.len() > MAX_SOLID_TRIANGLES
+    {
+        return Err(BooleanError::InvalidInput("empty or excessive solid"));
+    }
+    let triangles = mesh
+        .faces
+        .iter()
+        .try_fold(0usize, |n, f| {
+            n.checked_add(f.verts.len().saturating_sub(2))
+        })
+        .ok_or(BooleanError::InvalidInput("triangle budget"))?;
+    if triangles > MAX_SOLID_TRIANGLES {
+        return Err(BooleanError::InvalidInput("triangle budget"));
+    }
+    let mut edges = std::collections::HashMap::<(u32, u32), (u32, i32)>::new();
+    for face in &mesh.faces {
+        for (a, b) in face
+            .verts
+            .iter()
+            .zip(face.verts.iter().cycle().skip(1))
+            .take(face.verts.len())
+        {
+            let key = if a < b { (*a, *b) } else { (*b, *a) };
+            let entry = edges.entry(key).or_default();
+            entry.0 = entry.0.saturating_add(1);
+            entry.1 += if a < b { 1 } else { -1 };
+        }
+    }
+    if edges
+        .values()
+        .any(|(count, direction)| *count != 2 || *direction != 0)
+    {
+        return Err(BooleanError::InvalidInput(
+            "mesh must be closed and consistently oriented",
+        ));
+    }
+    Ok(())
+}
+
+/// Edge-connected face components. Vertex-only contacts remain separate.
+pub fn connected_face_components(mesh: &Mesh) -> Result<Vec<Mesh>, BooleanError> {
+    use std::collections::{HashMap, VecDeque};
+    mesh.validate_invariants()
+        .map_err(|_| BooleanError::InvalidInput("component mesh"))?;
+    if mesh.faces.len() > MAX_SOLID_TRIANGLES {
+        return Err(BooleanError::InvalidInput("component budget"));
+    }
+    let mut incident: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+    for (index, face) in mesh.faces.iter().enumerate() {
+        for (a, b) in face
+            .verts
+            .iter()
+            .zip(face.verts.iter().cycle().skip(1))
+            .take(face.verts.len())
+        {
+            incident
+                .entry(if a < b { (*a, *b) } else { (*b, *a) })
+                .or_default()
+                .push(index);
+        }
+    }
+    let mut visited = vec![false; mesh.faces.len()];
+    let mut result = Vec::new();
+    for seed in 0..mesh.faces.len() {
+        if visited.get(seed).copied().unwrap_or(true) {
+            continue;
+        }
+        let mut queue = VecDeque::from([seed]);
+        let mut faces = Vec::new();
+        while let Some(index) = queue.pop_front() {
+            let Some(flag) = visited.get_mut(index) else {
+                continue;
+            };
+            if *flag {
+                continue;
+            }
+            *flag = true;
+            let Some(face) = mesh.faces.get(index) else {
+                continue;
+            };
+            faces.push(index);
+            for (a, b) in face
+                .verts
+                .iter()
+                .zip(face.verts.iter().cycle().skip(1))
+                .take(face.verts.len())
+            {
+                let key = if a < b { (*a, *b) } else { (*b, *a) };
+                if let Some(neighbors) = incident.get(&key) {
+                    for neighbor in neighbors {
+                        if !visited.get(*neighbor).copied().unwrap_or(true) {
+                            queue.push_back(*neighbor);
+                        }
+                    }
+                }
+            }
+        }
+        if result.len() >= MAX_SOLID_COMPONENTS {
+            return Err(BooleanError::InvalidOutput("component budget"));
+        }
+        let mut compact = Mesh::default();
+        let mut remap: HashMap<u32, u32> = HashMap::new();
+        for index in faces {
+            let Some(source) = mesh.faces.get(index) else {
+                return Err(BooleanError::InvalidInput("missing face"));
+            };
+            let mut face = source.clone();
+            for id in &mut face.verts {
+                let next = if let Some(existing) = remap.get(id) {
+                    *existing
+                } else {
+                    let vertex = mesh
+                        .verts
+                        .get(*id as usize)
+                        .ok_or(BooleanError::InvalidInput("missing vertex"))?;
+                    let next = u32::try_from(compact.verts.len())
+                        .map_err(|_| BooleanError::InvalidOutput("vertex budget"))?;
+                    compact.verts.push(vertex.clone());
+                    remap.insert(*id, next);
+                    next
+                };
+                *id = next;
+            }
+            let next_face = compact.faces.len();
+            for (pinned_face, corner) in &mesh.uv_pinned {
+                if *pinned_face == index {
+                    compact.uv_pinned.insert((next_face, *corner));
+                }
+            }
+            compact.faces.push(face);
+        }
+        for (a, b) in &mesh.sharp_edges {
+            if let (Some(a), Some(b)) = (remap.get(a), remap.get(b)) {
+                compact
+                    .sharp_edges
+                    .insert(if a < b { (*a, *b) } else { (*b, *a) });
+            }
+        }
+        for (a, b) in &mesh.selected_edges {
+            if let (Some(a), Some(b)) = (remap.get(a), remap.get(b)) {
+                compact
+                    .selected_edges
+                    .insert(if a < b { (*a, *b) } else { (*b, *a) });
+            }
+        }
+        for (a, b) in &mesh.uv_seams {
+            if let (Some(a), Some(b)) = (remap.get(a), remap.get(b)) {
+                compact
+                    .uv_seams
+                    .insert(if a < b { (*a, *b) } else { (*b, *a) });
+            }
+        }
+        result.push(compact);
+    }
+    Ok(result)
+}
+
+pub fn boolean_solid(a: &Mesh, b: &Mesh, op: BooleanOp) -> Result<BooleanSolid, BooleanError> {
+    validate_solid_operand(a)?;
+    validate_solid_operand(b)?;
+    let (mut ta, mut tb) = (a.clone(), b.clone());
+    ta.triangulate();
+    tb.triangulate();
+    let ma = to_provider(&ta).ok_or(BooleanError::InvalidInput("first solid"))?;
+    let mb = to_provider(&tb).ok_or(BooleanError::InvalidInput("second solid"))?;
+    let result = match op {
+        BooleanOp::Union => ma.union(&mb),
+        BooleanOp::Difference => ma.difference(&mb),
+        BooleanOp::Intersection => ma.intersection(&mb),
+    };
+    if result.status() != manifold_rust::types::Error::NoError {
+        return Err(BooleanError::Kernel);
+    }
+    if result.is_empty() {
+        return Ok(BooleanSolid::Empty);
+    }
+    let raw = from_provider(&result).ok_or(BooleanError::InvalidOutput("solid result"))?;
+    Ok(BooleanSolid::Mesh(Box::new(
+        crate::boolean_cleanup::cleanup_boolean_surfaces(&raw, a, b).0,
+    )))
 }

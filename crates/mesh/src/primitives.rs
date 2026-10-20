@@ -843,12 +843,22 @@ impl Mesh {
         if profile.len() < 2 {
             return Err("perfil precisa de ao menos 2 pontos".to_string());
         }
-        let seg = segments.clamp(3, 64) as usize;
-        let angle_deg = if angle_degrees.is_finite() && angle_degrees > 0.0 {
-            angle_degrees.min(360.0)
-        } else {
-            360.0
-        };
+        if !(3..=512).contains(&segments)
+            || !angle_degrees.is_finite()
+            || !(0.01..=360.0).contains(&angle_degrees)
+            || profile.len() > 65_536
+            || profile
+                .iter()
+                .any(|p| !p[0].is_finite() || !p[1].is_finite() || p[0] < 0.0)
+            || profile
+                .len()
+                .checked_mul(segments as usize + 1)
+                .is_none_or(|n| n > 262_144)
+        {
+            return Err("invalid revolve profile, angle, segments or geometry budget".into());
+        }
+        let seg = segments as usize;
+        let angle_deg = angle_degrees;
         let is_full_circle = (angle_deg - 360.0).abs() < 1e-3;
         let angle_rad = angle_deg.to_radians();
 
@@ -907,6 +917,159 @@ impl Mesh {
         }
         m.layout_uv_charts(DEFAULT_UV_PADDING);
         Ok(m)
+    }
+
+    /// Canonical generator evaluation; axis vertices and closed-profile seams
+    /// are shared by construction rather than welded as a repair afterwards.
+    pub fn revolve_profile(
+        profile: &[[f32; 2]],
+        segments: u32,
+        angle: f32,
+        closed: bool,
+        caps: [bool; 2],
+    ) -> Result<Self, String> {
+        if profile.len() < if closed { 3 } else { 2 }
+            || !(3..=512).contains(&segments)
+            || !angle.is_finite()
+            || !(0.01..=360.0).contains(&angle)
+            || profile
+                .iter()
+                .any(|p| p.iter().any(|v| !v.is_finite()) || p[0] < 0.0)
+            || profile
+                .len()
+                .checked_mul(segments as usize + 1)
+                .is_none_or(|n| n > 262_144)
+        {
+            return Err("invalid revolve profile or geometry budget".into());
+        }
+        let full = (angle - 360.0).abs() < 1.0e-4;
+        let steps = segments as usize;
+        let ring_count = if full { steps } else { steps + 1 };
+        let mut points = profile.to_vec();
+        if closed && triangulate::polygon_area(&points) < 0.0 {
+            points.reverse();
+        }
+        let mut mesh = Self::default();
+        let mut rings = Vec::with_capacity(points.len());
+        for &[radius, y] in &points {
+            if radius < 1.0e-6 {
+                let id = mesh.verts.len() as u32;
+                mesh.verts.push(Vertex::new(0.0, y, 0.0));
+                rings.push(vec![id; ring_count]);
+            } else {
+                let mut ring = Vec::with_capacity(ring_count);
+                for step in 0..ring_count {
+                    let radians = angle.to_radians() * step as f32 / steps as f32;
+                    ring.push(mesh.verts.len() as u32);
+                    mesh.verts.push(Vertex::new(
+                        radius * radians.cos(),
+                        y,
+                        radius * radians.sin(),
+                    ));
+                }
+                rings.push(ring);
+            }
+        }
+        let pairs = if closed {
+            points.len()
+        } else {
+            points.len() - 1
+        };
+        for index in 0..pairs {
+            let first = rings.get(index).ok_or("revolve ring")?;
+            let second = rings.get((index + 1) % rings.len()).ok_or("revolve ring")?;
+            for step in 0..steps {
+                let next = if full {
+                    (step + 1) % ring_count
+                } else {
+                    step + 1
+                };
+                let a = *first.get(step).ok_or("revolve vertex")?;
+                let b = *first.get(next).ok_or("revolve vertex")?;
+                let c = *second.get(next).ok_or("revolve vertex")?;
+                let d = *second.get(step).ok_or("revolve vertex")?;
+                let mut vertices = vec![a, d, c, b];
+                vertices.dedup();
+                if vertices.first() == vertices.last() {
+                    vertices.pop();
+                }
+                if vertices.len() >= 3 {
+                    mesh.push_face(Face::new(vertices));
+                }
+            }
+        }
+        let mut axis_endpoints = Vec::new();
+        if !closed && !full && caps.into_iter().any(|enabled| enabled) {
+            for (point, ring) in points
+                .first()
+                .zip(rings.first())
+                .into_iter()
+                .chain(points.last().zip(rings.last()))
+            {
+                let id = if point[0] < 1.0e-6 {
+                    *ring.first().ok_or("revolve axis")?
+                } else {
+                    let id = mesh.verts.len() as u32;
+                    mesh.verts.push(Vertex::new(0.0, point[1], 0.0));
+                    id
+                };
+                axis_endpoints.push(id);
+            }
+        }
+        if !closed {
+            for (end, enabled) in caps.into_iter().enumerate() {
+                if !enabled {
+                    continue;
+                }
+                let ring = if end == 0 {
+                    rings.first()
+                } else {
+                    rings.last()
+                }
+                .ok_or("revolve endpoint")?;
+                if ring.first() == ring.last() {
+                    continue;
+                }
+                let mut vertices = ring.clone();
+                if !full {
+                    vertices.push(*axis_endpoints.get(end).ok_or("revolve cap axis")?);
+                }
+                if end == 1 {
+                    vertices.reverse();
+                }
+                if vertices.len() >= 3 {
+                    mesh.push_face(Face::new(vertices));
+                }
+            }
+        }
+        if !full && (closed || caps.into_iter().all(|v| v)) {
+            for (end, enabled) in caps.into_iter().enumerate() {
+                if closed && !enabled {
+                    continue;
+                }
+                let step = if end == 0 { 0 } else { steps };
+                let mut vertices: Vec<_> = rings
+                    .iter()
+                    .filter_map(|ring| ring.get(step).copied())
+                    .collect();
+                if !closed {
+                    vertices.extend(axis_endpoints.iter().rev().copied());
+                }
+                vertices.dedup();
+                if vertices.first() == vertices.last() {
+                    vertices.pop();
+                }
+                if end == 0 {
+                    vertices.reverse();
+                }
+                if vertices.len() >= 3 {
+                    mesh.push_face(Face::new(vertices));
+                }
+            }
+        }
+        mesh.validate_invariants().map_err(|e| e.to_string())?;
+        mesh.layout_uv_charts(DEFAULT_UV_PADDING);
+        Ok(mesh)
     }
 
     /// Malha a partir de polígono 2D extrudado em +Z.

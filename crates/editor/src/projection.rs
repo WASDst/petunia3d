@@ -435,7 +435,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         let Some(asset) = state.project.active() else {
             return model;
         };
-        if asset.mesh.verts.is_empty() {
+        if asset.source_mesh().verts.is_empty() {
             return model;
         };
         // B10: em vértice/aresta/face sem nada selecionado não há o que

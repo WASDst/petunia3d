@@ -435,6 +435,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return false;
             }
         }
+        if !ctrl && !alt && self.draw_numeric_input(text) {
+            return true;
+        }
+        if text == "Backspace"
+            && !ctrl
+            && !alt
+            && self.state.session.tools.active_tool == "draw_profile"
+            && !self.active_profile_closed()
+            && let Some(id) = self
+                .active_contour_resources()
+                .and_then(|(_, s)| s.points.last())
+                .map(|p| p.id)
+        {
+            self.state.session.planar_selection.point = Some(id);
+            return self.delete_selected_profile_point();
+        }
         if self.decal_gesture.is_some() && !ctrl && !alt {
             // Buffer numérico do gesto de decalque (constituição 11).
             if text == "Tab" {
@@ -460,17 +476,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if text == "F4" && !ctrl && !alt && !shift {
             return self.toggle_reference_manager();
         }
-        if ctrl
-            && !alt
-            && text.eq_ignore_ascii_case("g")
-            && self.state.workspace == Workspace::Model
-        {
-            return if shift {
-                self.ungroup(None)
-            } else {
-                self.group_selection()
-            };
-        }
         if ctrl && !shift && !alt && text.eq_ignore_ascii_case("c") {
             return self.copy_selection();
         }
@@ -486,23 +491,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.mark_dirty();
             return true;
         }
-        if matches!(text, "Delete" | "Backspace")
-            && !ctrl
-            && !alt
-            && !shift
-            && self.state.session.tools.modal.is_some()
-            && !self.tool_session.numeric_text().is_empty()
-        {
-            self.tool_session.pop_numeric();
-            if self.tool_session.numeric_text().is_empty() {
-                let [x, y] = self.pointer_position;
-                self.update_viewport_transform(x, y);
-            } else {
-                self.preview_modal_text();
+        if (text == "Delete" || text == "Backspace") && !ctrl && !alt && !shift {
+            if self.state.session.tools.modal.is_some()
+                && !self.tool_session.numeric_text().is_empty()
+            {
+                self.tool_session.pop_numeric();
+                if self.tool_session.numeric_text().is_empty() {
+                    let [x, y] = self.pointer_position;
+                    self.update_viewport_transform(x, y);
+                } else {
+                    self.preview_modal_text();
+                }
+                return true;
             }
-            return true;
+            return self.delete_or_dissolve_selection();
         }
-        // Idle Delete/Backspace belongs to the effective keymap.
         if self.state.session.tools.modal.is_none()
             && self.drag.is_none()
             && self.rename_draft.is_none()
@@ -539,7 +542,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
         }
-
+        if (text == "Insert" || text.eq_ignore_ascii_case("d"))
+            && !ctrl
+            && !alt
+            && !shift
+            && self.state.session.tools.modal.is_none()
+            && self.drag.is_none()
+            && self.rename_draft.is_none()
+        {
+            self.apply(UiIntent::ToggleEditPivot);
+            return true;
+        }
         if (text == " " || text == "Space") && !ctrl && !alt && !shift {
             if self.state.session.tools.active_tool == "slice"
                 && (self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some())
@@ -641,7 +654,74 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return true;
             }
         }
-
+        if text.eq_ignore_ascii_case("z")
+            && !ctrl
+            && !alt
+            && self.state.session.tools.modal.is_none()
+            && self.drag.is_none()
+            && self.rename_draft.is_none()
+        {
+            if let Err(error) = self.execute_core_command("view.toggle_wireframe") {
+                self.state.set_status(error.to_string());
+            }
+            return true;
+        }
+        if self.state.workspace == Workspace::Model
+            && self.state.session.tools.modal.is_none()
+            && self.drag.is_none()
+            && self.rename_draft.is_none()
+            && !ctrl
+            && !alt
+            && !shift
+        {
+            match text {
+                "1" => {
+                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Vertex));
+                    return true;
+                }
+                "2" => {
+                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge));
+                    return true;
+                }
+                "3" => {
+                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face));
+                    return true;
+                }
+                "4" => {
+                    self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Object));
+                    return true;
+                }
+                "Tab" => {
+                    self.apply(UiIntent::CycleSelectionDomain);
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        if self.state.workspace == Workspace::Paint
+            && self.state.session.tools.modal.is_none()
+            && self.drag.is_none()
+            && self.rename_draft.is_none()
+            && !ctrl
+            && !alt
+        {
+            if text == "[" || text == "{" {
+                if shift {
+                    self.adjust_brush_hardness(-0.1);
+                } else {
+                    self.adjust_brush_size(-0.2);
+                }
+                return true;
+            }
+            if text == "]" || text == "}" {
+                if shift {
+                    self.adjust_brush_hardness(0.1);
+                } else {
+                    self.adjust_brush_size(0.2);
+                }
+                return true;
+            }
+        }
         if self.state.session.tools.modal.is_none()
             && self.drag.is_none()
             && self.rename_draft.is_none()
@@ -763,18 +843,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .find_in_context(key, mods, context)
             .map(str::to_owned)
         else {
+            if text.eq_ignore_ascii_case("w")
+                && !ctrl
+                && !alt
+                && !shift
+                && self.state.session.tools.modal.is_none()
+                && self.drag.is_none()
+                && self.rename_draft.is_none()
+            {
+                if self.state.workspace == Workspace::Model {
+                    let next = if self.state.session.tools.active_tool == "select" {
+                        "box_select"
+                    } else {
+                        "select"
+                    };
+                    self.apply(UiIntent::SetActiveTool(next.to_string()));
+                    return true;
+                } else if self.state.workspace == Workspace::Uv {
+                    self.apply(UiIntent::SetActiveTool("select".to_string()));
+                    return true;
+                }
+            }
             return false;
         };
         match action.as_str() {
-            "uv.move" => self.apply(UiIntent::BeginUvTransform(
-                petunia_core::UvTransformKind::Move,
-            )),
-            "uv.rotate" => self.apply(UiIntent::BeginUvTransform(
-                petunia_core::UvTransformKind::Rotate,
-            )),
-            "uv.scale" => self.apply(UiIntent::BeginUvTransform(
-                petunia_core::UvTransformKind::Scale,
-            )),
             "global.undo" => self.apply(UiIntent::Undo),
             "global.redo" => self.apply(UiIntent::Redo),
             "global.reset_camera" => self.apply(UiIntent::ResetCamera),
@@ -793,7 +885,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.select_edge" => self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge)),
             "model.select_face" => self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face)),
             "model.tool_select" | "model.select" | "model.select_tool" => {
-                self.apply(UiIntent::SetActiveTool("select".into()));
+                if self.state.workspace == Workspace::Model {
+                    let next = if self.state.session.tools.active_tool == "select" {
+                        "box_select"
+                    } else {
+                        "select"
+                    };
+                    self.apply(UiIntent::SetActiveTool(next.to_string()));
+                } else if self.state.workspace == Workspace::Uv {
+                    self.apply(UiIntent::SetActiveTool("select".to_string()));
+                }
             }
             "model.box_select" => self.apply(UiIntent::SetActiveTool("box_select".into())),
             "model.move" | "model.transform" => {
@@ -805,9 +906,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let _ = self.execute_core_command("model.make_face");
             }
             "model.frame_selection" => {
-                let _ = self.execute_core_command("view.frame_selection");
+                if self.state.selection_domain().is_component() {
+                    let _ = self.execute_core_command("model.make_face");
+                } else {
+                    let _ = self.execute_core_command("view.frame_selection");
+                }
             }
-            "model.toggle_edit_pivot" => self.apply(UiIntent::ToggleEditPivot),
             "model.extrude" => {
                 if self.state.session.tools.active_tool == "draw_profile"
                     && (self.active_profile_closed() || self.active_profile_point_count() >= 3)
@@ -876,7 +980,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "window.workspace_animate" => self.apply(UiIntent::SetWorkspace(Workspace::Animate)),
             "paint.select" => self.apply(UiIntent::SetActiveTool("select".into())),
             "paint.isolate" => {
-                self.toggle_paint_isolate();
+                self.state.toggle_isolate();
             }
             "paint.airbrush" => self.apply(UiIntent::SetActiveTool("airbrush".into())),
             "paint.eraser" => self.apply(UiIntent::SetActiveTool("eraser".into())),

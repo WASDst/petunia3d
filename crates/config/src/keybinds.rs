@@ -243,6 +243,7 @@ pub const POINTER_CURSOR_PLACE: &str = "pointer.cursor_place";
 /// Modificador da roda para ajuste contextual (contagem/raio).
 pub const POINTER_ADJUST: &str = "pointer.adjust";
 /// Modificador para seleção de loop/conectado via pointer.
+pub const POINTER_INFERENCE_LOCK: &str = "pointer.inference_lock";
 pub const POINTER_LOOP: &str = "pointer.loop";
 /// Modificador que transforma LMB em orbit; usado pelo perfil Maya-like.
 pub const POINTER_ORBIT_LEFT: &str = "pointer.orbit_left";
@@ -649,7 +650,8 @@ impl Keybinds {
             | POINTER_PAN
             | POINTER_CURSOR_PLACE
             | POINTER_PAINT_STRAIGHT
-            | POINTER_DECAL_SCALE => Mods2 {
+            | POINTER_DECAL_SCALE
+            | POINTER_INFERENCE_LOCK => Mods2 {
                 shift: true,
                 ..Mods2::default()
             },
@@ -890,6 +892,7 @@ impl Keybinds {
             (POINTER_CURSOR_PLACE, "Shift"),
             (POINTER_ADJUST, "Ctrl"),
             (POINTER_LOOP, "Alt"),
+            (POINTER_INFERENCE_LOCK, "Shift"),
         ] {
             if let Some(mods) = parse_modifiers(mods) {
                 kb.pointer.insert(action.to_string(), mods);

@@ -89,7 +89,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn viewport_render_state(&self) -> ViewportRenderState {
         ViewportRenderState {
             shading: self.state.session.shading,
-            xray: self.state.session.show_xray,
+            xray: self.state.session.show_xray
+                || (self.solid_shape_builder.is_some() && self.solid_xray),
             show_triangulation: self.state.session.show_triangulation,
             // Na PAINT a textura que se pinta aparece sempre; nos outros
             // workspaces ela segue opcional (toggle ou Material/Rendered).

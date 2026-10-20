@@ -93,6 +93,8 @@ impl LegacyProjectWithSplines {
             assets: self.assets,
             active: self.active,
             history_selection: Vec::new(),
+            history_active_shape: None,
+            history_planar_selection: crate::profile::PlanarSelection::default(),
             palette: self.palette,
             collections: self.collections,
             annotations: self.annotations,
@@ -173,6 +175,8 @@ impl LegacyProjectBeforeSplines {
             assets: self.assets,
             active: self.active,
             history_selection: Vec::new(),
+            history_active_shape: None,
+            history_planar_selection: crate::profile::PlanarSelection::default(),
             palette: self.palette,
             collections: self.collections,
             annotations: self.annotations,
@@ -724,7 +728,13 @@ mod tests {
         let path_id = path.id;
         project.add_spline(path).unwrap();
         let loaded = load_bytes(&encode_zip(&project).unwrap()).unwrap();
-        assert_eq!(loaded.get_profile(profile.id).unwrap().holes, profile.holes);
+        let migrated = loaded.get_profile(profile.id).unwrap();
+        assert!(migrated.holes.is_empty());
+        assert_eq!(migrated.hole_splines.len(), profile.holes.len());
+        assert_eq!(
+            loaded.shape_hole_contours(migrated, 0.005).unwrap(),
+            profile.holes
+        );
         assert_eq!(
             loaded.get_spline(path_id).unwrap().points[0].attachment,
             Some(hit.attachment)
@@ -841,6 +851,7 @@ mod tests {
                     pixels: vec![].into(),
                 }),
                 material_id: None,
+                surface_materials: Vec::new(),
                 skeleton_id: None,
                 skin_data: None,
                 skinning_enabled: true,
@@ -855,6 +866,10 @@ mod tests {
                 transform_locks: Default::default(),
                 eval_cache: None,
                 graph_cache: None,
+                geometry_source: None,
+                generated_mesh: Mesh::default().into(),
+                generator_diagnostic: None,
+                generated_key: None,
                 parametric: None,
                 selection_overlay_color: None,
                 position: [0.0, 0.0, 0.0],

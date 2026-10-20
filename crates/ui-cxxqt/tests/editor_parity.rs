@@ -229,7 +229,7 @@ fn native_profile_creation_can_be_undone() {
         &mut e,
         json!({"action":"profile_rectangle","width":2.,"height":3.}),
     );
-    assert!(e.controller.active_profile_id.is_some());
+    assert!(e.controller.state.session.active_shape.is_some());
     assert_ne!(e.state.project.project.revision_id(), before);
     assert!(e.undo());
     assert_eq!(
@@ -816,4 +816,469 @@ fn the_operation_mode_request_reaches_the_active_tool() {
         e.state.tools.extrude_mode,
         petunia_mesh::ExtrudeMode::Individual
     );
+}
+#[test]
+fn draw_volume_preview_is_transient_and_make_editable_is_explicit_undoable() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":4.,"height":3.}),
+    );
+    let before = serde_json::to_value(&e.state.project.project).unwrap();
+    let count = e.state.project.assets.len();
+    request(
+        &mut e,
+        json!({"action":"enter_profile_volume","mode_str":"extrude"}),
+    );
+    request(&mut e, json!({"action":"set_profile_depth","depth":-2.}));
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        before
+    );
+    request(&mut e, json!({"action":"cancel_profile_volume"}));
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        before
+    );
+    request(
+        &mut e,
+        json!({"action":"enter_profile_volume","mode_str":"extrude"}),
+    );
+    request(&mut e, json!({"action":"commit_profile_volume"}));
+    assert_eq!(e.state.project.assets.len(), count + 1);
+    let generated = e.state.project.active().unwrap();
+    let id = generated.id;
+    assert!(generated.geometry_source.is_some());
+    assert!(generated.mesh.verts.is_empty());
+    assert!(!generated.source_mesh().verts.is_empty());
+    request(&mut e, json!({"action":"draw_generator_gesture","phase":0}));
+    request(
+        &mut e,
+        json!({"action":"draw_generator_distance","depth":5.}),
+    );
+    assert_eq!(e.state.project.active().unwrap().id, id);
+    request(&mut e, json!({"action":"draw_generator_gesture","phase":2}));
+    assert!(
+        matches!(e.state.project.active().unwrap().geometry_source.as_ref().unwrap().kind,petunia_project::GeometryGeneratorKind::Extrude{distance,..} if distance == -2.)
+    );
+    request(&mut e, json!({"action":"draw_make_editable"}));
+    assert!(e.state.project.active().unwrap().geometry_source.is_none());
+    assert!(!e.state.project.active().unwrap().mesh.verts.is_empty());
+    assert!(e.undo());
+    assert!(e.state.project.active().unwrap().geometry_source.is_some());
+    assert_eq!(e.state.project.active().unwrap().id, id);
+    assert!(e.undo());
+    assert_eq!(e.state.project.assets.len(), count);
+    assert!(e.redo());
+    assert_eq!(e.state.project.assets.len(), count + 1);
+}
+
+#[test]
+fn draw_numeric_scrub_cancel_keeps_authoring_and_single_commit_undo() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":2.,"height":3.}),
+    );
+    let original = serde_json::to_value(&e.state.project.project).unwrap();
+    request(
+        &mut e,
+        json!({"action":"profile_dimension_gesture","phase":0}),
+    );
+    request(
+        &mut e,
+        json!({"action":"profile_dimension","field":"width","value":8.}),
+    );
+    request(
+        &mut e,
+        json!({"action":"profile_dimension","field":"height","value":7.}),
+    );
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        original
+    );
+    request(
+        &mut e,
+        json!({"action":"profile_dimension_gesture","phase":2}),
+    );
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        original
+    );
+    request(
+        &mut e,
+        json!({"action":"profile_dimension_gesture","phase":0}),
+    );
+    request(
+        &mut e,
+        json!({"action":"profile_dimension","field":"width","value":8.}),
+    );
+    request(
+        &mut e,
+        json!({"action":"profile_dimension_gesture","phase":1}),
+    );
+    assert_eq!(e.snapshot()["profile_width"], 8.);
+    assert!(e.undo());
+    assert_eq!(e.snapshot()["profile_width"], 2.);
+}
+
+#[test]
+fn draw_plane_change_does_not_move_camera_and_open_curve_is_sweep_path() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    let camera = e.state.session.camera.clone();
+    request(
+        &mut e,
+        json!({"action":"draw_plane_component","field":"origin_x","value":12.}),
+    );
+    request(
+        &mut e,
+        json!({"action":"draw_plane_component","field":"rotate_z","value":35.}),
+    );
+    assert_eq!(e.state.session.camera, camera);
+    assert_eq!(e.state.session.active_workplane.plane.origin[0], 12.);
+    request(&mut e, json!({"action":"workplane_look"}));
+    assert!(e.state.session.camera.planar_basis.is_some());
+    request(&mut e, json!({"action":"draw_angle_step","value":30.}));
+    assert_eq!(e.snapshot()["draw"]["angle_step"], 30.);
+    let spline = petunia_project::SplineResource::from_polyline(
+        "route",
+        &[[0., 0., 0.], [0., 4., 0.]],
+        false,
+    );
+    let path = spline.id;
+    let shape = petunia_project::PlanarShape::new(
+        "route plane",
+        path,
+        petunia_project::Workplane::default(),
+    );
+    e.execute_command(&petunia_core::CreateProfileCmd {
+        profile: shape,
+        spline,
+    })
+    .unwrap();
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":2.,"height":2.}),
+    );
+    assert!(
+        e.snapshot()["draw"]["paths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"] == path.to_string())
+    );
+    request(
+        &mut e,
+        json!({"action":"draw_sweep_path","id":path.to_string()}),
+    );
+    request(
+        &mut e,
+        json!({"action":"enter_profile_volume","mode_str":"sweep"}),
+    );
+    request(&mut e, json!({"action":"commit_profile_volume"}));
+    assert!(
+        matches!(e.state.project.active().unwrap().geometry_source.as_ref().unwrap().kind,petunia_project::GeometryGeneratorKind::Sweep{path_object,..} if path_object == path)
+    );
+}
+
+#[test]
+fn draw_point_gesture_never_writes_authoring_until_release_and_cancels_cleanly() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(&mut e, json!({"action":"tool","id":"draw_profile"}));
+    e.controller.viewport_size = [800., 600.];
+    request(&mut e, json!({"action":"workplane_look"}));
+    let original = serde_json::to_value(&e.state.project.project).unwrap();
+    e.controller.tool_pointer(0, 400., 300., false, false);
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        original
+    );
+    assert!(e.controller.tool_pointer(2, 400., 300., false, false));
+    assert_eq!(e.state.project.project.profiles.len(), 1);
+    assert_eq!(e.state.project.project.splines.len(), 1);
+    assert!(e.undo());
+    assert!(e.state.project.project.profiles.is_empty());
+}
+
+#[test]
+fn native_split_banks_keep_workplane_navigation_and_snap_independent() {
+    let mut host = petunia_ui_cxxqt::render::opengl_viewport::QtViewportRenderer::new();
+    host.app
+        .state
+        .session
+        .active_workplane
+        .set(
+            petunia_core::WorkplaneMode::Custom,
+            petunia_project::Workplane::default(),
+        )
+        .unwrap();
+    host.activate(2);
+    let plane = petunia_project::Workplane {
+        origin: [7., 8., 9.],
+        ..Default::default()
+    };
+    host.app
+        .state
+        .session
+        .active_workplane
+        .set(petunia_core::WorkplaneMode::Custom, plane)
+        .unwrap();
+    host.app.state.session.snap_settings.angle_step_degrees = 30.;
+    host.activate(1);
+    assert_eq!(
+        host.app.state.session.active_workplane.plane.origin,
+        [0.; 3]
+    );
+    assert_eq!(host.app.state.session.snap_settings.angle_step_degrees, 15.);
+    host.activate(2);
+    assert_eq!(
+        host.app.state.session.active_workplane.plane.origin,
+        [7., 8., 9.]
+    );
+    assert_eq!(host.app.state.session.snap_settings.angle_step_degrees, 30.);
+}
+
+#[test]
+fn draw_relative_shape_transform_changes_all_contours_in_one_undo() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":4.,"height":3.}),
+    );
+    request(
+        &mut e,
+        json!({"action":"draw_offset_inner","distance":0.25}),
+    );
+    let shape = e.state.session.active_shape.unwrap();
+    let original = e.state.project.project.clone();
+    request(
+        &mut e,
+        json!({"action":"draw_shape_transform","field":"scale_x","value":2.}),
+    );
+    let outer = original.get_profile(shape).unwrap().spline_id;
+    let inner = original.get_profile(shape).unwrap().hole_splines[0];
+    for id in [outer, inner] {
+        for (before, after) in original
+            .get_spline(id)
+            .unwrap()
+            .points
+            .iter()
+            .zip(&e.state.project.project.get_spline(id).unwrap().points)
+        {
+            assert_eq!(after.position[0], before.position[0] * 2.);
+            assert_eq!(after.position[1], before.position[1]);
+        }
+    }
+    assert!(e.undo());
+    assert_eq!(
+        e.state.project.project.get_spline(inner).unwrap().points,
+        original.get_spline(inner).unwrap().points
+    );
+}
+
+#[test]
+fn draw_delete_undo_redo_restores_shape_selection_with_the_document() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":2.,"height":2.}),
+    );
+    let id = e.state.session.active_shape.unwrap();
+    assert!(e.controller.delete_or_dissolve_selection());
+    assert!(e.state.project.project.get_profile(id).is_none());
+    assert!(e.undo());
+    assert_eq!(e.state.session.active_shape, Some(id));
+    assert!(e.state.project.project.get_profile(id).is_some());
+    assert!(e.redo());
+    assert_eq!(e.state.session.active_shape, None);
+    assert!(e.state.project.project.get_profile(id).is_none());
+}
+
+#[test]
+fn draw_reset_and_explicit_view_changes_preserve_construction_plane() {
+    let mut host = petunia_ui_cxxqt::render::opengl_viewport::QtViewportRenderer::new();
+    request(&mut host.app, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut host.app,
+        json!({"action":"draw_plane_component","field":"origin_x","value":7.}),
+    );
+    request(&mut host.app, json!({"action":"workplane_look"}));
+    let plane = host.app.state.session.active_workplane;
+    host.reset_camera();
+    assert!(host.app.state.session.camera.planar_basis.is_some());
+    assert_eq!(
+        host.app.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+    host.app
+        .controller
+        .set_view_preset(petunia_core::ViewPreset::Front);
+    assert!(!host.app.state.session.draw_planar_navigation);
+    assert_eq!(host.app.state.session.active_workplane, plane);
+}
+
+#[test]
+fn draw_poly_draw_preserves_shape_selection_sources_and_undo() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":2.,"height":3.}),
+    );
+    let id = e.state.session.active_shape;
+    let original = serde_json::to_value(&e.state.project.project).unwrap();
+    let history = e.state.project.undo.depth();
+    request(&mut e, json!({"action":"workspace","id":"POLY"}));
+    assert_eq!(e.state.session.active_shape, id);
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    assert_eq!(e.state.session.active_shape, id);
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        original
+    );
+    assert_eq!(e.state.project.undo.depth(), history);
+}
+
+#[test]
+fn draw_point_inspector_edits_handles_and_delete_undo_restores_context() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":2.,"height":3.}),
+    );
+    let shape = e.state.session.active_shape.unwrap();
+    let spline = e
+        .state
+        .project
+        .project
+        .get_profile(shape)
+        .unwrap()
+        .spline_id;
+    let point = e.state.project.project.get_spline(spline).unwrap().points[0].id;
+    request(
+        &mut e,
+        json!({"action":"draw_point","id":point.to_string()}),
+    );
+    request(
+        &mut e,
+        json!({"action":"draw_point_parameter","field":"out_x","value":0.5}),
+    );
+    request(&mut e, json!({"action":"draw_point_mode","id":"mirrored"}));
+    let node = e
+        .state
+        .project
+        .project
+        .get_spline(spline)
+        .unwrap()
+        .point(point)
+        .unwrap();
+    assert_eq!(node.handle_in, [-0.5, 0., 0.]);
+    assert_eq!(node.handle_out, [0.5, 0., 0.]);
+    assert!(e.controller.delete_or_dissolve_selection());
+    assert!(e.state.project.project.get_profile(shape).is_some());
+    assert_eq!(
+        e.state
+            .project
+            .project
+            .get_spline(spline)
+            .unwrap()
+            .points
+            .len(),
+        3
+    );
+    assert!(e.undo());
+    assert_eq!(e.state.session.active_shape, Some(shape));
+    assert_eq!(e.state.session.planar_selection.point, Some(point));
+    assert_eq!(
+        e.state
+            .project
+            .project
+            .get_spline(spline)
+            .unwrap()
+            .points
+            .len(),
+        4
+    );
+}
+
+#[test]
+fn draw_volume_and_parameter_previews_reject_changed_geometry_revisions() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    request(
+        &mut e,
+        json!({"action":"profile_rectangle","width":4.0,"height":3.0}),
+    );
+    request(
+        &mut e,
+        json!({"action":"enter_profile_volume","mode_str":"extrude"}),
+    );
+    let count = e.state.project.assets.len();
+    e.state.project.project.bump_positions();
+    assert!(!e.controller.commit_profile_volume());
+    assert_eq!(e.state.project.assets.len(), count);
+    assert!(e.controller.cancel_profile_volume());
+    assert!(e.controller.enter_profile_volume("extrude"));
+    assert!(e.controller.commit_profile_volume());
+    let source = e.state.project.active().unwrap().geometry_source.clone();
+    assert!(e.controller.generator_parameter_gesture(0));
+    assert!(e.controller.edit_selected_generator_distance(7.));
+    e.state.project.project.bump_transforms();
+    assert!(!e.controller.generator_parameter_gesture(1));
+    assert_eq!(e.state.project.active().unwrap().geometry_source, source);
+}
+
+#[test]
+fn draw_solid_pointer_selection_cancel_and_remove_share_document_undo() {
+    let mut e = editor();
+    request(&mut e, json!({"action":"workspace","id":"DRAW"}));
+    let first = petunia_project::Asset::new("A", petunia_mesh::Mesh::cube(2.));
+    let mut second = petunia_project::Asset::new("B", petunia_mesh::Mesh::cube(2.));
+    second.transform.translation = [5., 0., 0.];
+    let ids = vec![first.id, second.id];
+    e.state.project.project.assets = vec![first, second];
+    e.state.project.project.active = 0;
+    e.state.session.selection.assets = ids.clone();
+    e.state.session.selection.asset = Some(ids[0]);
+    e.controller.viewport_size = [800., 600.];
+    e.controller
+        .set_view_preset(petunia_core::ViewPreset::Front);
+    let before = serde_json::to_value(&e.state.project.project).unwrap();
+    assert!(e.request(&json!({"action":"draw_solid_begin"})).unwrap());
+    e.controller.tool_pointer(0, 400., 300., false, false);
+    e.controller.tool_pointer(2, 400., 300., false, false);
+    assert_eq!(e.snapshot()["draw"]["solid_can_commit"], true);
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        before
+    );
+    assert!(e.request(&json!({"action":"draw_solid_cancel"})).unwrap());
+    assert_eq!(
+        serde_json::to_value(&e.state.project.project).unwrap(),
+        before
+    );
+    assert!(e.request(&json!({"action":"draw_solid_begin"})).unwrap());
+    request(&mut e, json!({"action":"draw_solid_intent","id":"remove"}));
+    let region = e.snapshot()["draw"]["solid_regions"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        e.request(&json!({"action":"draw_solid_toggle","id":region}))
+            .unwrap()
+    );
+    assert!(e.request(&json!({"action":"draw_solid_commit"})).unwrap());
+    assert_eq!(e.state.project.assets.len(), 1);
+    assert_eq!(e.state.project.assets[0].id, ids[1]);
+    assert!(e.undo());
+    assert_eq!(e.state.project.assets.len(), 2);
+    assert!(e.redo());
+    assert_eq!(e.state.project.assets.len(), 1);
 }

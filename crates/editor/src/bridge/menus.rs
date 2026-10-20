@@ -559,12 +559,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             "delete" => {
-                if let Some(profile_id) = self.active_profile_id {
+                if let Some(profile_id) = self.state.session.active_shape {
                     let _ = self
                         .state
                         .dispatch(&petunia_core::DeleteProfileCmd { profile_id });
-                    self.active_profile_id = None;
-                    self.profile_selected_point = None;
+                    self.state.session.active_shape = None;
+                    self.state.session.planar_selection.point = None;
                     self.profile_drag_target = None;
                     self.state.set_status(
                         self.state
@@ -584,8 +584,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let _ = self
                         .state
                         .dispatch(&petunia_core::DeleteProfileCmd { profile_id: pid });
-                    if self.active_profile_id == Some(pid) {
-                        self.active_profile_id = None;
+                    if self.state.session.active_shape == Some(pid) {
+                        self.state.session.active_shape = None;
                     }
                     self.state.set_status(
                         self.state

@@ -48,7 +48,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Planos editáveis em cache; recalcula quando perfis, splines ou geradores mudam.
-    pub(crate) fn shape_planes_cached(&self) -> std::cell::Ref<'_, Vec<ShapePlane>> {
+    pub(crate) fn shape_planes_cached(&self) -> Option<std::cell::Ref<'_, Vec<ShapePlane>>> {
         let project = &self.state.project.project;
         let clock = project.revision_clock();
         let key = [
@@ -63,9 +63,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 *slot = Some((key, self.state.shape_planes()));
             }
         }
-        std::cell::Ref::map(self.shape_planes_cache.borrow(), |slot| {
-            &slot.as_ref().expect("cache preenchido acima").1
+        std::cell::Ref::filter_map(self.shape_planes_cache.borrow(), |slot| {
+            slot.as_ref().map(|(_, planes)| planes)
         })
+        .ok()
     }
 
     /// Face editável sob o ponto (px lógicos da viewport), se não estiver
@@ -80,7 +81,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let (origin, direction) = camera.ray(ndc.x, ndc.y);
         let perspective = camera.proj == petunia_core::Projection::Perspective;
         let mut best: Option<ShapeHit> = None;
-        for shape in self.shape_planes_cached().iter() {
+        for shape in self.shape_planes_cached()?.iter() {
             let plane = shape.plane;
             let denominator = direction.dot(plane.normal);
             if denominator.abs() < 1.0e-6 {
@@ -124,6 +125,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Hover do Shape Builder: destaca a face editável sob o cursor.
     pub(crate) fn hover_shape_builder(&mut self, pixel: [f32; 2]) -> bool {
+        if self.solid_shape_builder.is_some() {
+            return self.hover_solid_region(pixel);
+        }
         let previous = self.region_hover.take();
         self.region_hover = self.shape_hit_at(pixel).map(|hit| RegionHit {
             plane: hit.plane,
@@ -136,6 +140,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Começa o arrasto: a primeira amostra é a face sob o ponto de partida.
     pub(crate) fn begin_shape_builder(&mut self, anchor: [f32; 2]) -> bool {
+        if self.solid_shape_builder.is_some() {
+            self.tool_gesture = Some(ToolGesture::ShapeBuilder);
+            return self.select_solid_region(anchor, false);
+        }
         if !self.shape_builder_available() {
             return false;
         }
@@ -178,6 +186,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Estende o caminho até `current` amostrando a cada poucos pixels.
     pub(crate) fn update_shape_builder(&mut self, current: [f32; 2]) -> bool {
+        if self.solid_shape_builder.is_some() {
+            let from = self.solid_pointer;
+            let distance = (current[0] - from[0]).hypot(current[1] - from[1]);
+            if !distance.is_finite() {
+                return false;
+            }
+            let steps = (distance / SAMPLE_STEP_PX).ceil().clamp(1.0, 4096.0) as usize;
+            let mut changed = false;
+            for step in 1..=steps {
+                let t = step as f32 / steps as f32;
+                changed |= self.select_solid_region(
+                    [
+                        from[0] + (current[0] - from[0]) * t,
+                        from[1] + (current[1] - from[1]) * t,
+                    ],
+                    false,
+                );
+            }
+            return changed;
+        }
         let Some(mut gesture) = self.shape_builder.take() else {
             return false;
         };
@@ -236,6 +264,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Solta o gesto: aplica a fusão (ou a exclusão) numa única entrada de Undo.
     pub(crate) fn commit_shape_builder(&mut self) -> bool {
+        if self.solid_shape_builder.is_some() {
+            self.state.mark_dirty();
+            return true;
+        }
         let Some(gesture) = self.shape_builder.take() else {
             return false;
         };
@@ -244,6 +276,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Clique sem arrasto: extrai (ou, com Ctrl, apaga) a face sob o cursor.
     pub(crate) fn shape_builder_click(&mut self, at: [f32; 2]) -> bool {
+        if self.solid_shape_builder.is_some() {
+            return self.select_solid_region(at, true);
+        }
         let Some(hit) = self.shape_hit_at(at) else {
             self.state.set_status(
                 self.state.t_id(
@@ -257,6 +292,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// `Esc` no meio do arrasto: nada muda no documento.
     pub(crate) fn cancel_shape_builder(&mut self) -> bool {
+        if self.solid_shape_builder.is_some() {
+            return self.cancel_solid_shape_builder();
+        }
         let had = self.shape_builder.take().is_some();
         if had {
             self.state.set_status(
@@ -272,8 +310,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !self.shape_builder_available() {
             return false;
         }
-        let plane = self.active_profile_id.and_then(|id| {
-            self.shape_planes_cached()
+        let plane = self.state.session.active_shape.and_then(|id| {
+            self.shape_planes_cached()?
                 .iter()
                 .find(|shape| shape.profiles.contains(&id))
                 .map(|shape| shape.plane)
@@ -300,11 +338,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         *self.region_planes_cache.borrow_mut() = None;
         *self.shape_planes_cache.borrow_mut() = None;
         self.region_hover = None;
-        if let Some(id) = self.active_profile_id
+        if let Some(id) = self.state.session.active_shape
             && self.state.project.project.get_profile(id).is_none()
         {
-            self.active_profile_id = None;
-            self.profile_selected_point = None;
+            self.state.session.active_shape = None;
+            self.state.session.planar_selection.point = None;
             self.profile_drag_target = None;
             self.profile_edit_gesture = None;
         }

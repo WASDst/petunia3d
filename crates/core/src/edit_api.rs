@@ -524,10 +524,36 @@ impl Command for AssignMaterialSlotCmd {
             return Err(CommandError::StaleReference(format!("face {bad}")));
         }
         asset.material_id = Some(material_id);
-        if !faces.is_empty() {
-            let mesh = &mut *asset.mesh;
-            for &f in &faces {
-                mesh.faces[f].material_slot = Some(self.material_index);
+        let slot = if asset.surface_materials.is_empty() {
+            self.material_index
+        } else if faces.is_empty() {
+            asset.surface_materials.clear();
+            for face in &mut asset.mesh.faces {
+                face.material_slot = None;
+            }
+            self.material_index
+        } else {
+            let binding = petunia_project::SurfaceMaterial {
+                material_id: Some(material_id),
+                base_color: asset.base_color,
+                texture: None,
+            };
+            if let Some(slot) = asset
+                .surface_materials
+                .iter()
+                .position(|existing| *existing == binding)
+            {
+                slot
+            } else if asset.surface_materials.len() < 256 {
+                asset.surface_materials.push(binding);
+                asset.surface_materials.len() - 1
+            } else {
+                return Err(CommandError::Execution("Too many surface materials".into()));
+            }
+        };
+        for &face in &faces {
+            if let Some(face) = asset.mesh.faces.get_mut(face) {
+                face.material_slot = Some(slot);
             }
         }
         state.set_status(if faces.is_empty() {

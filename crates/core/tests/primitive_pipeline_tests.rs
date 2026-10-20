@@ -30,7 +30,7 @@ fn primitive_full_pipeline_per_species() {
         assert!(state.begin_primitive(kind, None), "{kind:?} begin");
         assert!(state.confirm_primitive(), "{kind:?} confirm");
         let asset_idx = state.project.assets.len() - 1;
-        let verts_before = state.project.assets[asset_idx].mesh.verts.len();
+        let verts_before = state.project.assets[asset_idx].source_mesh().verts.len();
         assert!(verts_before > 0, "{kind:?} sem vértices");
 
         // Select + Duplicate + ferramenta de modelagem sobre a malha criada.
@@ -38,10 +38,17 @@ fn primitive_full_pipeline_per_species() {
         state.dispatch(&DuplicateSelectionCmd).expect("duplicate");
         assert_eq!(state.project.assets.len(), asset_idx + 2);
         state.project.active = asset_idx + 1;
-        let _ = state.dispatch(&SubdivideSelectionCmd);
-
-        // Edit Mode sobre a duplicata.
+        assert!(state.project.active().unwrap().geometry_source.is_some());
+        assert!(state.dispatch(&SubdivideSelectionCmd).is_err());
+        assert!(state.freeze_active_primitive());
+        // Edit Mode sobre a duplicata após conversão explícita.
         state.set_edit_mode(EditMode::Edit);
+        state
+            .dispatch(&petunia_core::SelectAllCmd)
+            .expect("select editable mesh");
+        state
+            .dispatch(&SubdivideSelectionCmd)
+            .expect("subdivide editable mesh");
         assert_eq!(state.edit_mode(), EditMode::Edit);
 
         // Save → Load round-trip.
@@ -56,7 +63,7 @@ fn primitive_full_pipeline_per_species() {
             "{kind:?} assets"
         );
         assert_eq!(
-            loaded.project.assets[asset_idx].mesh.verts.len(),
+            loaded.project.assets[asset_idx].source_mesh().verts.len(),
             verts_before,
             "{kind:?} verts round-trip"
         );

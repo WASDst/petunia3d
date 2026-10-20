@@ -69,6 +69,8 @@ pub struct Camera {
     pub proj: Projection,
     /// meia-altura do frustum ortográfico.
     pub ortho_half_h: f32,
+    /// Captured planar frame (right/up/normal); viewport-session data only.
+    pub planar_basis: Option<[Vec3; 3]>,
 }
 
 impl Default for Camera {
@@ -84,12 +86,35 @@ impl Default for Camera {
             far: 200.0,
             proj: Projection::Perspective,
             ortho_half_h: 4.0,
+            planar_basis: None,
         }
     }
 }
 
 impl Camera {
+    pub fn align_to_workplane(&mut self, plane: petunia_project::Workplane) -> bool {
+        let Ok(plane) = plane.try_normalized() else {
+            return false;
+        };
+        let right = Vec3::from_array(plane.right.map(|v| v as f32));
+        let up = Vec3::from_array(plane.up.map(|v| v as f32));
+        let normal = Vec3::from_array(plane.normal.map(|v| v as f32));
+        let origin = Vec3::from_array(plane.origin.map(|v| v as f32));
+        if !right.is_finite() || !up.is_finite() || !normal.is_finite() || !origin.is_finite() {
+            return false;
+        }
+        self.planar_basis = Some([right, up, normal]);
+        self.target = origin;
+        self.yaw = normal.x.atan2(normal.z);
+        self.pitch = normal.y.clamp(-1.0, 1.0).asin();
+        self.proj = Projection::Ortho;
+        true
+    }
+
     pub fn eye(&self) -> Vec3 {
+        if let Some([_, _, normal]) = self.planar_basis {
+            return self.target + normal * self.distance;
+        }
         let (sy, cy) = self.yaw.sin_cos();
         let (sp, cp) = self.pitch.sin_cos();
         self.target + Vec3::new(sy * cp, sp, cy * cp) * self.distance
@@ -99,6 +124,9 @@ impl Camera {
         (self.target - self.eye()).normalize_or_zero()
     }
     pub fn right(&self) -> Vec3 {
+        if let Some([right, _, _]) = self.planar_basis {
+            return right;
+        }
         let (sin, cos) = self.yaw.sin_cos();
         Vec3::new(cos, 0.0, -sin)
     }
@@ -160,6 +188,7 @@ impl Camera {
     }
 
     pub fn set_preset(&mut self, p: ViewPreset) {
+        self.planar_basis = None;
         self.set_projection(if p == ViewPreset::Persp {
             Projection::Perspective
         } else {
@@ -219,6 +248,7 @@ impl Camera {
 
     /// Orbits in the current projection; orthographic views stay orthographic.
     pub fn orbit(&mut self, dx: f32, dy: f32) {
+        self.planar_basis = None;
         if !dx.is_finite() || !dy.is_finite() {
             return;
         }

@@ -2340,7 +2340,7 @@ mod tests {
     #[test]
     fn feedback_reports_snap_only_when_the_caller_snapped() {
         let mut state = selected_face();
-        state.snap_enabled = true;
+        state.session.snap_settings.enabled = true;
         state.session.snap_settings.enabled = true;
         state.begin_modal(ModalKind::Move).unwrap();
         let pivot = state.modal.as_ref().unwrap().pivot;

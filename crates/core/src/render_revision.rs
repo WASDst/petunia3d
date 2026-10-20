@@ -106,8 +106,8 @@ pub fn fingerprint_scene(
     for asset in &project.assets {
         h = hash_bytes(h, asset.id.as_bytes());
         h = mix(h, asset.visible as u64);
-        h = mix(h, asset.mesh.verts.len() as u64);
-        h = mix(h, asset.mesh.faces.len() as u64);
+        h = mix(h, asset.source_mesh().verts.len() as u64);
+        h = mix(h, asset.source_mesh().faces.len() as u64);
         h = mix(h, asset.modifiers.len() as u64);
         for modifier in &asset.modifiers {
             h = hash_bytes(h, modifier.id.as_bytes());
@@ -146,6 +146,18 @@ pub fn fingerprint_scene(
                 })
                 .unwrap_or(0),
         );
+        for surface in &asset.surface_materials {
+            if let Some(id) = surface.material_id {
+                h = hash_bytes(h, id.as_bytes());
+            }
+            for c in surface.base_color {
+                h = hash_f32(h, c);
+            }
+            if let Some(canvas) = &surface.texture {
+                h = mix(h, canvas.w as u64);
+                h = mix(h, canvas.h as u64);
+            }
+        }
         let unrevisioned = project.topology_revision == 0
             && project.position_revision == 0
             && project.normal_revision == 0
@@ -154,7 +166,7 @@ pub fn fingerprint_scene(
             && project.color_revision == 0
             && project.material_revision == 0;
         if unrevisioned {
-            for v in &asset.mesh.verts {
+            for v in &asset.source_mesh().verts {
                 for c in v.pos {
                     h = hash_f32(h, c);
                 }
@@ -163,7 +175,7 @@ pub fn fingerprint_scene(
                     h = hash_f32(h, c);
                 }
             }
-            for f in &asset.mesh.faces {
+            for f in &asset.source_mesh().faces {
                 h = mix(h, f.verts.len() as u64);
                 for &i in &f.verts {
                     h = mix(h, i as u64);
@@ -175,19 +187,20 @@ pub fn fingerprint_scene(
                 h = mix(h, f.selected as u64);
                 h = mix(h, f.material_slot.unwrap_or(usize::MAX) as u64);
             }
-            let mut selected_edges: Vec<_> = asset.mesh.selected_edges.iter().copied().collect();
+            let mut selected_edges: Vec<_> =
+                asset.source_mesh().selected_edges.iter().copied().collect();
             selected_edges.sort_unstable();
             for (a, b) in selected_edges {
                 h = mix(h, a as u64);
                 h = mix(h, b as u64);
             }
-            let mut seams: Vec<_> = asset.mesh.uv_seams.iter().copied().collect();
+            let mut seams: Vec<_> = asset.source_mesh().uv_seams.iter().copied().collect();
             seams.sort_unstable();
             for (a, b) in seams {
                 h = mix(h, a as u64);
                 h = mix(h, b as u64);
             }
-            let mut pins: Vec<_> = asset.mesh.uv_pinned.iter().copied().collect();
+            let mut pins: Vec<_> = asset.source_mesh().uv_pinned.iter().copied().collect();
             pins.sort_unstable();
             for (face, corner) in pins {
                 h = mix(h, face as u64);

@@ -16,7 +16,7 @@ pub struct QtViewportRenderer {
     pub app: crate::editor::QtEditor,
     surfaces: HashMap<u64, GlSurface>,
     software: HashMap<u64, SoftwareSurface>,
-    cameras: HashMap<u64, Camera>,
+    viewports: HashMap<u64, petunia_core::ViewportSession>,
     active_view: u64,
     dimensions: HashMap<u64, (u32, u32, f32)>,
     width: u32,
@@ -48,7 +48,7 @@ impl QtViewportRenderer {
             app,
             surfaces: HashMap::new(),
             software: HashMap::new(),
-            cameras: HashMap::new(),
+            viewports: HashMap::new(),
             active_view: 1,
             dimensions: HashMap::new(),
             width: 800,
@@ -58,16 +58,16 @@ impl QtViewportRenderer {
     pub fn activate(&mut self, id: u64) {
         let bank = |id: u64| if id == 3 { 1 } else { id }; // PiP shares the primary camera; split is independent.
         if id != self.active_view {
-            self.cameras.insert(
+            self.viewports.insert(
                 bank(self.active_view),
-                self.app.state.session.camera.clone(),
+                self.app.state.session.viewport_session(),
             );
             let next = self
-                .cameras
+                .viewports
                 .get(&bank(id))
                 .cloned()
-                .unwrap_or_else(|| self.app.state.session.camera.clone());
-            self.app.state.session.camera = next;
+                .unwrap_or_else(|| self.app.state.session.viewport_session());
+            self.app.state.session.set_viewport_session(next);
             self.active_view = id;
         }
         if let Some((w, h, dpr)) = self.dimensions.get(&id).copied() {
@@ -122,7 +122,9 @@ impl QtViewportRenderer {
         self.app.state.session.camera.zoom(delta);
     }
     pub fn reset_camera(&mut self) {
-        self.app.state.session.camera.reset();
+        self.app
+            .controller
+            .apply(petunia_editor::UiIntent::ResetCamera);
     }
     pub fn paint_into_qt_fbo(&mut self, fbo: u32, width: u32, height: u32) {
         self.paint_surface(1, fbo, width, height, 1.)
@@ -627,7 +629,7 @@ pub extern "C" fn petunia_qt_camera_set_preset(preset: i32) {
                     8 => petunia_core::camera::ViewPreset::PseudoIsometric2To1,
                     _ => petunia_core::camera::ViewPreset::Persp,
                 };
-                guard.app.state.session.camera.set_preset(p);
+                guard.app.controller.set_view_preset(p);
             }
         })
         .unwrap_or(())
@@ -696,7 +698,10 @@ pub extern "C" fn petunia_qt_camera_toggle_projection() {
     crate::render::opengl_viewport::VIEWPORT_RENDERER
         .with(|renderer| {
             if let Ok(mut guard) = renderer.try_borrow_mut() {
-                guard.app.state.session.camera.toggle_projection();
+                guard
+                    .app
+                    .controller
+                    .apply(petunia_editor::UiIntent::ToggleProjection);
             }
         })
         .unwrap_or(())
@@ -818,6 +823,101 @@ pub extern "C" fn petunia_qt_app_set_shading(shading: i32) {
             }
         })
         .unwrap_or(())
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// C string inputs must be valid and null-terminated. Non-null output pointers
+/// must reference writable scalar storage or buffers of the advertised length.
+pub unsafe extern "C" fn petunia_qt_app_save_project(path_cstr: *const std::ffi::c_char) -> bool {
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            let Some(path) = ffi_path(path_cstr) else {
+                return false;
+            };
+            let Ok(mut host) = renderer.try_borrow_mut() else {
+                return false;
+            };
+            host.app
+                .request(&serde_json::json!({"action":"project.save","path":path}))
+                .is_ok()
+        })
+        .unwrap_or(false)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// C string inputs must be valid and null-terminated. Non-null output pointers
+/// must reference writable scalar storage or buffers of the advertised length.
+pub unsafe extern "C" fn petunia_qt_app_load_project(path_cstr: *const std::ffi::c_char) -> bool {
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            let Some(path) = ffi_path(path_cstr) else {
+                return false;
+            };
+            let Ok(mut host) = renderer.try_borrow_mut() else {
+                return false;
+            };
+            match host.app.open(std::path::Path::new(&path)) {
+                Ok(()) => {
+                    host.viewports.clear();
+                    host.active_view = 1;
+                    true
+                }
+                Err(e) => {
+                    host.app.state.set_status(e);
+                    false
+                }
+            }
+        })
+        .unwrap_or(false)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// C string inputs must be valid and null-terminated. Non-null output pointers
+/// must reference writable scalar storage or buffers of the advertised length.
+pub unsafe extern "C" fn petunia_qt_app_export_gltf(path_cstr: *const std::ffi::c_char) -> bool {
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            let Some(path) = ffi_path(path_cstr) else {
+                return false;
+            };
+            let Ok(host) = renderer.try_borrow_mut() else {
+                return false;
+            };
+            petunia_core::ProjectService::export_glb_with_padding(
+                &host.app.state,
+                &host.app.state.export_selected_indices(),
+                std::path::Path::new(&path),
+                0,
+            )
+            .is_ok()
+        })
+        .unwrap_or(false)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// C string inputs must be valid and null-terminated. Non-null output pointers
+/// must reference writable scalar storage or buffers of the advertised length.
+pub unsafe extern "C" fn petunia_qt_app_export_obj(path_cstr: *const std::ffi::c_char) -> bool {
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            let Some(path) = ffi_path(path_cstr) else {
+                return false;
+            };
+            let Ok(host) = renderer.try_borrow_mut() else {
+                return false;
+            };
+            petunia_core::ProjectService::export_obj(
+                &host.app.state,
+                host.app.state.project.active,
+                std::path::Path::new(&path),
+            )
+            .is_ok()
+        })
+        .unwrap_or(false)
 }
 
 fn active_mesh_in_world<'a>(
@@ -1414,6 +1514,15 @@ pub extern "C" fn petunia_qt_view_activate(id: u64) {
         .unwrap_or(())
 }
 
+fn ffi_path(path: *const std::ffi::c_char) -> Option<String> {
+    if path.is_null() {
+        return None;
+    }
+    unsafe { std::ffi::CStr::from_ptr(path) }
+        .to_str()
+        .ok()
+        .map(str::to_owned)
+}
 fn select_index(editor: &mut crate::editor::QtEditor, index: i32) -> bool {
     if index < 0 {
         return false;

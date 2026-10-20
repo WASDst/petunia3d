@@ -942,8 +942,8 @@ impl ShellViewModel {
                 selected: state.session.selection.assets.contains(&asset.id)
                     || active_id == Some(asset.id),
                 active: active_id == Some(asset.id),
-                verts: asset.mesh.verts.len(),
-                tris: asset.mesh.tri_count(),
+                verts: asset.source_mesh().verts.len(),
+                tris: asset.source_mesh().tri_count(),
                 has_custom_color: asset.selection_overlay_color.is_some(),
                 custom_color_rgb: asset
                     .selection_overlay_color
@@ -982,8 +982,8 @@ impl ShellViewModel {
                 let title = active_asset.name.clone();
                 let mut details = format!(
                     "Vertices: {}  ·  Faces: {}",
-                    active_asset.mesh.verts.len(),
-                    active_asset.mesh.faces.len()
+                    active_asset.source_mesh().verts.len(),
+                    active_asset.source_mesh().faces.len()
                 );
                 // Segunda linha só com seleção real: o inspector mostra o
                 // que as operações vão atingir, como o Object Info do Blender.
@@ -1446,7 +1446,7 @@ impl ShellViewModel {
             proportional_radius: state.session.proportional_settings.radius,
             proportional_falloff: format!("{:?}", state.session.proportional_settings.falloff)
                 .to_lowercase(),
-            snap_enabled: state.session.snap_enabled,
+            snap_enabled: state.session.snap_settings.enabled,
             snap_target: format!("{:?}", state.session.snap_settings.target).to_lowercase(),
             shading_popover_open: false,
             operation_hud_active: false,

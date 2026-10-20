@@ -188,20 +188,34 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             micro_inspector_pos: [512.0, 384.0],
             paint_show_uv_overlay: false,
             uv_show_texture: true,
-            active_profile_id: None,
             profile_volume_mode: None,
+            profile_generator_draft: None,
+            generator_parameter_preview: None,
+            profile_volume_diagnostic: None,
+            profile_region_revision: None,
+            profile_region_source: None,
+            profile_authoring_preview: None,
+            planar_primitive_numeric: false,
+            profile_sweep_path: None,
             profile_drag_target: None,
-            profile_selected_point: None,
-            profile_selected_segment: None,
+            draw_component_context: "shape".into(),
             region_selected: None,
             profile_hover_snap: None,
+            draw_inference_toggle: false,
+            draw_inference_held: false,
+            draw_inference_guide: None,
+            draw_revolve_axis: petunia_project::RevolutionAxis::Vertical,
+            draw_caps: [true; 2],
             region_hover: None,
             modeling_mode: ModelingMode::default(),
-            draw_planar_navigation: true,
-            planar_saved_camera: None,
             region_planes_cache: std::cell::RefCell::new(None),
             shape_planes_cache: std::cell::RefCell::new(None),
             shape_builder: None,
+            solid_shape_builder: None,
+            solid_hover: None,
+            solid_cycle: 0,
+            solid_xray: false,
+            solid_pointer: [0.0; 2],
             profile_last_anchor_click: None,
             previous_tool: "select".to_string(),
             scene_query_cache: std::cell::RefCell::new(None),
@@ -210,7 +224,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_preview_id: None,
             profile_edit_gesture: None,
             profile_transform_gesture: None,
-            profile_dimension_gesture: None,
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
             clipboard: None,
@@ -230,6 +243,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 NumericFieldState::new(1.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(1.0, None, None).with_steps(0.1, 0.01),
             ],
+            active_profile_id: None,
+            profile_selected_point: None,
+            profile_selected_segment: None,
+            draw_planar_navigation: true,
+            planar_saved_camera: None,
+            profile_dimension_gesture: None,
             transform_initial: [0.0, 0.0, 0.0],
         };
         bridge.state.project.normalize_references();
@@ -353,8 +372,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             UiIntent::TogglePlanarNavigation => {
                 // A transição (guardar/alinhar ou restaurar a câmera) acontece
                 // em `sync_viewport_context`, ao fim deste `apply`.
-                self.draw_planar_navigation = !self.draw_planar_navigation;
-                let key = if self.draw_planar_navigation {
+                self.state.session.draw_planar_navigation =
+                    !self.state.session.draw_planar_navigation;
+                let key = if self.state.session.draw_planar_navigation {
                     "sl.planar_view_on"
                 } else {
                     "sl.planar_view_off"
@@ -774,6 +794,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.set_status("Pivot confirmed.");
                 }
                 if self.state.session.tools.active_tool != tool {
+                    self.cancel_profile_point_drag();
+                    self.cancel_profile_volume();
+                    if tool != "shape_builder" {
+                        self.cancel_solid_shape_builder();
+                    }
+                }
+                if self.state.session.tools.active_tool != tool {
                     self.previous_tool = self.state.session.tools.active_tool.clone();
                 }
                 if tool != "poly_pen" {
@@ -784,14 +811,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 if self.state.session.tools.active_tool == "draw_profile" && tool != "draw_profile"
                 {
-                    self.profile_pointer_up();
-                    if !self.draw_shapes_visible()
-                        || !matches!(tool.as_str(), "move" | "rotate" | "scale" | "transform")
-                    {
-                        self.state.profile.clear();
-                        self.active_profile_id = None;
-                    }
-                    self.profile_selected_point = None;
+                    self.cancel_profile_point_drag();
                     self.profile_drag_target = None;
                     self.profile_edit_gesture = None;
                 }
@@ -830,12 +850,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         }
                     }
                     "draw_profile" => {
-                        self.active_profile_id = None;
-                        self.profile_selected_point = None;
                         self.profile_drag_target = None;
                         self.profile_edit_gesture = None;
                         // A câmera nunca se move sozinha (capítulos 01 e 02).
-                        petunia_module_model::profile_capture_current(&mut self.state);
+                        let plane = self.state.session.active_workplane.plane;
+                        self.project_workplane_compatibility(plane);
+                        self.state.profile.workplane_locked =
+                            self.state.session.active_workplane.locked;
                         let plane = self.workplane_display_name();
                         let message = self
                             .state
@@ -1012,12 +1033,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ResetCamera => {
                 let _ = self.state.dispatch(&petunia_core::ResetCameraCmd);
+                if self.planar_navigation_active() {
+                    let plane = self.state.session.active_workplane.plane;
+                    self.state.session.camera.align_to_workplane(plane);
+                }
                 self.state.set_status(
                     self.state
                         .t_id(petunia_config::text_id::STATUS_CAMERA_RESET),
                 );
             }
             UiIntent::ToggleProjection => {
+                self.leave_planar_navigation_for_view_change();
                 let _ = self.state.dispatch(&petunia_core::ToggleProjectionCmd);
                 self.state.set_status(
                     if self.state.session.camera.proj == petunia_core::Projection::Ortho {
@@ -1179,51 +1205,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.mark_dirty();
             }
             UiIntent::ProfileSetWorkplaneGround => {
-                self.reset_profile_for_workplane();
-                self.state.profile.workplane_locked = true;
-                petunia_module_model::profile_capture_ground(&mut self.state);
-                self.announce_locked_workplane();
+                self.set_draw_workplane("ground");
             }
             UiIntent::ProfileSetWorkplaneFace => {
-                self.reset_profile_for_workplane();
-                self.state.profile.workplane_locked = true;
-                if petunia_module_model::profile_capture_face(&mut self.state) {
-                    self.announce_locked_workplane();
-                } else {
-                    let message = self
-                        .state
-                        .t_id(petunia_config::text_id::TOOL_GRAMMAR_NO_FACE_SELECTED);
-                    self.state.set_status(message);
-                }
+                self.set_draw_workplane("face");
             }
             UiIntent::ProfileSetWorkplaneView => {
-                self.reset_profile_for_workplane();
-                self.state.profile.workplane_locked = true;
-                petunia_module_model::profile_capture_view(&mut self.state);
-                self.announce_locked_workplane();
+                self.set_draw_workplane("view");
             }
             UiIntent::ProfileSetWorkplaneSelection => {
-                self.reset_profile_for_workplane();
-                if petunia_module_model::profile_capture_from_selection(&mut self.state) {
-                    self.state.profile.workplane_locked = true;
-                    self.announce_locked_workplane();
-                } else {
-                    self.state.set_status(
-                        self.state
-                            .t_id(petunia_config::text_id::STATUS_SELECT_3_POINTS_OR_A_FACE_TO),
-                    );
-                }
+                self.set_draw_workplane("selection");
             }
             UiIntent::ProfileSetWorkplaneAuto => {
-                self.reset_profile_for_workplane();
-                self.state.profile.workplane_locked = false;
-                petunia_module_model::profile_capture_auto(&mut self.state);
-                let message = self
-                    .state
-                    .t_id(petunia_config::text_id::TOOL_GRAMMAR_WORKPLANE_AUTO);
-                self.state.set_status(message);
+                self.set_draw_workplane("auto");
             }
             UiIntent::SetModelingMode(mode) => {
+                if mode != self.modeling_mode {
+                    self.cancel_active_operation();
+                }
                 if self.state.workspace != Workspace::Model {
                     self.state.switch_workspace(Workspace::Model);
                     self.state.session.tools.hover = petunia_core::HoverTarget::None;
@@ -1246,8 +1245,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.mark_dirty();
             }
             UiIntent::ProfileLookAtPlane => {
-                petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
-                self.state.mark_dirty();
+                self.align_draw_view();
             }
             UiIntent::SetVisualAssistanceProfile(profile) => {
                 self.state.set_visual_assistance_profile(profile);

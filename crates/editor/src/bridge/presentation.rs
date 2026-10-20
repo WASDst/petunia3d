@@ -215,12 +215,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .project
                 .get_spline(profile.spline_id)
                 .map_or(0, |s| s.points.len());
-            let is_active = self.active_profile_id == Some(profile.id);
+            let is_active = self.state.session.active_shape == Some(profile.id);
             vm.scene_items.push(SceneItemModel {
                 id: format!("profile:{}", profile.id),
                 name: profile.name.clone(),
-                visible: true,
-                locked: false,
+                visible: profile.visible,
+                locked: profile.locked,
                 selected: is_active,
                 active: is_active,
                 verts: pts,
@@ -1057,7 +1057,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     fn project_modeling(&self, vm: &mut ShellViewModel) {
         vm.profile_active = self.state.session.workspace == Workspace::Model
             && (self.state.session.tools.active_tool == "draw_profile"
-                || self.active_profile_id.is_some());
+                || matches!(self.grammar_tool(), Some(GrammarTool::PlanarPrimitive(_)))
+                || self.state.session.active_shape.is_some());
         vm.profile_point_count = self.active_profile_point_count() as i32;
         vm.profile_closed = self.active_profile_closed();
         if let Some((profile, spline)) = self.active_profile_resources()
@@ -1665,19 +1666,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn planar_navigation_active(&self) -> bool {
         self.state.workspace == Workspace::Model
             && self.modeling_mode == crate::ModelingMode::Draw
-            && self.draw_planar_navigation
+            && self.state.session.draw_planar_navigation
     }
 
     fn sync_planar_navigation(&mut self) {
         let wanted = self.planar_navigation_active();
-        match (wanted, self.planar_saved_camera.is_some()) {
+        match (wanted, self.state.session.planar_saved_camera.is_some()) {
             (true, false) => {
-                self.planar_saved_camera = Some(self.state.session.camera.clone());
-                petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
+                self.state.session.planar_saved_camera = Some(self.state.session.camera.clone());
+                let plane = self.state.session.active_workplane.plane;
+                self.state.session.camera.align_to_workplane(plane);
                 self.state.mark_dirty();
             }
             (false, true) => {
-                if let Some(mut camera) = self.planar_saved_camera.take() {
+                if let Some(mut camera) = self.state.session.planar_saved_camera.take() {
                     // A janela pode ter mudado de proporção nesse meio-tempo.
                     camera.aspect = self.state.session.camera.aspect;
                     self.state.session.camera = camera;

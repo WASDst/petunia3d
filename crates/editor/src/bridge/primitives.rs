@@ -52,6 +52,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status("Primitive parameters must be finite");
             return false;
         }
+        if [
+            "sides",
+            "vertices",
+            "major_segments",
+            "minor_segments",
+            "segments",
+            "rings",
+            "subdiv",
+        ]
+        .contains(&param)
+            && (value.fract() != 0.0 || !(0.0..=512.0).contains(&value))
+        {
+            return false;
+        }
         let Some(desc) = self.active_primitive_descriptor_or_session() else {
             return false;
         };
@@ -63,30 +77,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 depth,
             } => match param {
                 "width" => Box {
-                    width: value.max(0.01),
+                    width: value,
                     height,
                     depth,
                 },
                 "height" => Box {
                     width,
-                    height: value.max(0.01),
+                    height: value,
                     depth,
                 },
                 "depth" => Box {
                     width,
                     height,
-                    depth: value.max(0.01),
+                    depth: value,
                 },
                 _ => return false,
             },
             Plane { width, height } => match param {
                 "width" => Plane {
-                    width: value.max(0.01),
+                    width: value,
                     height,
                 },
                 "height" => Plane {
                     width,
-                    height: value.max(0.01),
+                    height: value,
                 },
                 _ => return false,
             },
@@ -96,19 +110,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 depth,
             } => match param {
                 "width" => Wedge {
-                    width: value.max(0.01),
+                    width: value,
                     height,
                     depth,
                 },
                 "height" => Wedge {
                     width,
-                    height: value.max(0.01),
+                    height: value,
                     depth,
                 },
                 "depth" => Wedge {
                     width,
                     height,
-                    depth: value.max(0.01),
+                    depth: value,
                 },
                 _ => return false,
             },
@@ -120,7 +134,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 cap_bottom,
             } => match param {
                 "radius" => Cylinder {
-                    radius: value.max(0.01),
+                    radius: value,
                     height,
                     sides,
                     cap_top,
@@ -128,7 +142,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 },
                 "height" => Cylinder {
                     radius,
-                    height: value.max(0.01),
+                    height: value,
                     sides,
                     cap_top,
                     cap_bottom,
@@ -136,7 +150,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "sides" => Cylinder {
                     radius,
                     height,
-                    sides: (value.round() as u32).clamp(3, 32),
+                    sides: value as u32,
                     cap_top,
                     cap_bottom,
                 },
@@ -151,7 +165,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 cap_top,
             } => match param {
                 "radius" => Cone {
-                    bottom_radius: value.max(0.0),
+                    bottom_radius: value,
                     top_radius,
                     height,
                     sides,
@@ -160,7 +174,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 },
                 "radius_b" => Cone {
                     bottom_radius,
-                    top_radius: value.max(0.0),
+                    top_radius: value,
                     height,
                     sides,
                     cap_bottom,
@@ -169,7 +183,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "height" => Cone {
                     bottom_radius,
                     top_radius,
-                    height: value.max(0.01),
+                    height: value,
                     sides,
                     cap_bottom,
                     cap_top,
@@ -178,7 +192,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     bottom_radius,
                     top_radius,
                     height,
-                    sides: (value.round() as u32).clamp(3, 32),
+                    sides: value as u32,
                     cap_bottom,
                     cap_top,
                 },
@@ -190,13 +204,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 fill,
             } => match param {
                 "radius" => Circle {
-                    radius: value.max(0.01),
+                    radius: value,
                     vertices,
                     fill,
                 },
                 "sides" => Circle {
                     radius,
-                    vertices: (value.round() as u32).clamp(3, 64),
+                    vertices: value as u32,
                     fill,
                 },
                 _ => return false,
@@ -208,28 +222,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 minor_segments,
             } => match param {
                 "radius" => Torus {
-                    major_radius: value.max(0.01),
+                    major_radius: value,
                     minor_radius,
                     major_segments,
                     minor_segments,
                 },
                 "radius_b" => Torus {
                     major_radius,
-                    minor_radius: value.max(0.01),
+                    minor_radius: value,
                     major_segments,
                     minor_segments,
                 },
                 "sides" => Torus {
                     major_radius,
                     minor_radius,
-                    major_segments: (value.round() as u32).clamp(3, 64),
+                    major_segments: value as u32,
                     minor_segments,
                 },
                 "rings" => Torus {
                     major_radius,
                     minor_radius,
                     major_segments,
-                    minor_segments: (value.round() as u32).clamp(3, 32),
+                    minor_segments: value as u32,
                 },
                 _ => return false,
             },
@@ -239,30 +253,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 rings,
             } => match param {
                 "radius" => LowSphere {
-                    radius: value.max(0.01),
+                    radius: value,
                     segments,
                     rings,
                 },
                 "sides" => LowSphere {
                     radius,
-                    segments: (value.round() as u32).clamp(3, 32),
+                    segments: value as u32,
                     rings,
                 },
                 "rings" => LowSphere {
                     radius,
                     segments,
-                    rings: (value.round() as u32).clamp(2, 24),
+                    rings: value as u32,
                 },
                 _ => return false,
             },
             Icosphere { radius, subdiv } => match param {
                 "radius" => Icosphere {
-                    radius: value.max(0.01),
+                    radius: value,
                     subdiv,
                 },
                 "subdiv" => Icosphere {
                     radius,
-                    subdiv: (value.round() as u32).min(3),
+                    subdiv: value as u32,
                 },
                 _ => return false,
             },
@@ -273,32 +287,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 cap_segments,
             } => match param {
                 "radius" => Capsule {
-                    radius: value.max(0.01),
+                    radius: value,
                     height,
                     radial_segments,
                     cap_segments,
                 },
                 "height" => Capsule {
                     radius,
-                    height: value.max(0.01),
+                    height: value,
                     radial_segments,
                     cap_segments,
                 },
                 "sides" => Capsule {
                     radius,
                     height,
-                    radial_segments: (value.round() as u32).clamp(3, 32),
+                    radial_segments: value as u32,
                     cap_segments,
                 },
                 "rings" => Capsule {
                     radius,
                     height,
                     radial_segments,
-                    cap_segments: (value.round() as u32).clamp(1, 8),
+                    cap_segments: value as u32,
                 },
                 _ => return false,
             },
         };
+        if let Err(error) =
+            petunia_project::geometry_generator::validate_primitive_descriptor(new_desc)
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
         self.state
             .update_active_primitive(new_desc, !self.state.primitive_session_valid())
     }
@@ -374,6 +394,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             },
             _ => return false,
         };
+        if let Err(error) =
+            petunia_project::geometry_generator::validate_primitive_descriptor(new_desc)
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
         self.state
             .update_active_primitive(new_desc, !self.state.primitive_session_valid())
     }

@@ -21,7 +21,7 @@ use crate::*;
 
 /// Revisões de prévia de ferramenta ficam num espaço próprio, para nunca
 /// coincidir com as revisões da pose do Animate no cache do renderer.
-const TOOL_PREVIEW_REVISION_BIT: u64 = 1 << 63;
+pub(crate) const TOOL_PREVIEW_REVISION_BIT: u64 = 1 << 63;
 
 /// A malha do documento ainda é a fonte da sessão (mesma topologia e posições)?
 /// Undo, Redo ou outra edição durante a ferramenta invalidam a prévia.

@@ -93,6 +93,16 @@ pub trait Command: Send + Sync {
         }
     }
 
+    /// Whole-object lifecycle commands retain their generator; authoring mesh
+    /// edits require an explicit conversion.
+    fn requires_editable_mesh(&self, _state: &EditorView<'_>) -> bool {
+        self.changes()
+            .intersects(ProjectChanges::TOPOLOGY | ProjectChanges::UVS | ProjectChanges::NORMALS)
+            && !self
+                .changes()
+                .intersects(ProjectChanges::PROCEDURAL | ProjectChanges::SPLINES)
+    }
+
     /// Valida disponibilidade contextual do comando contra o estado atual (P3D-100).
     /// Retorna Ok(()) se puder ser executado, ou Err("razão legível") quando desabilitado.
     fn can_execute(&self, _state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -119,6 +129,10 @@ impl<T: ?Sized + Command> Command for Box<T> {
 
     fn changes(&self) -> ProjectChanges {
         (**self).changes()
+    }
+
+    fn requires_editable_mesh(&self, state: &EditorView<'_>) -> bool {
+        (**self).requires_editable_mesh(state)
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -345,10 +359,25 @@ impl CommandDispatcher {
                 "Confirm or cancel the active operation first".into(),
             ));
         }
-        ctx.document.normalize_references();
         let changes = cmd.changes();
+        if cmd.requires_editable_mesh(&ctx.view())
+            && ctx
+                .document
+                .active()
+                .is_some_and(|a| a.geometry_source.is_some())
+        {
+            return Err(CommandError::Execution(
+                "This object is parametric. Make Editable explicitly before editing its mesh"
+                    .into(),
+            ));
+        }
+        ctx.document.normalize_references();
         ctx.document.project.history_selection = ctx.editor.selection.assets.clone();
+        ctx.document.project.history_active_shape = ctx.editor.active_shape;
+        ctx.document.project.history_planar_selection = ctx.editor.planar_selection.clone();
         let original_selection = ctx.editor.selection.clone();
+        let original_shape = ctx.editor.active_shape;
+        let original_planar_selection = ctx.editor.planar_selection.clone();
         let original = cmd.is_destructive().then(|| ctx.document.project.clone());
         // A sessão de criação de primitiva é consumida ao congelar; guardá-la
         // permite restaurar o estado de sessão junto com o projeto se falhar.
@@ -359,8 +388,19 @@ impl CommandDispatcher {
         if cmd.is_destructive() && cmd.freezes_active_primitive() {
             ctx.freeze_active_primitive_for_command();
         }
-        let exec_result =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cmd.execute(ctx)));
+        let exec_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            cmd.execute(ctx)?;
+            if ctx.document.project.assets.iter().any(|a| {
+                a.geometry_source.is_some()
+                    && (!a.mesh.verts.is_empty() || !a.mesh.faces.is_empty())
+            }) {
+                return Err(CommandError::Execution("Parametric geometry cannot be edited as an authoring mesh; Make Editable explicitly".into()));
+            }
+            if changes.intersects(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL) {
+                ctx.document.project.promote_planar_contours()?;
+            }
+            Ok(())
+        }));
         let execution_outcome = match exec_result {
             Ok(res) => res,
             Err(panic_payload) => {
@@ -387,6 +427,8 @@ impl CommandDispatcher {
                 ctx.document.project = original;
                 ctx.document.sync_reference_mirror();
                 ctx.editor.selection = original_selection;
+                ctx.editor.active_shape = original_shape;
+                ctx.editor.planar_selection = original_planar_selection;
                 (ctx.editor.primitive_session, ctx.editor.last_primitive) =
                     original_primitive_session;
                 // The project and selection are the same snapshot. Recomputing
@@ -2552,6 +2594,10 @@ impl Command for DeleteSelectionCmd {
         "delete"
     }
 
+    fn requires_editable_mesh(&self, state: &EditorView<'_>) -> bool {
+        state.edit_mode() != EditMode::Object
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() == EditMode::Object {
             if state.document.active().is_none() {
@@ -2611,6 +2657,10 @@ pub struct DuplicateSelectionCmd;
 impl Command for DuplicateSelectionCmd {
     fn label(&self) -> &'static str {
         "duplicate"
+    }
+
+    fn requires_editable_mesh(&self, state: &EditorView<'_>) -> bool {
+        state.edit_mode() != EditMode::Object
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -2746,6 +2796,8 @@ impl Command for ClearSelectionCmd {
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.selection_domain() == crate::SelectionDomain::Object {
             state.select_object(None, false);
+            state.editor.active_shape = None;
+            state.editor.planar_selection = Default::default();
             return Ok(());
         }
         let Some(mesh) = state.document.active_mesh_mut() else {
@@ -5020,8 +5072,8 @@ impl Command for ToggleSnapCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        state.editor.snap_enabled = !state.editor.snap_enabled;
-        state.set_status(if state.editor.snap_enabled {
+        state.editor.snap_settings.enabled = !state.editor.snap_settings.enabled;
+        state.set_status(if state.editor.snap_settings.enabled {
             "Magnet snap enabled"
         } else {
             "Magnet snap disabled"
@@ -6059,15 +6111,10 @@ impl Command for UpdateSplineCmd {
         self.spline
             .validate_authoring()
             .map_err(|_| "Spline data is invalid")?;
-        if let Some(profile) = project
-            .profiles
-            .iter()
-            .find(|profile| profile.spline_id == self.spline.id)
-        {
-            profile
-                .validate_authoring(&self.spline)
-                .map_err(|_| "Profile spline data is invalid")?;
-        }
+        validate_profile_edit(project, self.spline.id, |spline| {
+            *spline = self.spline.clone();
+            Ok(())
+        })?;
         Ok(())
     }
 
@@ -6148,6 +6195,9 @@ impl Command for UpdateProfileCmd {
         let current = project
             .get_profile(self.profile.id)
             .ok_or("Profile not found")?;
+        if current.locked {
+            return Err("Shape is locked");
+        }
         if current.spline_id != self.profile.spline_id {
             return Err("Profile spline cannot be replaced");
         }
@@ -6194,6 +6244,24 @@ impl Command for DeleteProfileCmd {
         let profile = project
             .get_profile(self.profile_id)
             .ok_or("Profile not found")?;
+        if profile.locked {
+            return Err("Shape is locked");
+        }
+        if project
+            .assets
+            .iter()
+            .filter_map(|a| a.geometry_source.as_ref())
+            .any(|g| {
+                g.depends_on_shape(profile.id)
+                    || g.depends_on_spline(profile.spline_id)
+                    || profile
+                        .hole_splines
+                        .iter()
+                        .any(|id| g.depends_on_spline(*id))
+            })
+        {
+            return Err("Shape is used by a generator");
+        }
         if project
             .path_generators
             .iter()
@@ -6221,6 +6289,9 @@ impl Command for DeleteProfileCmd {
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let profile = state.document.project.remove_profile(self.profile_id)?;
         state.document.project.remove_spline(profile.spline_id)?;
+        for id in profile.hole_splines {
+            state.document.project.remove_spline(id)?;
+        }
         Ok(())
     }
 }
@@ -6444,28 +6515,34 @@ fn validate_profile_edit(
     spline_id: uuid::Uuid,
     apply: impl FnOnce(&mut SplineResource) -> Result<(), SplineError>,
 ) -> Result<(), &'static str> {
-    let Some(profile) = project
-        .profiles
-        .iter()
-        .find(|profile| profile.spline_id == spline_id)
-    else {
+    let Some(profile) = project.profiles.iter().find(|profile| {
+        profile.spline_id == spline_id || profile.hole_splines.contains(&spline_id)
+    }) else {
         return Ok(());
     };
+    if profile.locked {
+        return Err("Shape is locked");
+    }
     let mut spline = project
         .get_spline(spline_id)
         .ok_or("Spline not found")?
         .clone();
     apply(&mut spline).map_err(|_| "Spline edit is invalid")?;
-    profile
+    if profile.hole_splines.contains(&spline_id) && (!spline.closed || spline.points.len() < 3) {
+        return Err("Inner contours must remain closed with at least three points");
+    }
+    let mut contour_shape = profile.clone();
+    contour_shape.spline_id = spline_id;
+    contour_shape
         .validate_authoring(&spline)
-        .map_err(|_| "Edit would break the Profile (must stay planar and unattached)")
+        .map_err(|_| "Edit would break the shape (contours must stay planar and unattached)")
 }
 
 fn spline_owned_by_profile(project: &petunia_project::Project, spline_id: uuid::Uuid) -> bool {
     project
         .profiles
         .iter()
-        .any(|profile| profile.spline_id == spline_id)
+        .any(|profile| profile.spline_id == spline_id || profile.hole_splines.contains(&spline_id))
 }
 
 #[derive(Debug, Clone)]

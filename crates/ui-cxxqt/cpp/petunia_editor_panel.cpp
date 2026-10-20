@@ -296,6 +296,7 @@ QFormLayout *PetuniaEditorPanel::page(const QString &title) {
     QString tabText = (m_mode == "MODEL" && !tabIcon.isNull()) ? QString() : title;
     int idx = m_tabs->addTab(scroll, tabIcon, tabText);
     m_tabs->setTabToolTip(idx, title);
+    scroll->setProperty("sourceTitle", title);
     scroll->setProperty("nativeSourceTab", tabText);
 
     if (m_mode == "MODEL") {

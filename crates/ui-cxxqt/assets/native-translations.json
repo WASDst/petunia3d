@@ -15,22 +15,6 @@
     "pt-BR": "Perfil",
     "en": "Profile"
   },
-  "Transf": {
-    "pt-BR": "Transf",
-    "en": "Transf"
-  },
-  "Modif": {
-    "pt-BR": "Modif",
-    "en": "Modif"
-  },
-  "Ações": {
-    "pt-BR": "Ações",
-    "en": "Actions"
-  },
-  "Ferram": {
-    "pt-BR": "Ferram",
-    "en": "Tools"
-  },
   "Transformação": {
     "pt-BR": "Transformação",
     "en": "Transform"
@@ -42,6 +26,10 @@
   "Modificadores": {
     "pt-BR": "Modificadores",
     "en": "Modifiers"
+  },
+  "Booleans": {
+    "pt-BR": "Booleans",
+    "en": "Booleans"
   },
   "Vista": {
     "pt-BR": "Vista",
@@ -351,9 +339,25 @@
     "pt-BR": "Restaurar ações rápidas",
     "en": "Reset quick actions"
   },
+  "Operando": {
+    "pt-BR": "Operando",
+    "en": "Operand"
+  },
   "Limpeza": {
     "pt-BR": "Limpeza",
     "en": "Cleanup"
+  },
+  "Manter partes": {
+    "pt-BR": "Manter partes",
+    "en": "Keep parts"
+  },
+  "Juntar": {
+    "pt-BR": "Juntar",
+    "en": "Join"
+  },
+  "Limpar operando": {
+    "pt-BR": "Limpar operando",
+    "en": "Clear operand"
   },
   "Navegação planar": {
     "pt-BR": "Navegação planar",
@@ -850,10 +854,6 @@
   "Tamanho": {
     "pt-BR": "Tamanho",
     "en": "Size"
-  },
-  "Alinhar": {
-    "pt-BR": "Alinhar",
-    "en": "Align"
   },
   "Alinhar vista": {
     "pt-BR": "Alinhar vista",
@@ -2787,6 +2787,326 @@
     "pt-BR": "ASSETS · controles do editor",
     "en": "ASSETS · editor controls"
   },
+  "Forma e volume": {
+    "pt-BR": "Forma e volume",
+    "en": "Shape and volume"
+  },
+  "Formas · selecionar para reeditar": {
+    "pt-BR": "Formas · selecionar para reeditar",
+    "en": "Shapes · select to edit"
+  },
+  "Contorno para edição": {
+    "pt-BR": "Contorno para edição",
+    "en": "Contour to edit"
+  },
+  "Editar na forma selecionada": {
+    "pt-BR": "Editar na forma selecionada",
+    "en": "Edit within selected shape"
+  },
+  "Forma inteira": {
+    "pt-BR": "Forma inteira",
+    "en": "Whole shape"
+  },
+  "Pontos": {
+    "pt-BR": "Pontos",
+    "en": "Points"
+  },
+  "Regiões": {
+    "pt-BR": "Regiões",
+    "en": "Regions"
+  },
+  "Fechar contorno": {
+    "pt-BR": "Fechar contorno",
+    "en": "Close contour"
+  },
+  "Automático": {
+    "pt-BR": "Automático",
+    "en": "Automatic"
+  },
+  "Chão (XZ)": {
+    "pt-BR": "Chão (XZ)",
+    "en": "Ground (XZ)"
+  },
+  "Seleção / plano médio": {
+    "pt-BR": "Seleção / plano médio",
+    "en": "Selection / midplane"
+  },
+  "Personalizado": {
+    "pt-BR": "Personalizado",
+    "en": "Custom"
+  },
+  "Referência": {
+    "pt-BR": "Referência",
+    "en": "Reference"
+  },
+  "Desenhar retângulo": {
+    "pt-BR": "Desenhar retângulo",
+    "en": "Draw rectangle"
+  },
+  "Desenhar círculo": {
+    "pt-BR": "Desenhar círculo",
+    "en": "Draw circle"
+  },
+  "Desenhar elipse": {
+    "pt-BR": "Desenhar elipse",
+    "en": "Draw ellipse"
+  },
+  "Desenhar polígono": {
+    "pt-BR": "Desenhar polígono",
+    "en": "Draw polygon"
+  },
+  "Mostrar / ocultar forma": {
+    "pt-BR": "Mostrar / ocultar forma",
+    "en": "Show / hide shape"
+  },
+  "Bloquear / desbloquear forma": {
+    "pt-BR": "Bloquear / desbloquear forma",
+    "en": "Lock / unlock shape"
+  },
+  "Criar contorno interno (0,1)": {
+    "pt-BR": "Criar contorno interno (0,1)",
+    "en": "Create inner contour (0.1)"
+  },
+  "Prévia de extrusão": {
+    "pt-BR": "Prévia de extrusão",
+    "en": "Preview extrusion"
+  },
+  "Prévia de revolução": {
+    "pt-BR": "Prévia de revolução",
+    "en": "Preview revolution"
+  },
+  "Prévia de sweep": {
+    "pt-BR": "Prévia de sweep",
+    "en": "Preview sweep"
+  },
+  "Caminho explícito do sweep": {
+    "pt-BR": "Caminho explícito do sweep",
+    "en": "Explicit sweep path"
+  },
+  "Altura da extrusão selecionada": {
+    "pt-BR": "Altura da extrusão selecionada",
+    "en": "Selected extrusion height"
+  },
+  "Ângulo da revolução selecionada": {
+    "pt-BR": "Ângulo da revolução selecionada",
+    "en": "Selected revolution angle"
+  },
+  "Segmentos da revolução selecionada": {
+    "pt-BR": "Segmentos da revolução selecionada",
+    "en": "Selected revolution segments"
+  },
+  "Converter volume em malha editável": {
+    "pt-BR": "Converter volume em malha editável",
+    "en": "Convert volume to editable mesh"
+  },
+  "Estado da forma e do volume": {
+    "pt-BR": "Estado da forma e do volume",
+    "en": "Shape and volume status"
+  },
+  "Compor sólidos": {
+    "pt-BR": "Compor sólidos",
+    "en": "Compose solids"
+  },
+  "Preparar os dois sólidos selecionados": {
+    "pt-BR": "Preparar os dois sólidos selecionados",
+    "en": "Prepare the two selected solids"
+  },
+  "Ação nas regiões": {
+    "pt-BR": "Ação nas regiões",
+    "en": "Region action"
+  },
+  "Unir": {
+    "pt-BR": "Unir",
+    "en": "Unite"
+  },
+  "Extrair": {
+    "pt-BR": "Extrair",
+    "en": "Extract"
+  },
+  "Próxima região sob o cursor": {
+    "pt-BR": "Próxima região sob o cursor",
+    "en": "Next region under cursor"
+  },
+  "Revelar regiões internas": {
+    "pt-BR": "Revelar regiões internas",
+    "en": "Reveal internal regions"
+  },
+  "Confirmar composição": {
+    "pt-BR": "Confirmar composição",
+    "en": "Confirm composition"
+  },
+  "Cancelar composição": {
+    "pt-BR": "Cancelar composição",
+    "en": "Cancel composition"
+  },
+  "Regiões da composição sólida": {
+    "pt-BR": "Regiões da composição sólida",
+    "en": "Solid composition regions"
+  },
+  "Caneta Bézier": {
+    "pt-BR": "Caneta Bézier",
+    "en": "Bézier pen"
+  },
+  "Elipse": {
+    "pt-BR": "Elipse",
+    "en": "Ellipse"
+  },
+  "Polígono": {
+    "pt-BR": "Polígono",
+    "en": "Polygon"
+  },
+  "Objeto · domínio compartilhado de malha": {
+    "pt-BR": "Objeto · domínio compartilhado de malha",
+    "en": "Object · shared mesh selection domain"
+  },
+  "Vértice · domínio compartilhado de malha": {
+    "pt-BR": "Vértice · domínio compartilhado de malha",
+    "en": "Vertex · shared mesh selection domain"
+  },
+  "Aresta · domínio compartilhado de malha": {
+    "pt-BR": "Aresta · domínio compartilhado de malha",
+    "en": "Edge · shared mesh selection domain"
+  },
+  "Face · domínio compartilhado de malha": {
+    "pt-BR": "Face · domínio compartilhado de malha",
+    "en": "Face · shared mesh selection domain"
+  },
+  "Smart": {
+    "pt-BR": "Smart",
+    "en": "Smart"
+  },
+  "Forma": {
+    "pt-BR": "Forma",
+    "en": "Shape"
+  },
+  "Gerador": {
+    "pt-BR": "Gerador",
+    "en": "Generator"
+  },
+  "Nova curva Bézier": {
+    "pt-BR": "Nova curva Bézier",
+    "en": "New Bézier curve"
+  },
+  "Concluir curva sem gerar volume": {
+    "pt-BR": "Concluir curva sem gerar volume",
+    "en": "Finish curve without generating a volume"
+  },
+  "Distância do contorno interno": {
+    "pt-BR": "Distância do contorno interno",
+    "en": "Inner contour distance"
+  },
+  "Criar contorno interno": {
+    "pt-BR": "Criar contorno interno",
+    "en": "Create inner contour"
+  },
+  "Origem do plano": {
+    "pt-BR": "Origem do plano",
+    "en": "Plane origin"
+  },
+  "Girar plano (graus)": {
+    "pt-BR": "Girar plano (graus)",
+    "en": "Rotate plane (degrees)"
+  },
+  "Passo angular": {
+    "pt-BR": "Passo angular",
+    "en": "Angular step"
+  },
+  "Travar / liberar guia de inferência": {
+    "pt-BR": "Travar / liberar guia de inferência",
+    "en": "Lock / unlock inference guide"
+  },
+  "Eixo da revolução": {
+    "pt-BR": "Eixo da revolução",
+    "en": "Revolve axis"
+  },
+  "Vertical do plano": {
+    "pt-BR": "Vertical do plano",
+    "en": "Plane vertical"
+  },
+  "Horizontal do plano": {
+    "pt-BR": "Horizontal do plano",
+    "en": "Plane horizontal"
+  },
+  "Tampa inicial": {
+    "pt-BR": "Tampa inicial",
+    "en": "Start cap"
+  },
+  "Tampa final": {
+    "pt-BR": "Tampa final",
+    "en": "End cap"
+  },
+  "Deslocar forma": {
+    "pt-BR": "Deslocar forma",
+    "en": "Translate shape"
+  },
+  "Girar forma (graus)": {
+    "pt-BR": "Girar forma (graus)",
+    "en": "Rotate shape (degrees)"
+  },
+  "Escalar no plano (fator)": {
+    "pt-BR": "Escalar no plano (fator)",
+    "en": "Scale in plane (factor)"
+  },
+  "Pontos do contorno": {
+    "pt-BR": "Pontos do contorno",
+    "en": "Contour points"
+  },
+  "Alça de entrada": {
+    "pt-BR": "Alça de entrada",
+    "en": "Incoming handle"
+  },
+  "Alça de saída": {
+    "pt-BR": "Alça de saída",
+    "en": "Outgoing handle"
+  },
+  "Modo das alças": {
+    "pt-BR": "Modo das alças",
+    "en": "Handle mode"
+  },
+  "Independentes": {
+    "pt-BR": "Independentes",
+    "en": "Independent"
+  },
+  "Alinhadas": {
+    "pt-BR": "Alinhadas",
+    "en": "Aligned"
+  },
+  "Espelhadas": {
+    "pt-BR": "Espelhadas",
+    "en": "Mirrored"
+  },
+  "Nome da forma": {
+    "pt-BR": "Nome da forma",
+    "en": "Shape name"
+  },
+  "Transformar forma": {
+    "pt-BR": "Transformar forma",
+    "en": "Transform shape"
+  },
+  "Selecionar regiões": {
+    "pt-BR": "Selecionar regiões",
+    "en": "Select regions"
+  },
+  "Transf": {
+    "pt-BR": "Transf",
+    "en": "Transf"
+  },
+  "Modif": {
+    "pt-BR": "Modif",
+    "en": "Modif"
+  },
+  "Ações": {
+    "pt-BR": "Ações",
+    "en": "Actions"
+  },
+  "Ferram": {
+    "pt-BR": "Ferram",
+    "en": "Tools"
+  },
+  "Alinhar": {
+    "pt-BR": "Alinhar",
+    "en": "Align"
+  },
   "%1 ativa(s)": {
     "pt-BR": "%1 ativa(s)",
     "en": "%1 active"
@@ -2862,10 +3182,6 @@
   "Ativar snap": {
     "pt-BR": "Ativar snap",
     "en": "Enable snapping"
-  },
-  "Automático": {
-    "pt-BR": "Automático",
-    "en": "Automatic"
   },
   "Ações da seleção": {
     "pt-BR": "Ações da seleção",
@@ -5263,10 +5579,6 @@
     "pt-BR": "Cena",
     "en": "Scene"
   },
-  "Forma": {
-    "pt-BR": "Forma",
-    "en": "Shape"
-  },
   "Topologia": {
     "pt-BR": "Topologia",
     "en": "Topology"
@@ -5442,10 +5754,6 @@
   "Ungroup": {
     "pt-BR": "Desagrupar",
     "en": "Ungroup"
-  },
-  "Gerador": {
-    "pt-BR": "Gerador",
-    "en": "Generator"
   },
   "Gizmos": {
     "pt-BR": "Gizmos",
@@ -6122,10 +6430,6 @@
   "Modo da operação": {
     "pt-BR": "Modo da operação",
     "en": "Operation mode"
-  },
-  "Referência": {
-    "pt-BR": "Referência",
-    "en": "Reference"
   },
   "Apagar referência": {
     "pt-BR": "Apagar referência",

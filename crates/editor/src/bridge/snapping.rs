@@ -79,6 +79,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             None => (2u8, self.scene_geometry_key(), project.active).hash(&mut hasher),
         }
+        (
+            project.spline_revision,
+            project.procedural_revision,
+            self.profile_authoring_preview.is_some(),
+        )
+            .hash(&mut hasher);
         let key = hasher.finish();
         if let Some((cached, accel)) = self.snap_accel_cache.borrow().as_ref()
             && *cached == key
@@ -129,7 +135,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             })
             .collect();
         let accel = std::sync::Arc::new(crate::perf::measure("snap_accel_rebuild", || {
-            petunia_core::SnapAccel::build(&sources)
+            let identities: Vec<_> = meshes
+                .iter()
+                .filter_map(|(index, _)| {
+                    project.assets.get(*index).map(|a| {
+                        (
+                            a.id,
+                            a.geometry_source.is_none() && !a.has_enabled_modifiers(),
+                        )
+                    })
+                })
+                .collect();
+            let mut accel = petunia_core::SnapAccel::build_scoped(&sources, &identities);
+            for shape in project.profiles.iter().filter(|s| s.visible) {
+                if self
+                    .profile_authoring_preview
+                    .as_ref()
+                    .is_some_and(|d| d.profile.id == shape.id)
+                {
+                    continue;
+                }
+                for id in std::iter::once(&shape.spline_id).chain(&shape.hole_splines) {
+                    if let Some(spline) = project.get_spline(*id) {
+                        accel.append_planar_spline(shape.id, spline, shape.workplane);
+                    }
+                }
+            }
+            for spline in project.splines.iter().filter(|spline| {
+                !project.profiles.iter().any(|shape| {
+                    shape.spline_id == spline.id || shape.hole_splines.contains(&spline.id)
+                })
+            }) {
+                if let Ok(resolved) = project.resolved_spline(spline.id) {
+                    accel.append_spatial_spline(spline.id, &resolved);
+                }
+            }
+            accel
         }));
         *self.snap_accel_cache.borrow_mut() = Some((key, std::sync::Arc::clone(&accel)));
         accel
@@ -189,9 +230,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn toggle_snap_enabled(&mut self) -> bool {
-        self.state.session.snap_enabled = !self.state.session.snap_enabled;
-        self.state.session.snap_settings.enabled = self.state.session.snap_enabled;
-        let enabled = self.state.session.snap_enabled;
+        self.state.session.snap_settings.enabled = !self.state.session.snap_settings.enabled;
+        let enabled = self.state.session.snap_settings.enabled;
         self.state.render.mark_dirty();
         self.state.set_status(if enabled {
             "Snap magnético ativado"
@@ -204,12 +244,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn set_snap_target(&mut self, target_str: &str) -> bool {
         use petunia_core::SnapTarget;
         let target = match target_str.to_lowercase().as_str() {
+            "smart" => SnapTarget::Smart,
             "grid" => SnapTarget::Grid,
             "increment" => SnapTarget::Increment,
             "vertex" | "point" => SnapTarget::Vertex,
             "edge" => SnapTarget::Edge,
             "face" => SnapTarget::Face,
-            _ => SnapTarget::Grid,
+            _ => return false,
         };
         self.state.session.snap_settings.target = target;
         self.state.render.mark_dirty();

@@ -244,6 +244,8 @@ pub struct SceneExtractor {
     rebuilds: u64,
     object_rebuilds: u64,
     pixels: PixelCache,
+    surface_atlases: HashMap<Uuid, petunia_project::Canvas>,
+    surface_atlases_key: Option<(u64, u64, bool)>,
 }
 
 impl SceneExtractor {
@@ -311,6 +313,13 @@ impl SceneExtractor {
 
         let mut scene_key = Hasher::new();
         scene_key.mix(fingerprint.mesh);
+        if project
+            .assets
+            .iter()
+            .any(|a| !a.surface_materials.is_empty())
+        {
+            scene_key.mix(fingerprint.textures);
+        }
         scene_key.mix(settings.shading as u64);
         scene_key.mix(settings.edge_mode as u64);
         scene_key.mix(u64::from(settings.show_wireframe_overlay));
@@ -335,6 +344,22 @@ impl SceneExtractor {
         }
         let scene_key = scene_key.finish();
         if self.scene_key != Some(scene_key) {
+            let atlas_key = (fingerprint.mesh, fingerprint.textures, samples_textures);
+            if self.surface_atlases_key != Some(atlas_key) {
+                self.surface_atlases = if samples_textures {
+                    project
+                        .assets
+                        .iter()
+                        .filter(|a| a.visible)
+                        .filter_map(|a| {
+                            crate::surface_materials::atlas(project, a).map(|canvas| (a.id, canvas))
+                        })
+                        .collect()
+                } else {
+                    HashMap::new()
+                };
+                self.surface_atlases_key = Some(atlas_key);
+            }
             self.rebuild_objects(project, &settings, samples_textures, pose, rigid_previews);
             self.scene_key = Some(scene_key);
             self.rebuilds += 1;
@@ -375,7 +400,10 @@ impl SceneExtractor {
             .iter()
             .filter(|asset| asset.visible)
             .filter_map(|asset| {
-                let canvas = object_canvas(project, samples_textures, asset)?;
+                let canvas = self
+                    .surface_atlases
+                    .get(&asset.id)
+                    .or_else(|| object_canvas(project, samples_textures, asset))?;
                 let dirty = texture_updates
                     .iter()
                     .find(|update| update.asset_id == asset.id)
@@ -395,9 +423,13 @@ impl SceneExtractor {
                     id: asset.id,
                     width: canvas.w,
                     height: canvas.h,
-                    revision: fingerprint.textures,
+                    revision: fingerprint.textures ^ fingerprint.mesh,
                     pixels: &canvas.pixels,
-                    dirty,
+                    dirty: if asset.surface_materials.is_empty() {
+                        dirty
+                    } else {
+                        None
+                    },
                 })
             })
             .collect();
@@ -470,8 +502,14 @@ impl SceneExtractor {
                     Some(base) => base,
                     None => {
                         let mesh = mesh_to_draw(pose, asset);
-                        let object =
-                            build_object(project, asset, &mesh, settings, samples_textures);
+                        let object = build_object(
+                            project,
+                            asset,
+                            &mesh,
+                            settings,
+                            samples_textures,
+                            self.surface_atlases.get(&asset.id),
+                        );
                         self.object_rebuilds += 1;
                         self.rigid_base
                             .entry(asset.id)
@@ -500,7 +538,14 @@ impl SceneExtractor {
                 }
                 _ => {
                     self.object_rebuilds += 1;
-                    build_object(project, asset, &mesh, settings, samples_textures)
+                    build_object(
+                        project,
+                        asset,
+                        &mesh,
+                        settings,
+                        samples_textures,
+                        self.surface_atlases.get(&asset.id),
+                    )
                 }
             };
             let mut object = object;
@@ -530,7 +575,7 @@ impl SceneExtractor {
                 }
                 _ => {
                     self.object_rebuilds += 1;
-                    build_object(project, &asset, mesh, settings, samples_textures)
+                    build_object(project, &asset, mesh, settings, samples_textures, None)
                 }
             };
             self.cache.insert(
@@ -843,6 +888,30 @@ fn surface_key(
         }
         h.f32(material.emission_strength);
     }
+    if !asset.surface_materials.is_empty() {
+        h.mix(project.texture_revision);
+    }
+    for surface in &asset.surface_materials {
+        for c in surface.base_color {
+            h.f32(c);
+        }
+        if let Some(id) = surface.material_id {
+            for byte in id.as_bytes() {
+                h.mix(u64::from(*byte));
+            }
+            if let Some(material) = project.get_material(id) {
+                h.mix(material.profile as u64);
+                for c in material
+                    .base_color
+                    .iter()
+                    .chain(material.emission_color.iter())
+                {
+                    h.f32(*c);
+                }
+                h.f32(material.emission_strength);
+            }
+        }
+    }
     h.mix(mesh.verts.len() as u64);
     h.mix(mesh.faces.len() as u64);
     for vertex in &mesh.verts {
@@ -1013,10 +1082,16 @@ fn build_object(
     mesh: &petunia_core::Mesh,
     settings: &ViewportRenderSettings,
     samples_textures: bool,
+    atlas: Option<&petunia_project::Canvas>,
 ) -> RenderObject {
     puffin::profile_function!();
     let render_mesh = if settings.shading == Shading::Wireframe {
         RenderMesh::default()
+    } else if !asset.surface_materials.is_empty() {
+        index_triangles(
+            crate::surface_materials::triangles(project, asset, mesh, atlas),
+            |color| color,
+        )
     } else {
         let (profile, material_color, emission) = match asset.material(project) {
             Some(material) => (
@@ -1064,7 +1139,9 @@ fn build_object(
         surface_revision: surface_key(project, asset, mesh, settings, samples_textures),
         edge_revision: edge_key(mesh, settings),
         mesh: render_mesh,
-        texture: object_canvas(project, samples_textures, asset).map(|_| asset.id),
+        texture: atlas
+            .or_else(|| object_canvas(project, samples_textures, asset))
+            .map(|_| asset.id),
         edges: build_edges(mesh, settings),
         transform: IDENTITY,
     }
