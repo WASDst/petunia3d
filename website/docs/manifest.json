@@ -267,6 +267,14 @@
         {
           "path": "09-ui/visual-language.md",
           "title": "Linguagem visual da vista e da GUI — proposta (B8)"
+        },
+        {
+          "path": "09-ui/shell-v2-polish-waves.md",
+          "title": "Acabamento da UI: comparação Slint × Qt e ondas D–F"
+        },
+        {
+          "path": "09-ui/shell-v2-manual-test-checklist.md",
+          "title": "Roteiro de teste manual do Shell v2"
         }
       ]
     },

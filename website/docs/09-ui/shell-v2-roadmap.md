@@ -69,6 +69,18 @@ Pedido do usuário de 2026-10-18, [refinamento do Shell v2](shell-v2-refinement.
 | C7  | Grupo especial **Referência**, sempre o primeiro da lista de Partes, com girar, mover no eixo da referência, escalar, ocultar e apagar (no painel de Partes só ocultar e apagar) | [x] DONE (código e testes) |
 | C8  | Modos das operações com vários elementos selecionados: extrudar a região (manifold), faces individuais, ao longo das normais; idem para inset/bevel, escolhidos no HUD da ferramenta | [x] DONE (código e testes) |
 
+## Ondas D–F — acabamento da interface (2026-10-19)
+
+Comparação entre a UI Slint (removida) e o shell Qt atual, com o item a item, em [acabamento da UI](shell-v2-polish-waves.md). O relato do usuário ("quão mal polida ainda está nossa UI") vira ondas com critério de aceite, não com adjetivo.
+
+| ID  | Onda                                                                              | Itens |
+|-----|-----------------------------------------------------------------------------------|-------|
+| D   | **Densidade, hierarquia e ancoragem** (a casca): barra superior em 3 zonas, painel direito aberto por padrão, cartão de contexto ancorado, trilho com rótulo e grupos, espaçamento por token, estados vazios com ação, textos de sistema traduzidos | D1–D7 |
+| E   | **Viewport legível e sem ruído**: grade sutil, gizmo com contraste, seleção só com a silhueta, acessórios agrupados e ocultados quando ocioso, HUD na linguagem da prévia | E1–E5 |
+| F   | **Consistência, estados e acessibilidade**: um seletor de cor só, torta com lista equivalente, foco visível e ordem previsível, alto contraste e 150%/200%, movimento reduzido, leitor de tela, recusas em linguagem de usuário | F1–F7 |
+
+**Roteiro de aceite**: [roteiro de teste manual](shell-v2-manual-test-checklist.md) — o que só a pessoa no app real pode conferir.
+
 ## Gap
 
 - Hoje `DeleteAssetCmd` não limpa grupos vazios; o grupo só guarda nome (`Project.collections: Vec<String>`).
@@ -244,4 +256,4 @@ Onda C, parte 5 — C6 (galeria de assets) e C5 (Animate), 2026-10-19.
 
 ## Next
 
-Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados, grade, e — da Onda C parte 1 — os painéis de camada/efeitos/gradiente, a prateleira de pincéis e o wireframe nas bordas. A Onda C já tem C1–C3 e C8; depois dela vêm C4 (nós), C5 (que consome o registro animável), C6 (galeria de assets) e C7 (grupo Referência).
+Conferência do usuário no app real: seleção no Raio-X e no Sólido, gizmo do Selecionar, painel denso, Paint compacto, orientação, diálogos no Wayland, tortas, cadeados, grade, e — da Onda C parte 1 — os painéis de camada/efeitos/gradiente, a prateleira de pincéis e o wireframe nas bordas. A Onda C fechou C1–C4, C7 e C8; C5 (Animate) e C6 (galeria) ficaram parciais, com o restante explicitado. O próximo bloco é o **acabamento da interface (ondas D–F)**, que é o que o relato de 2026-10-19 pide: a interface está correta, mas crua.

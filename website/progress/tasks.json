@@ -5566,6 +5566,153 @@
         "09-ui/shell-v2-refinement.md",
         "09-ui/shell-v2-proposal.md"
       ]
+    },
+    {
+      "id": "U34",
+      "phase": "slint-gl",
+      "title": "Shell v2 — Onda D (densidade, hierarquia e ancoragem)",
+      "description": "Barra superior em 3 zonas com pesos distintos, menus reduzidos, painel direito aberto por padrão em tela grande, cartão de contexto ancorado, trilho com rótulo e agrupamento, espaçamento e tipografia por token, estados vazios com ação, textos de sistema traduzidos.",
+      "document": "09-ui/shell-v2-polish-waves.md",
+      "status": "TODO",
+      "updated": "2026-10-19",
+      "baseline": "Relato do usuário em 2026-10-19: a interface está correta, mas crua. Comparação Slint (removida) x Qt (atual) em 09-ui/shell-v2-polish-waves.md.",
+      "checkpoints": [
+        {
+          "title": "D1 Barra superior em três zonas e menus reduzidos de 8 para 5.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "D2 Painel direito aberto por padrão acima de 1440 px, com botão explícito.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "D3 Cartão de contexto ancorado à seleção, não flutuando no rodapé.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "D4 Trilho com rótulo no hover, agrupamento por papel e marcador da ferramenta ativa.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "D5 Espaçamento, altura de campo e tipografia 100% por token.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "D6 Estados vazios com ação em Partes, Propriedades, Operações e Material.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "D7 Textos de sistema (dicas longas) traduzidos, não hardcoded em inglês.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-polish-waves.md",
+        "09-ui/shell-v2-roadmap.md",
+        "09-ui/visual-language.md",
+        "09-ui/shell-v2-manual-test-checklist.md"
+      ]
+    },
+    {
+      "id": "U35",
+      "phase": "slint-gl",
+      "title": "Shell v2 — Onda E (viewport legível e sem ruído)",
+      "description": "Grade mais sutil por padrão, gizmo com contraste e caixa de arraste, seleção só com a silhueta e face com tinta leve, acessórios da viewport agrupados/translúcidos e ocultados quando ocioso, HUD na linguagem do quadro de prévia.",
+      "document": "09-ui/shell-v2-polish-waves.md",
+      "status": "TODO",
+      "updated": "2026-10-19",
+      "baseline": "Relato do usuário em 2026-10-19: a interface está correta, mas crua. Comparação Slint (removida) x Qt (atual) em 09-ui/shell-v2-polish-waves.md.",
+      "checkpoints": [
+        {
+          "title": "E1 Grade mais sutil por padrão e visível só quando a câmera se move.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "E2 Gizmo: contraste do anel, tamanho e caixa de arraste coerentes.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "E3 Seleção sem arestas internas e face com tinta leve.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "E4 Acessórios da viewport agrupados, translúcidos e ocultados quando ocioso.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "E5 HUD da operação na linguagem do quadro de prévia.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-polish-waves.md",
+        "09-ui/shell-v2-roadmap.md",
+        "09-ui/visual-language.md"
+      ]
+    },
+    {
+      "id": "U36",
+      "phase": "slint-gl",
+      "title": "Shell v2 — Onda F (consistência, estados e acessibilidade)",
+      "description": "Um seletor de cor só em todo o app, torta com lista equivalente em menu comum, foco visível e ordem previsível, alto contraste e 150%/200% sem exceção, movimento reduzido em tudo, leitor de tela nos controles novos, recusas em linguagem de usuário.",
+      "document": "09-ui/shell-v2-polish-waves.md",
+      "status": "TODO",
+      "updated": "2026-10-19",
+      "baseline": "Relato do usuário em 2026-10-19: a interface está correta, mas crua. Comparação Slint (removida) x Qt (atual) em 09-ui/shell-v2-polish-waves.md.",
+      "checkpoints": [
+        {
+          "title": "F1 Um seletor de cor só em todo o app.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "F2 Toda torta tem a lista equivalente em menu comum.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "F3 Foco visível e ordem de foco previsível em todos os painéis novos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "F4 Alto contraste e 150%/200% sem exceção.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "F5 Movimento reduzido respeitado em toda animação nova.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "F6 Leitor de tela: nome, estado e motivo nos controles novos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "F7 Recusas explicadas em linguagem de usuário, com o próximo passo.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-polish-waves.md",
+        "09-ui/shell-v2-roadmap.md",
+        "09-ui/visual-language.md"
+      ]
     }
   ]
 }
