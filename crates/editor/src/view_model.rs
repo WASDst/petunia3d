@@ -18,6 +18,27 @@ pub struct SceneItemModel {
     pub tris: usize,
     pub has_custom_color: bool,
     pub custom_color_rgb: [u8; 3],
+    /// Grupo da Estrutura a que o objeto pertence (vazio = fora de grupos).
+    pub collection: String,
+}
+
+/// Grupo (collection) da Estrutura, com o resumo dos objetos que contém.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneGroupModel {
+    pub name: String,
+    pub count: usize,
+    /// Todos os objetos do grupo estão visíveis.
+    pub visible: bool,
+    /// Todos os objetos do grupo estão bloqueados.
+    pub locked: bool,
+    /// Todos os objetos do grupo estão selecionados.
+    pub selected: bool,
+    /// O grupo define uma cor de seleção própria.
+    pub has_color: bool,
+    /// Cor de seleção do grupo (a global quando `has_color` é falso).
+    pub color_rgb: [u8; 3],
+    /// A cor do grupo vence a cor própria de cada objeto.
+    pub force_color: bool,
 }
 
 /// Prefab da biblioteca já resumido para a grade do Asset Library.
@@ -269,6 +290,13 @@ pub struct ShellViewModel {
     pub paint_symmetry_z: bool,
     pub paint_target_vertex: bool,
     pub paint_mask_selection: bool,
+    /// Isolamento de pintura em raio-X (C2).
+    pub paint_isolate_ghost: bool,
+    /// Pedido de importação pendente: o contador muda a cada pedido e o host
+    /// (interface) abre o diálogo de arquivos.
+    pub import_request: u64,
+    /// Filtro sugerido para o pedido ("model", "obj", "gltf").
+    pub import_request_filter: String,
     /// Isolamento do objeto ativo ligado (esconde os demais).
     pub isolate_active: bool,
     pub status_message: String,
@@ -282,6 +310,7 @@ pub struct ShellViewModel {
     pub scale: [f32; 3],
     pub cursor_3d: [f32; 3],
     pub scene_items: Vec<SceneItemModel>,
+    pub scene_groups: Vec<SceneGroupModel>,
     pub parts_items: Vec<SceneItemModel>,
     pub parts_query: String,
     pub parts_selected_only: bool,
@@ -311,6 +340,9 @@ pub struct ShellViewModel {
     pub selection_rgb: [u8; 3],
     pub active_selection_rgb: [u8; 3],
     pub selection_thickness: f32,
+    pub gizmo_size: f32,
+    pub gizmo_thickness: f32,
+    pub nav_cube_opacity: f32,
     pub selection_color_hex: String,
     pub show_xray: bool,
     pub show_face_orientation: bool,
@@ -355,6 +387,8 @@ pub struct ShellViewModel {
     pub dimension_x: f32,
     pub dimension_y: f32,
     pub measure_visible: bool,
+    /// A ferramenta Medir tem um primeiro ponto marcado e espera o segundo.
+    pub measure_pending: bool,
     pub measure_commands: String,
     pub measure_text: String,
     pub measure_x: f32,
@@ -387,7 +421,6 @@ pub struct ShellViewModel {
     pub gizmo_center_hover: bool,
     pub asset_library_visible: bool,
     pub gizmo: GizmoModel,
-    pub selection_overlay: SelectionOverlayModel,
     pub add_menu_open: bool,
     pub inspector_width: f32,
     pub asset_library_height: f32,
@@ -410,10 +443,6 @@ pub struct ShellViewModel {
     /// Indicates if the item can be moved down in the hierarchy.
     /// Indica se o item pode ser movido para baixo na hierarquia.
     pub context_menu_can_move_down: bool,
-    pub boolean_operand_name: String,
-    pub boolean_ready: bool,
-    pub boolean_keep_parts: bool,
-    pub boolean_cleanup: bool,
     // Reference Image Manager (P3D-013)
     pub reference_manager_open: bool,
     pub reference_slots: Vec<ReferenceSlotViewModel>,
@@ -500,9 +529,6 @@ pub struct ShellViewModel {
     pub label_quick_action_reset: String,
     pub label_quick_action_done: String,
     pub label_action_subdivide: String,
-    pub label_action_fuse: String,
-    pub label_action_cut: String,
-    pub label_action_intersect: String,
     pub label_action_join: String,
     pub label_action_merge: String,
     pub label_action_slice: String,
@@ -670,6 +696,7 @@ pub struct ShellViewModel {
     pub themes: Vec<ThemeEntryModel>,
     pub uv_editor: UvEditorModel,
     pub paint_layers: Vec<PaintLayerModel>,
+    pub paint_active_layer: PaintActiveLayerModel,
     pub paint_layer_count: String,
     pub paint_effect_kind: String,
     pub paint_effect_params: Vec<PaintEffectParam>,
@@ -727,6 +754,10 @@ pub struct ShellViewModel {
     pub pivot_cursor_label: String,
     pub pivot_individual_label: String,
     pub edit_pivot: bool,
+    /// Motivo pelo qual a origem do objeto ativo não pode ser movida (vazio se pode).
+    pub origin_refusal: String,
+    /// Há vértice, aresta ou face selecionado no objeto ativo.
+    pub has_element_selection: bool,
     pub label_origin_to_geometry: String,
     pub label_origin_to_bottom: String,
     pub label_origin_to_cursor: String,
@@ -818,6 +849,10 @@ pub struct ShellViewModel {
     pub tool_modal_step: f32,
     pub tool_modal_min: f32,
     pub tool_modal_max: f32,
+    /// Modos da operação com vários elementos (C8), escolhidos no HUD.
+    pub tool_modal_modes: Vec<ToolModeModel>,
+    /// Modo atual da operação (C8).
+    pub tool_modal_mode: String,
     pub tool_options_active: bool,
     pub tool_options_title: String,
     pub tool_options_hint: String,
@@ -907,12 +942,38 @@ impl ShellViewModel {
                 selected: state.session.selection.assets.contains(&asset.id)
                     || active_id == Some(asset.id),
                 active: active_id == Some(asset.id),
-                verts: asset.mesh.verts.len(),
-                tris: asset.mesh.tri_count(),
+                verts: asset.source_mesh().verts.len(),
+                tris: asset.source_mesh().tri_count(),
                 has_custom_color: asset.selection_overlay_color.is_some(),
                 custom_color_rgb: asset
                     .selection_overlay_color
                     .unwrap_or(state.ui.selection_rgb),
+                collection: asset.collection.clone().unwrap_or_default(),
+            })
+            .collect();
+        let scene_groups: Vec<SceneGroupModel> = state
+            .project
+            .project
+            .collections
+            .iter()
+            .map(|name| {
+                let members: Vec<&SceneItemModel> = scene_items
+                    .iter()
+                    .filter(|item| &item.collection == name)
+                    .collect();
+                let meta = state.project.project.collection_meta.get(name);
+                SceneGroupModel {
+                    name: name.clone(),
+                    count: members.len(),
+                    visible: !members.is_empty() && members.iter().all(|item| item.visible),
+                    locked: !members.is_empty() && members.iter().all(|item| item.locked),
+                    selected: !members.is_empty() && members.iter().all(|item| item.selected),
+                    has_color: meta.is_some_and(|meta| meta.color.is_some()),
+                    color_rgb: meta
+                        .and_then(|meta| meta.color)
+                        .unwrap_or(state.ui.selection_rgb),
+                    force_color: meta.is_some_and(|meta| meta.force_color),
+                }
             })
             .collect();
 
@@ -921,8 +982,8 @@ impl ShellViewModel {
                 let title = active_asset.name.clone();
                 let mut details = format!(
                     "Vertices: {}  ·  Faces: {}",
-                    active_asset.mesh.verts.len(),
-                    active_asset.mesh.faces.len()
+                    active_asset.source_mesh().verts.len(),
+                    active_asset.source_mesh().faces.len()
                 );
                 // Segunda linha só com seleção real: o inspector mostra o
                 // que as operações vão atingir, como o Object Info do Blender.
@@ -1309,6 +1370,9 @@ impl ShellViewModel {
             paint_symmetry_z: state.session.tools.paint_symmetry_z,
             paint_target_vertex: false,
             paint_mask_selection: state.session.tools.paint_isolate_selection,
+            paint_isolate_ghost: state.session.paint_isolate_ghost,
+            import_request: state.session.import_request,
+            import_request_filter: state.session.import_request_filter.clone(),
             isolate_active: state.session.isolate_active,
             status_message,
             status_severity,
@@ -1318,6 +1382,7 @@ impl ShellViewModel {
             scale: [1.0, 1.0, 1.0],
             cursor_3d: state.session.cursor_3d,
             scene_items,
+            scene_groups,
             parts_items: Vec::new(),
             parts_query: String::new(),
             parts_selected_only: false,
@@ -1360,9 +1425,12 @@ impl ShellViewModel {
             active_selection_rgb: state
                 .project
                 .active()
-                .and_then(|a| a.effective_selection_overlay_color())
+                .and_then(|a| state.project.selection_color_of(a))
                 .unwrap_or(state.ui.selection_rgb),
             selection_thickness: state.ui.selection_thickness,
+            gizmo_size: state.ui.gizmo_size,
+            gizmo_thickness: state.ui.gizmo_thickness,
+            nav_cube_opacity: state.ui.nav_cube_opacity,
             selection_color_hex: format!(
                 "#{:02X}{:02X}{:02X}",
                 state.ui.selection_rgb[0], state.ui.selection_rgb[1], state.ui.selection_rgb[2]
@@ -1378,7 +1446,7 @@ impl ShellViewModel {
             proportional_radius: state.session.proportional_settings.radius,
             proportional_falloff: format!("{:?}", state.session.proportional_settings.falloff)
                 .to_lowercase(),
-            snap_enabled: state.session.snap_enabled,
+            snap_enabled: state.session.snap_settings.enabled,
             snap_target: format!("{:?}", state.session.snap_settings.target).to_lowercase(),
             shading_popover_open: false,
             operation_hud_active: false,
@@ -1418,6 +1486,7 @@ impl ShellViewModel {
             measure_angle_deg: 0.0,
             measure_hud_text: String::new(),
             measure_tags: Vec::new(),
+            measure_pending: false,
             micro_inspector_open: false,
             micro_inspector_x: 0.0,
             micro_inspector_y: 0.0,
@@ -1439,7 +1508,6 @@ impl ShellViewModel {
             gizmo_center_hover: false,
             asset_library_visible: false,
             gizmo: GizmoModel::default(),
-            selection_overlay: SelectionOverlayModel::default(),
             add_menu_open: false,
             inspector_width: state.ui.right_width,
             asset_library_height: state.ui.shell_asset_library_height,
@@ -1455,10 +1523,6 @@ impl ShellViewModel {
             context_menu_isolated: false,
             context_menu_can_move_up: false,
             context_menu_can_move_down: false,
-            boolean_operand_name: String::new(),
-            boolean_ready: false,
-            boolean_keep_parts: false,
-            boolean_cleanup: true,
             primitive_active,
             active_asset_is_parametric,
             primitive_kind,
@@ -1539,9 +1603,6 @@ impl ShellViewModel {
             label_quick_action_reset: String::new(),
             label_quick_action_done: String::new(),
             label_action_subdivide: String::new(),
-            label_action_fuse: String::new(),
-            label_action_cut: String::new(),
-            label_action_intersect: String::new(),
             label_action_join: String::new(),
             label_action_merge: String::new(),
             label_action_slice: String::new(),
@@ -1700,6 +1761,7 @@ impl ShellViewModel {
             themes: Vec::new(),
             uv_editor: UvEditorModel::default(),
             paint_layers: Vec::new(),
+            paint_active_layer: PaintActiveLayerModel::default(),
             paint_layer_count: String::new(),
             paint_effect_kind: String::new(),
             paint_effect_params: Vec::new(),
@@ -1756,6 +1818,19 @@ impl ShellViewModel {
             pivot_cursor_label: state.t_id(petunia_config::text_id::PIVOT_CURSOR),
             pivot_individual_label: state.t_id(petunia_config::text_id::PIVOT_INDIVIDUAL),
             edit_pivot: state.session.edit_pivot,
+            origin_refusal: state.project.active().map_or_else(
+                || "No active object".to_string(),
+                |asset| {
+                    petunia_core::origin_commands::origin_refusal(asset)
+                        .unwrap_or_default()
+                        .to_string()
+                },
+            ),
+            has_element_selection: state.project.active_mesh().is_some_and(|mesh| {
+                mesh.verts.iter().any(|vertex| vertex.selected)
+                    || mesh.faces.iter().any(|face| face.selected)
+                    || !mesh.selected_edges.is_empty()
+            }),
             label_origin_to_geometry: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_GEOMETRY),
             label_origin_to_bottom: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_BOTTOM),
             label_origin_to_cursor: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_CURSOR),
@@ -1847,6 +1922,8 @@ impl ShellViewModel {
             tool_modal_step: 0.1,
             tool_modal_min: 0.0,
             tool_modal_max: 0.0,
+            tool_modal_modes: Vec::new(),
+            tool_modal_mode: String::new(),
             tool_options_active: false,
             tool_options_title: String::new(),
             tool_options_hint: String::new(),
@@ -1985,6 +2062,22 @@ impl ShellViewModel {
     }
 }
 
+/// Teto de linhas de ilha publicadas: malhas hostis não inflam o snapshot.
+pub const UV_ISLAND_ROWS_MAX: usize = 512;
+
+/// Uma ilha UV na Estrutura: índice estável na ordem de `Mesh::uv_islands`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UvIslandRowModel {
+    pub index: usize,
+    pub face_count: usize,
+    /// Fração da área UV 0..1 ocupada pelo retângulo da ilha.
+    pub area: f32,
+    /// Todas as faces da ilha estão na seleção UV.
+    pub selected: bool,
+    /// Um ponto (u, v) dentro da ilha: o centroide de uma de suas faces.
+    pub center: [f32; 2],
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UvEditorModel {
     /// SVG-like Path commands for UV mesh wireframe / Comandos SVG-like para malha de arame UV
@@ -2003,30 +2096,9 @@ pub struct UvEditorModel {
     pub uv_selected_count: usize,
     /// `true` quando a malha tem mais faces do que o editor desenha.
     pub truncated: bool,
-}
-
-/// Feedback visual da seleção na viewport, projetado para `Path` do Slint.
-///
-/// O shell desenha a silhueta do objeto por cima da imagem do backend como
-/// complemento da camada de seleção 3D: sem isso o usuário clica e nada
-/// muda na tela. Como no Blender, ativo e selecionado são canais distintos:
-/// no máximo um ativo (amarelo) contra N selecionados (laranja).
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct SelectionOverlayModel {
-    pub visible: bool,
-    /// Arestas do contorno (caixa do objeto, arestas ou faces selecionadas).
-    pub outline_commands: String,
-    /// Silhueta do objeto ATIVO. Canal separado do selecionado para o
-    /// usuário saber qual objeto é referência das operações.
-    pub active_outline_commands: String,
-    /// Marcadores preenchidos dos vértices selecionados.
-    pub point_commands: String,
-    /// Elementos não selecionados do domínio atual, para o usuário ver o que
-    /// pode clicar. Sem isso a viewport mostra um sólido sem alvos visíveis.
-    pub unselected_outline_commands: String,
-    pub unselected_point_commands: String,
-    /// Cor semântica: seleção normal ou ativo em modo componente.
-    pub accent: bool,
+    /// Ilhas UV da malha ativa (lista da Estrutura no workspace UV), limitada
+    /// a `UV_ISLAND_ROWS_MAX` linhas.
+    pub islands: Vec<UvIslandRowModel>,
 }
 
 /// Parâmetro numérico de um efeito de camada, já com rótulo e faixa.
@@ -2050,12 +2122,69 @@ pub struct PaintLayerModel {
     pub active: bool,
     pub is_group: bool,
     pub kind_label: String,
-    /// `raster`, `group`, `decal` ou `effect` (ícone por tipo, não pelo nome).
+    /// `raster`, `group`, `decal`, `effect` ou `gradient` (ícone por tipo).
     pub kind: String,
+    /// A camada tem máscara (C1) — o painel mostra o indicador.
+    pub has_mask: bool,
+    /// Quantidade de efeitos de sub-camada (C1) — indicador do painel.
+    pub effect_count: i32,
     /// Índice de `LayerBlendMode` (Normal, Multiply, Add, Screen).
     pub blend: i32,
     /// Profundidade no grupo (recuo da linha).
     pub depth: i32,
+}
+
+/// Efeito de sub-camada publicado para o painel da camada ativa (C1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaintLayerEffectModel {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub enabled: bool,
+    pub opacity: f32,
+    pub has_mask: bool,
+    pub mask_enabled: bool,
+    pub mask_inverted: bool,
+    pub params: Vec<PaintEffectParam>,
+}
+
+/// Parada de gradiente publicada para edição (C3). `color` é `#RRGGBB`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaintGradientStopModel {
+    pub position: f32,
+    pub color: String,
+}
+
+/// Estado da camada ativa para o painel de propriedades do PAINT (C1/C3).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PaintActiveLayerModel {
+    pub id: String,
+    pub name: String,
+    /// `raster`, `decal`, `effect`, `gradient` ou `group`.
+    pub kind: String,
+    pub kind_label: String,
+    pub is_group: bool,
+    /// `content`, `layer` ou `effect` (a máscara de qual efeito).
+    pub paint_target: String,
+    pub paint_target_effect: String,
+    pub has_mask: bool,
+    pub mask_enabled: bool,
+    pub mask_inverted: bool,
+    pub effects: Vec<PaintLayerEffectModel>,
+    pub gradient_kind: String,
+    pub gradient_repeat: bool,
+    pub gradient_start: [f32; 2],
+    pub gradient_end: [f32; 2],
+    pub gradient_stops: Vec<PaintGradientStopModel>,
+}
+
+/// Modo de uma operação com vários elementos (C8), pronto para o HUD.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolModeModel {
+    /// Identificador estável (`region`, `individual`, `along_normals`).
+    pub id: String,
+    /// Rótulo traduzido.
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

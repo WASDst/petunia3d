@@ -21,7 +21,7 @@ Um agente deve **entender a decisão aprovada**, **inspecionar a implementação
 ## Regras que resolvem 90% dos erros
 
 - **Documento aprovado ≠ código já implementado.** Confirme chamadas reais, wiring, features, manifests e testes.
-- **Não invente stack.** Slint + OpenGL 3.3 são a direção aprovada; não expandir egui/WGPU por conveniência.
+- **Não invente stack.** No checkpoint `92c22caa` a migração aprovada usa `petunia_editor` + Qt Widgets e OpenGL 3.3. O resgate Slint é histórico; não restaurar frontends removidos nem confundir testes do núcleo com aceite visual.
 - **Não replique domínio na UI.** Tool → Intent/Command → Application → Geometry/Project/Paint/UV/Animation; renderer consome, não muta.
 - **Não faça big-bang rewrite.** Corrija menor delta testável, preserve projetos antigos.
 - **Não degrade acessibilidade para aumentar FPS.** Foco, teclado, labels, contraste, motion, escala e input alternativo são requisitos.

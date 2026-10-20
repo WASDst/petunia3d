@@ -122,7 +122,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Define diretamente o preset de visualização da câmera e notifica o estado.
     pub fn set_view_preset(&mut self, preset: petunia_core::ViewPreset) -> bool {
-        self.state.session.camera.set_preset(preset);
+        self.leave_planar_navigation_for_view_change();
+        if let Err(error) = self
+            .state
+            .dispatch(&petunia_core::command::SetViewPresetCmd(preset))
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_VIEW),
             &[("0", preset.title().to_string())],
@@ -133,6 +140,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Alterna a visualização para a vista oposta (ex: Front -> Back, Top -> Bottom).
     pub fn toggle_view_opposite(&mut self) -> bool {
+        self.leave_planar_navigation_for_view_change();
         use petunia_core::ViewPreset;
         let next = match self.state.session.camera.view_preset() {
             Some(ViewPreset::Front) => ViewPreset::Back,
@@ -142,6 +150,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(ViewPreset::Top) => ViewPreset::Bottom,
             Some(ViewPreset::Bottom) => ViewPreset::Top,
             _ => {
+                self.state.session.camera.planar_basis = None;
                 self.state.session.camera.yaw = (self.state.session.camera.yaw
                     + std::f32::consts::PI)
                     .rem_euclid(std::f32::consts::TAU);
@@ -150,6 +159,68 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         };
         self.set_view_preset(next)
+    }
+
+    /// Liga/desliga a grade da vista 3D (botão no cabeçalho da vista) — B6.
+    pub fn toggle_grid(&mut self) -> bool {
+        self.state.session.show_grid = !self.state.session.show_grid;
+        let enabled = self.state.session.show_grid;
+        self.state.render.mark_dirty();
+        self.state.mark_dirty();
+        self.state.set_status(if enabled {
+            "Grade visível"
+        } else {
+            "Grade oculta"
+        });
+        enabled
+    }
+
+    /// Liga/desliga um eixo do mundo (0 = X, 1 = Y, 2 = Z). Persiste na preferência.
+    pub fn toggle_world_axis(&mut self, axis: usize) -> bool {
+        let Some(visible) = self.state.session.grid_settings.axes.get(axis).copied() else {
+            return false;
+        };
+        let mut grid = self.preferences.viewport_grid;
+        if let Some(slot) = grid.axes.get_mut(axis) {
+            *slot = !visible;
+        }
+        self.apply_viewport_grid(grid)
+    }
+
+    /// Extensão (meia largura, m), lado do ladrilho (m) e opacidade da grade.
+    /// Valores fora da faixa são recusados com aviso, sem mudar nada.
+    pub fn set_viewport_grid(&mut self, size: f32, spacing: f32, opacity: f32) -> bool {
+        let in_range =
+            |value: f32, (lo, hi): (f32, f32)| value.is_finite() && (lo..=hi).contains(&value);
+        if !in_range(size, petunia_config::VIEWPORT_GRID_SIZE_RANGE)
+            || !in_range(spacing, petunia_config::VIEWPORT_GRID_SPACING_RANGE)
+            || !in_range(opacity, petunia_config::VIEWPORT_GRID_OPACITY_RANGE)
+        {
+            self.state
+                .set_status("Grade: valor fora da faixa (tamanho 1–1000 m, ladrilho 0,01–100 m, opacidade 5–100%)");
+            return false;
+        }
+        let mut grid = self.preferences.viewport_grid;
+        grid.size = size;
+        grid.spacing = spacing;
+        grid.opacity = opacity;
+        self.apply_viewport_grid(grid)
+    }
+
+    fn apply_viewport_grid(&mut self, grid: petunia_config::ViewportGridPreferences) -> bool {
+        let grid = grid.sanitized();
+        if grid == self.preferences.viewport_grid {
+            return false;
+        }
+        self.preferences.viewport_grid = grid;
+        let settings = &mut self.state.session.grid_settings;
+        settings.size = grid.size;
+        settings.spacing = grid.spacing;
+        settings.opacity = grid.opacity;
+        settings.axes = grid.axes;
+        self.state.render.mark_dirty();
+        self.state.mark_dirty();
+        true
     }
 
     pub fn toggle_face_orientation(&mut self) -> bool {
@@ -162,5 +233,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "Orientação de faces desativada"
         });
         enabled
+    }
+}
+
+impl<V: PetuniaViewport> SlintUiBridge<V> {
+    /// An explicit camera change enters free navigation, retaining the current
+    /// view and the construction plane. Align View re-enters planar navigation.
+    pub(crate) fn leave_planar_navigation_for_view_change(&mut self) {
+        if self.planar_navigation_active() {
+            self.state.session.draw_planar_navigation = false;
+            self.state.session.planar_saved_camera = None;
+        }
     }
 }

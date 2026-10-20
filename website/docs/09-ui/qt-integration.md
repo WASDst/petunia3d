@@ -160,8 +160,10 @@ Nenhum benchmark de performance ou aceite em hardware é inferido dessa decisão
 
 Executável nativo: `cargo run -p petunia_ui_cxxqt --bin petunia3d-qt`.
 `editor_parity` verifica comportamento do documento/histórico/pintura/arquivos e
-revisões. `qt_parity_acceptance` exercita a janela real, tabs, foco, doca, idioma,
-layout e captura screenshots. Usar XDG_CONFIG_HOME/XDG_DATA_HOME isolados e
+revisões. Desde U19 (2026-10-17) a janela real é o Shell v2: o harness offscreen
+`shell_v2` exercita regiões, foco F6, temas, densidade, largura estreita, layout,
+HUD, Operation Graph e captura screenshots; `qt_parity_acceptance` (shell legado)
+foi removido junto com `PetuniaMainWindow`. Usar XDG_CONFIG_HOME/XDG_DATA_HOME isolados e
 registrar plataforma, backend, comandos, resultados e limitações. Offscreen/CPU
 não certifica OpenGL físico, multimonitor, leitor de tela, stylus real ou Windows.
 Q06 só pode ser DONE quando todos os gates aplicáveis tiverem evidência.

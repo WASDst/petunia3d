@@ -35,6 +35,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(GrammarTool::Parametric(kind))
         };
         match self.state.session.tools.active_tool.as_str() {
+            "select" | "box_select" => Some(GrammarTool::Select),
             "move" | "transform" => Some(GrammarTool::Transform(TransformKind::Position)),
             "rotate" => Some(GrammarTool::Transform(TransformKind::Rotation)),
             "scale" => Some(GrammarTool::Transform(TransformKind::Scale)),
@@ -43,10 +44,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "bevel" => parametric(ToolModalKind::Bevel),
             "push_pull" => parametric(ToolModalKind::PushPull),
             "poly_pen" => Some(GrammarTool::PolyPen),
-            "shape_builder" if self.modeling_mode == ModelingMode::Draw => {
-                Some(GrammarTool::ShapeBuilder)
-            }
+            "shape_builder" => Some(GrammarTool::ShapeBuilder),
             "draw_profile" => Some(GrammarTool::DrawProfile),
+            "draw_rectangle" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Rectangle)),
+            "draw_circle" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Circle)),
+            "draw_ellipse" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Ellipse)),
+            "draw_polygon" => Some(GrammarTool::PlanarPrimitive(PlanarPrimitiveKind::Polygon)),
             "cut" => Some(GrammarTool::Knife),
             "loop_cut" => Some(GrammarTool::LoopCut),
             "slice" => Some(GrammarTool::Slice),

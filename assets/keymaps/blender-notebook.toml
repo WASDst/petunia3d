@@ -11,6 +11,9 @@ save_project = "Ctrl+S"
 cycle_mode = "Tab"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+make_face = "Shift+F"
+move = false
 box_select = "B"
 transform = "G"
 rotate = "R"

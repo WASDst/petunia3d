@@ -21,7 +21,7 @@ use crate::*;
 
 /// Revisões de prévia de ferramenta ficam num espaço próprio, para nunca
 /// coincidir com as revisões da pose do Animate no cache do renderer.
-const TOOL_PREVIEW_REVISION_BIT: u64 = 1 << 63;
+pub(crate) const TOOL_PREVIEW_REVISION_BIT: u64 = 1 << 63;
 
 /// A malha do documento ainda é a fonte da sessão (mesma topologia e posições)?
 /// Undo, Redo ou outra edição durante a ferramenta invalidam a prévia.
@@ -42,7 +42,7 @@ pub(crate) fn same_geometry(a: &petunia_core::Mesh, b: &petunia_core::Mesh) -> b
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Mostra `mesh` no lugar da malha ativa, só no viewport.
-    pub(crate) fn show_tool_preview(&mut self, mesh: petunia_core::Mesh) -> bool {
+    pub fn show_tool_preview(&mut self, mesh: petunia_core::Mesh) -> bool {
         let Some(id) = self.state.project.active().map(|asset| asset.id) else {
             return false;
         };
@@ -90,6 +90,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let preview = self.tool_preview.as_ref()?;
         let id = self.state.project.active()?.id;
         preview.mesh_for(id)
+    }
+
+    /// Feedback de modelagem da operação ativa ou prévia em andamento (H28 / MF-001–008).
+    pub fn current_modeling_feedback(&self) -> Option<petunia_core::OperationFeedback> {
+        self.state.current_modeling_feedback()
     }
 
     /// Prévia a desenhar neste frame: a da ferramenta vence a pose do Animate.

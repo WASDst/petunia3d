@@ -4,23 +4,22 @@
 
 ## Princípio
 
-**Decisão arquitetural aprovada não significa implementação concluída.** Cada feature avança pela cadeia: especificação → código → testes automáticos → validação manual/visual → evidência → aceita. Não declarar conformidade de Slint, GPU, acessibilidade ou export antes da execução correspondente.
+**Decisão arquitetural aprovada não significa implementação concluída.** Cada feature avança pela cadeia: especificação → código → testes automáticos → validação manual/visual → evidência → aceita. Não declarar conformidade de UI, GPU, acessibilidade ou export antes da execução correspondente.
 
-O velho programa de CI/documentação tinha baselines egui+wgpu. A autoridade nesta branch é **Slint + OpenGL 3.3** com egui preservado externamente como contingência, sem dual frontend de produção.
+Após a consolidação em 2026-10-15 (ADR-C11 e ADR-C12), a autoridade desta branch é **`petunia_editor` (controlador neutro) + Qt Widgets (`petunia_ui_cxxqt`) + OpenGL 3.3/glow/FBO**. A estratégia de garantia de qualidade adota as lições comprovadas de QA do Qt Creator IDE (testes holísticos do ponto de vista do usuário final, prevenção contínua de regressões e fuzzing), adaptadas para o ecossistema aberto e de baixo consumo de recursos do Petunia3D.
 
-## Matriz de testes
+## Pirâmide de testes e matriz de conformidade
 
-| Nível | Domínio | Evidência requerida |
-|---|---|---|
-| Unit pure | Geometry, UV, Camera math, Snap, Validation | determinismo, corner cases, input inválido |
-| Command/Transaction | Model, Paint, Animation, Assets | preview/commit/cancel, Undo/Redo, dirty/revisions |
-| Persistence | .petunia, recovery, assets | round-trip, migrations, atomic write, malformed data |
-| Interchange | glTF/GLB, OBJ, textures | conformance, import/export fixtures, warnings |
-| Security | Lua, MCP, paths, permissions | deny-by-default, stale ID, limits, rollback |
-| UI/Interactions | Slint components, workspaces, viewport | gestures remapeados, states, focus, keyboard |
-| Renderer | OpenGL viewport+Slint | native texture, resize/HiDPI, picking, state restoration |
-| Accessibility | shell + workspaces + overlays | screen reader audit, keyboard-only, high contrast, IME |
-| Performance | low-end Linux/Windows | frame times, GPU/CPU memory, idle scheduling, jobs |
+A bateria de testes do Petunia3D organiza-se em seis camadas complementares:
+
+| Camada | Nível / Domínio | Ferramenta / Execução | Evidência requerida |
+|---|---|---|---|
+| **L1** | **Unit pure** (Geometry, Mesh, Math, Snap) | `cargo test -p petunia_core --lib` | determinismo, corner cases, validação estrita, floats finitos |
+| **L2** | **E2E em memória / Transações** (Model, Paint, UV, Animate) | `petunia_editor::EditorController` (`editor_parity`) | fluxos completos, DTOs, Undo/Redo integral, sem flakiness de GUI |
+| **L3** | **Automação nativa de GUI** (Qt Widgets, dialogs, FFI) | `QTestLib` (`QT_QPA_PLATFORM=offscreen bridge_test`) | eventos de mouse/tecla em widgets, atalhos, sincronização FFI |
+| **L4** | **Fuzzing & Dados hostis** (Parsers, files, commands) | Sintético / Proptest / OSS-Fuzz pattern | ausência de pânico ("Never Crash"), erro gracioso em `Result::Err` |
+| **L5** | **Viewport & Shaders** (OpenGL 3.3 FBO rendering) | Offscreen framebuffer capture + Golden PNGs | conformidade visual, ausência de artefatos, render-on-demand |
+| **L6** | **Acessibilidade & Plataforma** (Teclado, F6, high-contrast) | `QAccessible` inspection + AT-SPI / Windows smoke | navegação F6/Tab, foco restaurado, screen reader tree, labels |
 
 Testes devem cobrir invariantes do domínio **antes** de snapshots cosméticos. Golden images são complemento, não garantia de usabilidade.
 
@@ -38,32 +37,41 @@ Testes devem cobrir invariantes do domínio **antes** de snapshots cosméticos. 
 
 Testes em CI Linux não substituem smoke manual em Windows e nem teste de mesa fraca.
 
-## Frontend Slint — gates específicos
+## Frontend Qt Widgets e petunia_editor — gates específicos
 
-O workflow **UI Slint** existente verifica formatação do crate, tokens, Clippy e testes de interface/gestos. Comandos úteis:
+Com a remoção do Slint e consolidação em `petunia_editor` e Qt Widgets (ADR-C11), os gates de interface combinam validação estrita de contrato Rust com automação nativa offscreen via `QTestLib`:
+## Controlador de editor — gate de CI atual
 
-- cargo fmt -p petunia_ui_slint -- --check
-- cargo run -p xtask -- ui-lint
-- cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
-- cargo test -p petunia_ui_slint --lib
-- cargo test -p petunia_ui_slint --features animation-workspace --lib --test animate_shell --test viewport_gestures --test model_shell --test uv_shell
+**2026-10-18:** com a retirada do Slint (ADR-C11/Q07), o workflow `ui-slint.yml` passou a falhar já no primeiro passo (`package petunia_ui_slint is not a member of the workspace`) sempre que um PR tocava `crates/core/**`. Ele foi substituído por `ui-editor.yml` (**UI Editor**), que cobre o controlador neutro `petunia_editor`, onde agora vivem intents, gestos, sessões e projeção de estado:
 
-Os nomes/flags devem acompanhar os manifests reais. O workflow atualmente cobre paths específicos e não constitui aprovação universal do workspace. Expandir gates gradualmente após modularizar para evitar bloqueios de memória mascararem problemas.
+- cargo fmt -p petunia_editor -- --check
+- cargo clippy -p petunia_editor --features animation-workspace --all-targets -- -D warnings
+- cargo test -p petunia_editor --lib
+- cargo test -p petunia_editor --features animation-workspace --lib
 
-**Checkpoint Q03 — 2026-10-09:** a extração MODEL adiciona `model_shell` e `uv_shell` ao comando de integração da CI Slint e inclui `refactor/architecture-foundation` no trigger de push. Evidência local e limites em [Slint Rescue — checkpoint MODEL](../09-ui/slint-rescue-plan.md#checkpoint-model-2026-10-09). YAML atualizado não equivale a execução de Actions: CI remota permanece `not run` até haver run/SHA. Cobertura ampla Core/Geometry/Project/security/GL/Windows e pinagem/toolchain permanecem checkpoints distintos.
+O adaptador `petunia_ui_cxxqt` exige Qt 6 no runner e não faz parte deste job; seus gates (`bridge_test`, `editor_parity`, `qt_parity_acceptance`) continuam locais, conforme [integração Qt](../09-ui/qt-integration.md). YAML atualizado não equivale a execução: o status remoto vale a partir do primeiro run com SHA.
 
-### Slint Rescue Go/No-Go
+## Frontend Slint — gates específicos (histórico)
 
-Ver [Slint Reassessment](../09-ui/slint-reassessment.md). Não dar Go final enquanto faltarem:
-- FBO/GL Texture compositado sem readback por frame;
-- resize/HiDPI/picking e contexto único corretos;
-- Split2 ativo/passivo sem budget regressivo;
-- critical authoring flow funcional;
-- teclado/F6/focus recovery/IME e screen reader tree;
-- UI Scale 100–200%, High Contrast, Reduced Motion e hit targets adequados;
-- perf low-end e Windows/Linux smoke.
+Registro anterior à retirada do Slint; os comandos abaixo não se aplicam mais ao workspace. O workflow **UI Slint** verificava formatação do crate, tokens, Clippy e testes de interface/gestos:
 
-Falha isolada de CSS visual ou código ainda monolítico não determina automaticamente No-Go; bloqueador estrutural comprovado após rescue sim.
+Comandos canônicos de gate:
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_editor --all-targets -- -D warnings`
+- `CARGO_BUILD_JOBS=2 cargo test -p petunia_core --lib`
+- `CARGO_BUILD_JOBS=2 cargo test -p petunia_editor --features animation-workspace --lib`
+- `CARGO_BUILD_JOBS=2 QT_QPA_PLATFORM=offscreen cargo test -p petunia_ui_cxxqt --test bridge_test -- --test-threads=1 --skip test_widgets_studio_window_creation`
+- `CARGO_BUILD_JOBS=2 QT_QPA_PLATFORM=offscreen cargo test -p petunia_ui_cxxqt --test editor_parity -- --test-threads=1`
+
+### Critérios de aceitação Qt Widgets (Go/No-Go)
+
+Não dar Go final da GUI enquanto faltarem evidências executadas de:
+- FBO/GL Texture compositado e redimensionamento correto no `QtGLWidget` (`QOpenGLWidget`);
+- Picking determinístico sem leituras redundantes de framebuffer;
+- Todos os fluxos de autoria essenciais (MODEL, DRAW, POLY, PAINT, UV, ANIMATE) cobertos por paridade E2E;
+- Navegação completa por teclado, ciclo de foco `F6`/`Tab`, recuperação de foco pós-diálogos e árvore `QAccessible`;
+- Escala de UI 100–200%, High Contrast, Reduced Motion e alvos de clique adequados;
+- Performance medida em hardware de baixo desempenho em Linux e Windows sem regressões de frame time.
 
 ## Gesto e keymaps
 

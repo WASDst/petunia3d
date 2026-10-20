@@ -1,0 +1,8 @@
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda3       238G  147G   91G  62% /mnt/sda3
+
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi        12Gi       938Mi       193Mi        17Gi        17Gi
+Swap:          4.0Gi       4.0Gi       4.1Mi
+
+agent targets: []

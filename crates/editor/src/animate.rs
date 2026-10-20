@@ -33,9 +33,7 @@ use petunia_project::{
     PoseOverride, RootMode,
 };
 
-use crate::{
-    project_preview_segment, project_world_point, PetuniaViewport, SlintUiBridge,
-};
+use crate::{PetuniaViewport, SlintUiBridge, project_preview_segment, project_world_point};
 
 /// Fração máxima de um passo de tempo (evita salto após travada da UI).
 const MAX_TICK_SECONDS: f32 = 0.1;
@@ -758,7 +756,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .join(", ")
         });
 
-        let fps = 24.0;
+        let fps = self.state.session.animate.timeline_frame_rate();
         let duration = cycle.unwrap_or(2.0).max(0.1);
         let current_frame = (session.time * fps).round() as i32;
         let total_frames = (duration * fps).round() as i32;
@@ -768,12 +766,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         );
         let can_keyframe = session.skeleton.is_some() && session.selected_bone.is_some();
 
-        let active_asset = session.skeleton.and_then(|skel_id| {
-            session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skel_id))
-        });
+        let active_asset = session.resolved_clip(project).ok().flatten();
 
         let mut has_keyframe_at_playhead = false;
         let mut current_interp = 1;
@@ -1303,7 +1296,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 Ok(())
             }
             A::StepFrame(delta) => {
-                let fps = 24.0;
+                let fps = self.state.session.animate.timeline_frame_rate();
                 let dt = (delta as f32) / fps;
                 let new_time = (self.state.session.animate.time + dt).max(0.0);
                 self.state.animate_seek(new_time);

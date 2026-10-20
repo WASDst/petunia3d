@@ -23,6 +23,28 @@ Não criaremos múltiplas hierarquias de command antecipadamente. Contextos meno
 
 `ProjectChanges` deve ser reutilizado sempre que possível para comunicar invalidações e mudanças do documento.
 
+### Retorno consolidado pós-commit (CommandExecutionReport)
+
+A fronteira de despacho única (`CommandDispatcher::run_detailed`, `dispatch_detailed`, `execute_detailed`, `Application::execute_command_detailed`, `ApplicationState::dispatch_detailed`) devolve um relatório transacional pós-commit:
+
+```rust
+pub struct CommandExecutionReport {
+    pub label: &'static str,
+    pub changes: ProjectChanges,
+    pub effects: CommandEffects,
+    pub undo_depth: usize,
+    pub redo_depth: usize,
+    pub revision: u64,
+}
+```
+
+Propriedades do contrato:
+- **Invalidações (`changes`):** `ProjectChanges` reporta as áreas afetadas pelo comando (`GEOMETRY`, `SELECTION`, `UVS`, etc.). Comandos de seleção emitem explicitamente `ProjectChanges::SELECTION`.
+- **Efeitos colaterais (`effects`):** `CommandEffects` consolida mensagens de status, requisições de redraw, dirty flag do documento e a lista acumulada de diagnósticos (`Vec<String>`) adicionados via `ctx.add_diagnostic(...)`.
+- **Histórico e revisão:** expõe as profundidades ativas de Undo e Redo e o `revision_id` corrente do documento após o commit.
+- **Envelope de segurança (Never Crash):** comandos em execução são isolados via `std::panic::catch_unwind`. Pânicos inesperados restauram o documento e a seleção para o estado pré-comando sem registrar entrada no Undo e retornam erro legível para a UI.
+
+
 ## Eventos
 
 A fila simples atual será preservada.
@@ -102,3 +124,16 @@ Construtores da Application não devem:
 - iniciar file watchers.
 
 Essas operações pertencem ao bootstrap/host e são injetadas explicitamente.
+
+## Matriz de implementação e conformidade (A02)
+
+| Requisito / Invariante                                     | Status    | Evidência / Implementação em Código                                                               |
+|------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------|
+| Pureza dos construtores (zero I/O, zero env, zero locks)   | [x] DONE  | `Application::new` e `from_state` são puros; relógio e storage injetados via parâmetros.          |
+| Injeção determinística de relógio (Clock abstraction)      | [x] DONE  | Trait `Clock` com `FixedClock` e `SystemClock`; ticks de autosave e timestamps reproduzíveis.    |
+| Separação Autosave: política vs infraestrutura             | [x] DONE  | `AutosavePolicy`/`Application` decide quando; trait `AutosaveStorage` decide onde/como salvar.    |
+| DesktopHost & Gestão de Session Lock                       | [x] DONE  | `DesktopHost::acquire_session_lock` com RAII `SessionLockGuard` prevenindo conflitos concorrentes.|
+| Aposentadoria de ModuleRegistry para domínios nativos      | [x] DONE  | `process_domain_event` coordena Model, Paint, UV e Assets nativamente sem acoplamento dinâmico.  |
+| Isolamento transacional de comandos (Never Crash)          | [x] DONE  | Comandos isolados com integridade de documento, profundidade de Undo e revisão garantidas.        |
+| Configurações de plataforma isoladas no DesktopHost        | [x] DONE  | `DesktopHost::apply_preferences` isola i18n, contraste, espessura e perfis de atalhos.          |
+

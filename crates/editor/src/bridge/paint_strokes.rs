@@ -42,21 +42,23 @@ impl PaintPointerActions {
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Inicia um traço de pintura ou manipulação de decalque contínuo.
     pub fn begin_paint_stroke_at(&mut self, x: f32, y: f32) -> bool {
-        self.begin_paint_stroke_with_modifiers(x, y, false, false)
+        self.begin_paint_stroke_with_modifiers(x, y, false, false, false)
     }
 
-    /// Inicia um traço de pintura ou manipulação interativa de decalque com modificadores (Shift: escala, Ctrl: rotação).
-    /// Adaptador de teclas físicas (testes, entradas legadas): resolve as
-    /// ações pelo keymap `[pointer]` — nenhuma tecla tem significado fixo.
+    /// Inicia um traço de pintura ou manipulação interativa de decalque.
+    /// Adaptador de teclas físicas: resolve as ações (reta, origem do Clone,
+    /// escala/giro do decalque) pelo keymap `[pointer]` — nenhuma tecla tem
+    /// significado fixo, e Alt também pode ser vinculado (U05).
     pub fn begin_paint_stroke_with_modifiers(
         &mut self,
         x: f32,
         y: f32,
         is_shift: bool,
         is_ctrl: bool,
+        is_alt: bool,
     ) -> bool {
         let actions =
-            PaintPointerActions::resolve(&self.state.ui.keybinds, is_shift, is_ctrl, false);
+            PaintPointerActions::resolve(&self.state.ui.keybinds, is_shift, is_ctrl, is_alt);
         self.begin_paint_stroke_actions(x, y, actions)
     }
 
@@ -134,7 +136,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         if self.state.session.tools.active_tool == "picker" {
-            return self.pick_paint_color_at(x, y);
+            let res = self.pick_paint_color_at(x, y);
+            self.state.finish_picker_sampling();
+            return res;
         }
         if self.state.session.tools.active_tool == "clone"
             && (actions.clone_source || self.state.session.tools.clone_source.is_none())
@@ -315,7 +319,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.paint_stroke_to_with_modifiers(x, y, false, false)
     }
 
-    /// Estende o traço de pintura ou manipulação de decalque com suporte a modificadores.
+    /// Estende o traço de pintura ou o arrasto de decalque. O modo do arrasto
+    /// (mover/escalar/girar) é fixado no início; as teclas aqui não o mudam.
     pub fn paint_stroke_to_with_modifiers(
         &mut self,
         x: f32,

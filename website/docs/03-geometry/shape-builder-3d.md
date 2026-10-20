@@ -585,3 +585,11 @@ O diferencial deve vir da interação e previsibilidade, não do acúmulo de sub
 9. Picking pode percorrer múltiplos hits para regiões internas, com cycling e X-Ray Regions.
 10. Hover/drag executam somente picking; booleans pesados acontecem na preparação ou commit.
 11. Shape Builder usa budget interno e falha explicitamente sem remesh automático.
+
+## Evolução avançada aprovada e execução — 2026-10-15
+
+O usuário aprovou **as três frentes**: composição reeditável, múltiplos operandos em uma sessão e construção sobre superfícies. A V1 de dois operandos acima permanece fundação preservada; não é descartada nem declarada suficiente para encerrar o escopo avançado. Sequência, referências e limites: [contrato contextual](../02-application/contextual-editor-contract.md#drawpoly-e-shapebuilder-avancado), tarefas H24–H27 na [matriz complementar](../02-application/tools-interaction-implementation.md).
+
+Primeiro checkpoint geométrico: `petunia_mesh::boolean::{BooleanSolid, PreparedBooleanOperands, BooleanPartition}` distingue resultado vazio de falha, prepara operandos uma vez e decompõe A-only/overlap/B-only. `connected_regions` separa componentes por arestas, preserva corners e não solda contato apenas por vértice. A API histórica `boolean_meshes` mantém seu contrato concreto para callers existentes; a API de sólidos trata `Empty` como sucesso.
+
+Isso **não fecha H25**: ainda faltam sessão de ferramenta, RegionPlan/Unite/Remove/Extract, integração de picking, revisão/cancel, broad-phase e proveniência de UV/material por face na publicação final. O cleanup booleano histórico pode gerar atlas global; ele não comprova o contrato novo de proveniência. H26/H27 continuam TODO até receita persistente, múltiplos sólidos e superfícies terem implementação e gates próprios.

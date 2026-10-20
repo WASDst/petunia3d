@@ -480,7 +480,7 @@ impl Command for UvPinCmd {
 /// Atribui o material `material_index` (índice em `Project::materials`) ao
 /// objeto ativo e, quando houver faces alvo, grava o slot nelas.
 /// `faces = None`: faces selecionadas.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AssignMaterialSlotCmd {
     pub material_index: usize,
     pub faces: Option<Vec<usize>>,
@@ -524,10 +524,36 @@ impl Command for AssignMaterialSlotCmd {
             return Err(CommandError::StaleReference(format!("face {bad}")));
         }
         asset.material_id = Some(material_id);
-        if !faces.is_empty() {
-            let mesh = &mut *asset.mesh;
-            for &f in &faces {
-                mesh.faces[f].material_slot = Some(self.material_index);
+        let slot = if asset.surface_materials.is_empty() {
+            self.material_index
+        } else if faces.is_empty() {
+            asset.surface_materials.clear();
+            for face in &mut asset.mesh.faces {
+                face.material_slot = None;
+            }
+            self.material_index
+        } else {
+            let binding = petunia_project::SurfaceMaterial {
+                material_id: Some(material_id),
+                base_color: asset.base_color,
+                texture: None,
+            };
+            if let Some(slot) = asset
+                .surface_materials
+                .iter()
+                .position(|existing| *existing == binding)
+            {
+                slot
+            } else if asset.surface_materials.len() < 256 {
+                asset.surface_materials.push(binding);
+                asset.surface_materials.len() - 1
+            } else {
+                return Err(CommandError::Execution("Too many surface materials".into()));
+            }
+        };
+        for &face in &faces {
+            if let Some(face) = asset.mesh.faces.get_mut(face) {
+                face.material_slot = Some(slot);
             }
         }
         state.set_status(if faces.is_empty() {
@@ -573,6 +599,31 @@ impl Command for NudgeCmd {
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let edit = state.editor.edit_mode() == crate::EditMode::Edit;
+        // Objeto: eixos de posição travados (B7) não andam; se nada sobrar, recusa
+        // dizendo qual trava impediu (a tecla não "some" em silêncio).
+        let mut delta = self.delta;
+        if !edit && let Some(asset) = state.document.active() {
+            let locks = asset.transform_locks;
+            let mut blocked = None;
+            for (axis, component) in delta.iter_mut().enumerate() {
+                if locks.is_locked(petunia_project::TransformChannel::Position, axis)
+                    && component.abs() > f32::EPSILON
+                {
+                    *component = 0.0;
+                    blocked.get_or_insert(axis);
+                }
+            }
+            if let Some(axis) = blocked
+                && delta
+                    .iter()
+                    .all(|component| component.abs() <= f32::EPSILON)
+            {
+                return Err(CommandError::Execution(format!(
+                    "Posição {} está travada",
+                    petunia_project::transform_locks::axis_label(axis)
+                )));
+            }
+        }
         let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
@@ -580,15 +631,15 @@ impl Command for NudgeCmd {
             if !mesh.verts.iter().any(|v| v.selected) {
                 return Err(CommandError::EmptySelection);
             }
-            mesh.translate_selected(self.delta);
+            mesh.translate_selected(delta);
         } else {
             for v in &mut mesh.verts {
-                for (axis, d) in v.pos.iter_mut().zip(self.delta) {
+                for (axis, d) in v.pos.iter_mut().zip(delta) {
                     *axis += d;
                 }
             }
         }
-        let [dx, dy, dz] = self.delta;
+        let [dx, dy, dz] = delta;
         state.set_status(format!("Nudge {dx:+.2}, {dy:+.2}, {dz:+.2}"));
         Ok(())
     }

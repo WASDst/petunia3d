@@ -452,3 +452,9 @@ O objetivo não é competir com um DCC tradicional em quantidade de editores exp
 ## Checkpoint de apresentação U02/U03 — 2026-10-09
 
 O drawer recebe transporte/playhead procedural e Motion Stack usando as ações existentes. Creature/Motion picker ficam em Structure, parâmetros em Properties. Timeline completa de keyframes, curves, blending e expansão procedural permanecem pendentes. **Código escrito, não compilado/testado:** bateria e aceite nativo adiados pelo usuário. Registro e limites: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).
+
+## Integridade de autoria e atalhos — 2026-10-15
+
+Autoria resolve um clipe explícito válido para o skeleton. Ausência de escolha aceita apenas zero/um clipe; múltiplos clipes exigem seleção, e ID obsoleto/estrangeiro não cai em outro clipe. Insert/Delete/Interpolation/Clear operam somente nesse alvo. Exclusão resolve um único tempo de chave; não remove uma janela de quadros. Inserção sem draft amostra a pose efetivamente avaliada; composição por layers exige política explícita de autoria/bake, devolvendo erro sem perder o draft.
+
+O contexto Animate resolve Space (play/pause), Left/Right (passo), I (inserção), Delete (chave) e Home (início), com remapeamento. Delete não cai em exclusão de geometria. A sessão expõe taxa de timeline validada, default preservado de 24 fps, para projeção e passo; tempo autoral permanece em segundos. Gates e limites em [H01–H03/H14](../02-application/tools-interaction-implementation.md); acesso nativo Qt e foco físico continuam pendentes.

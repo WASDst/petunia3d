@@ -229,52 +229,52 @@ pub fn profile_capture_face(state: &mut AppState) -> bool {
 /// Captura o frame 2D da face `face` da malha ativa (face sob o cursor no
 /// modo automático). Não move a câmera. `false` se a face não existe ou é
 /// degenerada; o frame anterior é mantido.
-pub fn profile_capture_face_index(state: &mut AppState, face: usize) -> bool {
-    let Some(mesh) = state.project.active_mesh() else {
+pub fn profile_capture_face_index(state: &mut AppState, face_index: usize) -> bool {
+    let Some(asset) = state.project.active() else {
         return false;
     };
-    let Some(face) = mesh.faces.get(face) else {
+    let mesh = asset.source_mesh();
+    let Some(face) = mesh.faces.get(face_index) else {
         return false;
     };
-    if face.verts.len() < 3 || face.verts.iter().any(|&v| v as usize >= mesh.verts.len()) {
+    let Some(points) = face
+        .verts
+        .iter()
+        .map(|i| {
+            mesh.verts
+                .get(*i as usize)
+                .map(|v| asset.to_world_point(v.vec()))
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
         return false;
-    }
-    let p0 = mesh.verts[face.verts[0] as usize].vec();
-    let p1 = mesh.verts[face.verts[1] as usize].vec();
-    let p2 = mesh.verts[face.verts[2] as usize].vec();
-    let mut center = glam::Vec3::ZERO;
-    for &idx in &face.verts {
-        center += mesh.verts[idx as usize].vec();
-    }
-    center /= face.verts.len() as f32;
-
-    let normal = (p1 - p0).cross(p2 - p0).normalize_or_zero();
-    if normal.length_squared() < 1e-4 {
-        return false;
-    }
-
-    let right = (p1 - p0).normalize_or_zero();
-    let right = if right.length_squared() < 1e-4 || right.abs_diff_eq(normal, 0.1) {
-        if normal.y.abs() < 0.9 {
-            glam::Vec3::Y.cross(normal).normalize_or_zero()
-        } else {
-            glam::Vec3::X.cross(normal).normalize_or_zero()
-        }
-    } else {
-        right
     };
-    let up = normal.cross(right).normalize_or_zero();
+    let [p0, p1, p2, ..] = points.as_slice() else {
+        return false;
+    };
+    let center = points.iter().copied().sum::<glam::Vec3>() / points.len() as f32;
+    let normal = (*p1 - *p0).cross(*p2 - *p0).normalize_or_zero();
+    let Ok(plane) = petunia_core::ProfileWorkplane::from_face_and_edge(
+        center.as_dvec3().to_array(),
+        normal.as_dvec3().to_array(),
+        (*p1 - *p0).as_dvec3().to_array(),
+    ) else {
+        return false;
+    };
+    assign_profile_plane(state, plane);
+    true
+}
 
-    state.profile.right = right.to_array();
-    state.profile.up = up.to_array();
-    state.profile.normal = normal.to_array();
-    state.profile.origin = center.to_array();
+fn assign_profile_plane(state: &mut AppState, plane: petunia_core::ProfileWorkplane) {
+    state.profile.origin = plane.origin.map(|v| v as f32);
+    state.profile.right = plane.right.map(|v| v as f32);
+    state.profile.up = plane.up.map(|v| v as f32);
+    state.profile.normal = plane.normal.map(|v| v as f32);
     state.profile.workplane_kind = WorkplaneKind::Face;
     state.profile.points.clear();
     state.profile.nodes.clear();
     state.profile.closed = false;
     state.mark_dirty();
-    true
 }
 
 /// Abaixo desta inclinação da câmera (graus), o chão fica "de lado" demais
@@ -776,21 +776,22 @@ pub fn profile_capture_three_points(
 /// - Se houver 3 vértices selecionados: define o plano passando por esses 3 pontos.
 /// - Se houver 1 face selecionada: captura o plano da face (com alinhamento pela aresta selecionada, se houver).
 pub fn profile_capture_from_selection(state: &mut AppState) -> bool {
-    let Some(mesh) = state.project.active_mesh() else {
+    let Some(asset) = state.project.active() else {
         return false;
     };
-    let sel_verts: Vec<[f32; 3]> = mesh
+    let mut mesh = asset.source_mesh().clone();
+    mesh.transform_affine(asset.world_matrix());
+    let points: Vec<_> = mesh
         .verts
         .iter()
         .filter(|v| v.selected)
         .map(|v| v.pos)
+        .take(4)
         .collect();
-    if sel_verts.len() == 3 {
-        return profile_capture_three_points(state, sel_verts[0], sel_verts[1], sel_verts[2]);
+    if let [a, b, c] = points.as_slice() {
+        return profile_capture_three_points(state, *a, *b, *c);
     }
-    // Duas faces paralelas (e não coplanares): plano médio entre elas, como
-    // o "mid-plane" do Plasticity — útil para simetria e nervuras centrais.
-    let selected_faces: Vec<usize> = mesh
+    let faces: Vec<_> = mesh
         .faces
         .iter()
         .enumerate()
@@ -798,84 +799,47 @@ pub fn profile_capture_from_selection(state: &mut AppState) -> bool {
         .map(|(i, _)| i)
         .take(3)
         .collect();
-    if let [a, b] = selected_faces[..] {
-        let (na, nb) = (
-            mesh.face_normal(a).normalize_or_zero(),
-            mesh.face_normal(b).normalize_or_zero(),
-        );
-        let (ca, cb) = (mesh.face_centroid(a), mesh.face_centroid(b));
-        let gap = (cb - ca).dot(na);
-        if na != glam::Vec3::ZERO && na.dot(nb).abs() > 0.999 && gap.abs() > 1.0e-5 {
-            let face = &mesh.faces[a];
-            let edge_dir = if face.verts.len() >= 2 {
-                (mesh.verts[face.verts[1] as usize].vec()
-                    - mesh.verts[face.verts[0] as usize].vec())
-                .normalize_or_zero()
-            } else {
-                glam::Vec3::ZERO
-            };
-            // Centro: centróide da face A levado até o meio do vão.
-            let center = ca + na * (gap * 0.5);
-            let to_f64 = |v: glam::Vec3| [v.x as f64, v.y as f64, v.z as f64];
-            let Ok(wp) = petunia_core::ProfileWorkplane::from_face_and_edge(
-                to_f64(center),
-                to_f64(na),
-                to_f64(edge_dir),
-            ) else {
-                return false;
-            };
-            state.profile.origin = wp.origin.map(|x| x as f32);
-            state.profile.right = wp.right.map(|x| x as f32);
-            state.profile.up = wp.up.map(|x| x as f32);
-            state.profile.normal = wp.normal.map(|x| x as f32);
-            state.profile.workplane_kind = WorkplaneKind::Face;
-            state.profile.workplane_locked = true;
-            state.profile.points.clear();
-            state.profile.nodes.clear();
-            state.profile.closed = false;
-            state.mark_dirty();
-            return true;
-        }
-    }
-    // Caso de face selecionada com aresta guia opcional
-    let sel_face = mesh.faces.iter().position(|f| f.selected);
-    if let Some(fi) = sel_face {
-        let normal = mesh.face_normal(fi).normalize_or_zero();
-        let center = mesh.face_centroid(fi);
-        if normal == glam::Vec3::ZERO {
+    let Some(a) = faces.first().copied() else {
+        return false;
+    };
+    let Some(face) = mesh.faces.get(a) else {
+        return false;
+    };
+    let Some(first) = face.verts.first().and_then(|i| mesh.verts.get(*i as usize)) else {
+        return false;
+    };
+    let Some(second) = face.verts.get(1).and_then(|i| mesh.verts.get(*i as usize)) else {
+        return false;
+    };
+    let edge = mesh
+        .selected_edges
+        .iter()
+        .next()
+        .and_then(|(a, b)| {
+            Some(mesh.verts.get(*b as usize)?.vec() - mesh.verts.get(*a as usize)?.vec())
+        })
+        .unwrap_or_else(|| second.vec() - first.vec());
+    let normal = mesh.face_normal(a).normalize_or_zero();
+    let mut center = mesh.face_centroid(a);
+    if let [_, b] = faces.as_slice() {
+        let other = mesh.face_normal(*b).normalize_or_zero();
+        if normal.dot(other).abs() < 0.9999 {
             return false;
         }
-        let edge_dir = if let Some(&(a, b)) = mesh.selected_edges.iter().next() {
-            (mesh.verts[b as usize].vec() - mesh.verts[a as usize].vec()).normalize_or_zero()
-        } else {
-            let face = &mesh.faces[fi];
-            if face.verts.len() >= 2 {
-                (mesh.verts[face.verts[1] as usize].vec()
-                    - mesh.verts[face.verts[0] as usize].vec())
-                .normalize_or_zero()
-            } else {
-                glam::Vec3::ZERO
-            }
-        };
-        let c_d = [center.x as f64, center.y as f64, center.z as f64];
-        let n_d = [normal.x as f64, normal.y as f64, normal.z as f64];
-        let e_d = [edge_dir.x as f64, edge_dir.y as f64, edge_dir.z as f64];
-        let Ok(wp) = petunia_core::ProfileWorkplane::from_face_and_edge(c_d, n_d, e_d) else {
-            return false;
-        };
-        state.profile.origin = wp.origin.map(|x| x as f32);
-        state.profile.right = wp.right.map(|x| x as f32);
-        state.profile.up = wp.up.map(|x| x as f32);
-        state.profile.normal = wp.normal.map(|x| x as f32);
-        state.profile.workplane_kind = WorkplaneKind::Face;
-        state.profile.workplane_locked = true;
-        state.profile.points.clear();
-        state.profile.nodes.clear();
-        state.profile.closed = false;
-        state.mark_dirty();
-        return true;
+        center += normal * ((mesh.face_centroid(*b) - center).dot(normal) * 0.5);
+    } else if faces.len() != 1 {
+        return false;
     }
-    false
+    let Ok(plane) = petunia_core::ProfileWorkplane::from_face_and_edge(
+        center.as_dvec3().to_array(),
+        normal.as_dvec3().to_array(),
+        edge.as_dvec3().to_array(),
+    ) else {
+        return false;
+    };
+    assign_profile_plane(state, plane);
+    state.profile.workplane_locked = true;
+    true
 }
 
 #[cfg(test)]

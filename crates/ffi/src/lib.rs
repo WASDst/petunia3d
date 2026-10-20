@@ -435,7 +435,10 @@ pub unsafe extern "C" fn petunia_extrude_selection(ctx: *mut PetuniaContext, dis
         return PETUNIA_ERR_NULL_PTR;
     }
     let ctx = &mut *ctx;
-    match ctx.state.dispatch(&ExtrudeSelectedCmd { dist: distance }) {
+    match ctx.state.dispatch(&ExtrudeSelectedCmd {
+        dist: distance,
+        mode: None,
+    }) {
         Ok(_) => PETUNIA_OK,
         Err(e) => {
             set_last_error(format!("Erro ao extrudar: {e}"));

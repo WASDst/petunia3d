@@ -243,6 +243,22 @@ fn gizmomodel(vm: &petunia_editor::GizmoModel) -> Value {
     obj.insert("view_origin_y".into(), json!(&vm.view_origin_y));
     obj.insert("cursor_screen".into(), json!(&vm.cursor_screen));
     obj.insert("cursor_visible".into(), json!(&vm.cursor_visible));
+    obj.insert("pivot_visible".into(), json!(&vm.pivot_visible));
+    obj.insert("pivot_screen".into(), json!(&vm.pivot_screen));
+    obj.insert(
+        "origin_marker_visible".into(),
+        json!(&vm.origin_marker_visible),
+    );
+    obj.insert(
+        "origin_marker_screen".into(),
+        json!(&vm.origin_marker_screen),
+    );
+    obj.insert("pivot_editing".into(), json!(&vm.pivot_editing));
+    obj.insert("x_ring_front".into(), json!(&vm.x_ring_front));
+    obj.insert("y_ring_front".into(), json!(&vm.y_ring_front));
+    obj.insert("z_ring_front".into(), json!(&vm.z_ring_front));
+    obj.insert("thickness".into(), json!(&vm.thickness));
+    obj.insert("size".into(), json!(&vm.size));
     Value::Object(obj)
 }
 fn measuretagmodel(vm: &petunia_editor::projection::MeasureTagModel) -> Value {
@@ -298,8 +314,63 @@ fn paintlayermodel(vm: &petunia_editor::PaintLayerModel) -> Value {
     obj.insert("is_group".into(), json!(&vm.is_group));
     obj.insert("kind_label".into(), json!(&vm.kind_label));
     obj.insert("kind".into(), json!(&vm.kind));
+    obj.insert("has_mask".into(), json!(&vm.has_mask));
+    obj.insert("effect_count".into(), json!(&vm.effect_count));
     obj.insert("blend".into(), json!(&vm.blend));
     obj.insert("depth".into(), json!(&vm.depth));
+    Value::Object(obj)
+}
+fn paintgradientstopmodel(vm: &petunia_editor::PaintGradientStopModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("position".into(), json!(&vm.position));
+    obj.insert("color".into(), json!(&vm.color));
+    Value::Object(obj)
+}
+fn paintlayereffectmodel(vm: &petunia_editor::PaintLayerEffectModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(&vm.id));
+    obj.insert("kind".into(), json!(&vm.kind));
+    obj.insert("label".into(), json!(&vm.label));
+    obj.insert("enabled".into(), json!(&vm.enabled));
+    obj.insert("opacity".into(), json!(&vm.opacity));
+    obj.insert("has_mask".into(), json!(&vm.has_mask));
+    obj.insert("mask_enabled".into(), json!(&vm.mask_enabled));
+    obj.insert("mask_inverted".into(), json!(&vm.mask_inverted));
+    obj.insert(
+        "params".into(),
+        Value::Array(vm.params.iter().map(painteffectparam).collect()),
+    );
+    Value::Object(obj)
+}
+fn paintactivelayermodel(vm: &petunia_editor::PaintActiveLayerModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(&vm.id));
+    obj.insert("name".into(), json!(&vm.name));
+    obj.insert("kind".into(), json!(&vm.kind));
+    obj.insert("kind_label".into(), json!(&vm.kind_label));
+    obj.insert("is_group".into(), json!(&vm.is_group));
+    obj.insert("paint_target".into(), json!(&vm.paint_target));
+    obj.insert("paint_target_effect".into(), json!(&vm.paint_target_effect));
+    obj.insert("has_mask".into(), json!(&vm.has_mask));
+    obj.insert("mask_enabled".into(), json!(&vm.mask_enabled));
+    obj.insert("mask_inverted".into(), json!(&vm.mask_inverted));
+    obj.insert(
+        "effects".into(),
+        Value::Array(vm.effects.iter().map(paintlayereffectmodel).collect()),
+    );
+    obj.insert("gradient_kind".into(), json!(&vm.gradient_kind));
+    obj.insert("gradient_repeat".into(), json!(&vm.gradient_repeat));
+    obj.insert("gradient_start".into(), json!(&vm.gradient_start));
+    obj.insert("gradient_end".into(), json!(&vm.gradient_end));
+    obj.insert(
+        "gradient_stops".into(),
+        Value::Array(
+            vm.gradient_stops
+                .iter()
+                .map(paintgradientstopmodel)
+                .collect(),
+        ),
+    );
     Value::Object(obj)
 }
 fn prefabitemmodel(vm: &petunia_editor::PrefabItemModel) -> Value {
@@ -354,6 +425,19 @@ fn sceneitemmodel(vm: &petunia_editor::SceneItemModel) -> Value {
     obj.insert("tris".into(), json!(&vm.tris));
     obj.insert("has_custom_color".into(), json!(&vm.has_custom_color));
     obj.insert("custom_color_rgb".into(), json!(&vm.custom_color_rgb));
+    obj.insert("collection".into(), json!(&vm.collection));
+    Value::Object(obj)
+}
+fn scenegroupmodel(vm: &petunia_editor::SceneGroupModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("name".into(), json!(&vm.name));
+    obj.insert("count".into(), json!(&vm.count));
+    obj.insert("visible".into(), json!(&vm.visible));
+    obj.insert("locked".into(), json!(&vm.locked));
+    obj.insert("selected".into(), json!(&vm.selected));
+    obj.insert("has_color".into(), json!(&vm.has_color));
+    obj.insert("color_rgb".into(), json!(&vm.color_rgb));
+    obj.insert("force_color".into(), json!(&vm.force_color));
     Value::Object(obj)
 }
 fn sectionstatemodel(vm: &petunia_editor::SectionStateModel) -> Value {
@@ -361,26 +445,6 @@ fn sectionstatemodel(vm: &petunia_editor::SectionStateModel) -> Value {
     obj.insert("id".into(), json!(&vm.id));
     obj.insert("pin_open".into(), json!(&vm.pin_open));
     obj.insert("open".into(), json!(&vm.open));
-    Value::Object(obj)
-}
-fn selectionoverlaymodel(vm: &petunia_editor::SelectionOverlayModel) -> Value {
-    let mut obj = Map::new();
-    obj.insert("visible".into(), json!(&vm.visible));
-    obj.insert("outline_commands".into(), json!(&vm.outline_commands));
-    obj.insert(
-        "active_outline_commands".into(),
-        json!(&vm.active_outline_commands),
-    );
-    obj.insert("point_commands".into(), json!(&vm.point_commands));
-    obj.insert(
-        "unselected_outline_commands".into(),
-        json!(&vm.unselected_outline_commands),
-    );
-    obj.insert(
-        "unselected_point_commands".into(),
-        json!(&vm.unselected_point_commands),
-    );
-    obj.insert("accent".into(), json!(&vm.accent));
     Value::Object(obj)
 }
 fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
@@ -409,6 +473,12 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         "paint_mask_selection".into(),
         json!(&vm.paint_mask_selection),
     );
+    obj.insert("paint_isolate_ghost".into(), json!(&vm.paint_isolate_ghost));
+    obj.insert("import_request".into(), json!(&vm.import_request));
+    obj.insert(
+        "import_request_filter".into(),
+        json!(&vm.import_request_filter),
+    );
     obj.insert("isolate_active".into(), json!(&vm.isolate_active));
     obj.insert("status_message".into(), json!(&vm.status_message));
     obj.insert("status_severity".into(), json!(&vm.status_severity));
@@ -420,6 +490,10 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert(
         "scene_items".into(),
         Value::Array(vm.scene_items.iter().map(sceneitemmodel).collect()),
+    );
+    obj.insert(
+        "scene_groups".into(),
+        Value::Array(vm.scene_groups.iter().map(scenegroupmodel).collect()),
     );
     obj.insert(
         "parts_items".into(),
@@ -501,6 +575,9 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         json!(&vm.active_selection_rgb),
     );
     obj.insert("selection_thickness".into(), json!(&vm.selection_thickness));
+    obj.insert("gizmo_size".into(), json!(&vm.gizmo_size));
+    obj.insert("gizmo_thickness".into(), json!(&vm.gizmo_thickness));
+    obj.insert("nav_cube_opacity".into(), json!(&vm.nav_cube_opacity));
     obj.insert("selection_color_hex".into(), json!(&vm.selection_color_hex));
     obj.insert("show_xray".into(), json!(&vm.show_xray));
     obj.insert(
@@ -569,6 +646,7 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("dimension_x".into(), json!(&vm.dimension_x));
     obj.insert("dimension_y".into(), json!(&vm.dimension_y));
     obj.insert("measure_visible".into(), json!(&vm.measure_visible));
+    obj.insert("measure_pending".into(), json!(&vm.measure_pending));
     obj.insert("measure_commands".into(), json!(&vm.measure_commands));
     obj.insert("measure_text".into(), json!(&vm.measure_text));
     obj.insert("measure_x".into(), json!(&vm.measure_x));
@@ -624,10 +702,6 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("gizmo".into(), gizmomodel(&vm.gizmo));
     obj.insert("cursor_visible".into(), json!(&vm.gizmo.cursor_visible));
     obj.insert("cursor_screen".into(), json!(&vm.gizmo.cursor_screen));
-    obj.insert(
-        "selection_overlay".into(),
-        selectionoverlaymodel(&vm.selection_overlay),
-    );
     obj.insert("add_menu_open".into(), json!(&vm.add_menu_open));
     obj.insert("inspector_width".into(), json!(&vm.inspector_width));
     obj.insert(
@@ -658,13 +732,6 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         "context_menu_can_move_down".into(),
         json!(&vm.context_menu_can_move_down),
     );
-    obj.insert(
-        "boolean_operand_name".into(),
-        json!(&vm.boolean_operand_name),
-    );
-    obj.insert("boolean_ready".into(), json!(&vm.boolean_ready));
-    obj.insert("boolean_keep_parts".into(), json!(&vm.boolean_keep_parts));
-    obj.insert("boolean_cleanup".into(), json!(&vm.boolean_cleanup));
     obj.insert(
         "reference_manager_open".into(),
         json!(&vm.reference_manager_open),
@@ -887,12 +954,6 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert(
         "label_action_subdivide".into(),
         json!(&vm.label_action_subdivide),
-    );
-    obj.insert("label_action_fuse".into(), json!(&vm.label_action_fuse));
-    obj.insert("label_action_cut".into(), json!(&vm.label_action_cut));
-    obj.insert(
-        "label_action_intersect".into(),
-        json!(&vm.label_action_intersect),
     );
     obj.insert("label_action_join".into(), json!(&vm.label_action_join));
     obj.insert("label_action_merge".into(), json!(&vm.label_action_merge));
@@ -1328,6 +1389,10 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         "paint_layers".into(),
         Value::Array(vm.paint_layers.iter().map(paintlayermodel).collect()),
     );
+    obj.insert(
+        "paint_active_layer".into(),
+        paintactivelayermodel(&vm.paint_active_layer),
+    );
     obj.insert("paint_layer_count".into(), json!(&vm.paint_layer_count));
     obj.insert("paint_effect_kind".into(), json!(&vm.paint_effect_kind));
     obj.insert(
@@ -1414,6 +1479,11 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
         json!(&vm.pivot_individual_label),
     );
     obj.insert("edit_pivot".into(), json!(&vm.edit_pivot));
+    obj.insert("origin_refusal".into(), json!(&vm.origin_refusal));
+    obj.insert(
+        "has_element_selection".into(),
+        json!(&vm.has_element_selection),
+    );
     obj.insert(
         "label_origin_to_geometry".into(),
         json!(&vm.label_origin_to_geometry),
@@ -1608,6 +1678,16 @@ fn shellviewmodel(vm: &petunia_editor::ShellViewModel) -> Value {
     obj.insert("tool_modal_step".into(), json!(&vm.tool_modal_step));
     obj.insert("tool_modal_min".into(), json!(&vm.tool_modal_min));
     obj.insert("tool_modal_max".into(), json!(&vm.tool_modal_max));
+    obj.insert(
+        "tool_modal_modes".into(),
+        Value::Array(
+            vm.tool_modal_modes
+                .iter()
+                .map(|mode| json!({"id": mode.id, "label": mode.label}))
+                .collect(),
+        ),
+    );
+    obj.insert("tool_modal_mode".into(), json!(&vm.tool_modal_mode));
     obj.insert("tool_options_active".into(), json!(&vm.tool_options_active));
     obj.insert("tool_options_title".into(), json!(&vm.tool_options_title));
     obj.insert("tool_options_hint".into(), json!(&vm.tool_options_hint));
@@ -1850,6 +1930,19 @@ fn uveditormodel(vm: &petunia_editor::UvEditorModel) -> Value {
     obj.insert("selected_face".into(), json!(&vm.selected_face));
     obj.insert("uv_selected_count".into(), json!(&vm.uv_selected_count));
     obj.insert("truncated".into(), json!(&vm.truncated));
+    obj.insert(
+        "islands".into(),
+        Value::Array(vm.islands.iter().map(uvislandrowmodel).collect()),
+    );
+    Value::Object(obj)
+}
+fn uvislandrowmodel(vm: &petunia_editor::UvIslandRowModel) -> Value {
+    let mut obj = Map::new();
+    obj.insert("index".into(), json!(&vm.index));
+    obj.insert("face_count".into(), json!(&vm.face_count));
+    obj.insert("area".into(), json!(&vm.area));
+    obj.insert("selected".into(), json!(&vm.selected));
+    obj.insert("center".into(), json!(&vm.center));
     Value::Object(obj)
 }
 fn worldaxislabelmodel(vm: &petunia_editor::projection::WorldAxisLabelModel) -> Value {
@@ -1878,6 +1971,21 @@ fn brushpanelmodel(vm: &petunia_editor::BrushPanelModel) -> Value {
     obj.insert("tip".into(), json!(&vm.tip));
     obj.insert("blend".into(), json!(&vm.blend));
     obj.insert("presets".into(), json!(&vm.presets));
+    obj.insert(
+        "presets_info".into(),
+        json!(
+            vm.presets_info
+                .iter()
+                .map(|preset| json!({
+                    "name": preset.name,
+                    "kind": preset.kind,
+                    "size_px": preset.size_px,
+                    "hardness": preset.hardness,
+                    "active": preset.active,
+                }))
+                .collect::<Vec<_>>()
+        ),
+    );
     obj.insert("active_preset".into(), json!(&vm.active_preset));
     obj.insert("clone_source_set".into(), json!(&vm.clone_source_set));
     Value::Object(obj)

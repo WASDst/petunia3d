@@ -84,6 +84,70 @@ pub fn answer_query(state: &AppState, name: &str) -> Result<String, PluginApiErr
     json.map_err(|e| PluginApiError::ValidationFailed(e.to_string()))
 }
 
+/// Answers a recorded plugin query, with contextual plugin awareness (e.g. `plugin.data`).
+pub fn answer_plugin_query(
+    state: &AppState,
+    plugin: &PluginId,
+    name: &str,
+) -> Result<String, PluginApiError> {
+    if name == "plugin.data" {
+        let payload = state.project.plugin_data.get(plugin.as_str());
+        let json = serde_json::to_string(&payload)
+            .map_err(|e| PluginApiError::ValidationFailed(e.to_string()))?;
+        return Ok(json);
+    }
+    answer_query(state, name)
+}
+
+/// Salva dados autorais namespaced de um plugin no Document.
+///
+/// Valida formato de namespace, schema versionado e limite de tamanho.
+pub fn set_plugin_data(
+    state: &mut AppState,
+    plugin: &PluginId,
+    schema_version: u32,
+    data: serde_json::Value,
+) -> Result<(), PluginApiError> {
+    let payload = petunia_project::plugin_data::PluginPayload {
+        schema_version,
+        data,
+    };
+    petunia_project::plugin_data::put_payload(
+        &mut state.project.plugin_data,
+        plugin.as_str(),
+        payload,
+    )
+    .map_err(|e| match e {
+        petunia_project::plugin_data::PluginDataError::BadNamespace(s) => {
+            PluginApiError::InvalidId(s)
+        }
+        petunia_project::plugin_data::PluginDataError::TooLarge(size) => {
+            PluginApiError::ValidationFailed(format!("plugin payload too large: {size} bytes"))
+        }
+    })
+}
+
+/// Lê os dados autorais namespaced de um plugin no Document.
+pub fn get_plugin_data<'a>(
+    state: &'a AppState,
+    plugin: &PluginId,
+) -> Option<&'a petunia_project::plugin_data::PluginPayload> {
+    state.project.plugin_data.get(plugin.as_str())
+}
+
+/// Identifica plugins cujos dados estão presentes no Document, mas o plugin
+/// não está instalado no registry (produzindo o diagnóstico canônico sem descartar o payload).
+pub fn detect_missing_plugins(
+    state: &AppState,
+    registry: &crate::registry::PluginRegistry,
+) -> Vec<String> {
+    petunia_project::plugin_data::missing_plugins(&state.project.plugin_data, |id| {
+        registry.is_installed(id)
+    })
+    .map(ToString::to_string)
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,5 +230,38 @@ mod tests {
 
     fn uuid_like_stale() -> String {
         "00000000-0000-4000-8000-000000000000".to_string()
+    }
+
+    #[test]
+    fn plugin_data_round_trip_and_missing_plugins_detection() {
+        let mut state = AppState::new("en");
+        ProjectService::new_project(&mut state);
+        let pid = id();
+
+        // 1. Initial query before data is set -> null json
+        let initial_query = answer_plugin_query(&state, &pid, "plugin.data").unwrap();
+        assert_eq!(initial_query, "null");
+
+        // 2. Set namespaced plugin data
+        let sample_payload = serde_json::json!({
+            "mode": "auto_relax",
+            "threshold": 0.42
+        });
+        set_plugin_data(&mut state, &pid, 1, sample_payload.clone()).unwrap();
+
+        // 3. Query after data is set
+        let query_after = answer_plugin_query(&state, &pid, "plugin.data").unwrap();
+        assert!(query_after.contains("\"threshold\":0.42"));
+        assert!(query_after.contains("\"schema_version\":1"));
+
+        // 4. In-memory check
+        let stored = get_plugin_data(&state, &pid).expect("payload must be stored");
+        assert_eq!(stored.schema_version, 1);
+        assert_eq!(stored.data, sample_payload);
+
+        // 5. Missing plugins detection
+        let registry = crate::registry::PluginRegistry::default();
+        let missing = detect_missing_plugins(&state, &registry);
+        assert_eq!(missing, vec!["test.add"]);
     }
 }

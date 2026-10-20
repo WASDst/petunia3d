@@ -24,9 +24,9 @@
 use crate::command::CommandError;
 use crate::context::CommandContext;
 use crate::rig_commands::{
-    AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd, ApplyMotionNowCmd, ClearBoneTrackCmd,
-    DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd, InsertBoneKeyframeCmd,
-    RemoveMotionCmd, RemoveMotionLayerCmd, ResetBonePoseCmd, RigPresetKind,
+    AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd, ApplyIkPoseCmd, ApplyMotionNowCmd,
+    ClearBoneTrackCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd,
+    InsertBoneKeyframeCmd, RemoveMotionCmd, RemoveMotionLayerCmd, ResetBonePoseCmd, RigPresetKind,
     SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd, SetMotionLayerBlendModeCmd,
     SetMotionLayerWeightCmd, SetMotionParamCmd, SetMotionStyleCmd, ToggleMotionLayerEnabledCmd,
     UpdateMotionCmd,
@@ -41,12 +41,22 @@ use uuid::Uuid;
 
 /// Escala padrão dos rigs criados pelo seletor de criaturas.
 pub const DEFAULT_RIG_SCALE: f32 = 1.0;
+/// Timeline display/stepping rate; key times remain authored in seconds.
+pub const DEFAULT_TIMELINE_FPS: f32 = 24.0;
 
 /// Valor provisório da transformação de um osso durante manipulação no viewport.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BoneDraft {
     pub bone_id: u32,
     pub transform: Transform3D,
+}
+
+/// Rascunho temporário do solver IK durante interação manual ou arrasto de alvo (Task H15).
+#[derive(Debug, Clone, PartialEq)]
+pub struct IkDraft {
+    pub chain_id: Uuid,
+    pub bone_rotations: Vec<(u32, [f32; 4])>,
+    pub target_local: [f32; 3],
 }
 
 /// Valor provisório de um parâmetro durante o arrasto de um slider.
@@ -70,6 +80,7 @@ pub struct AnimateSession {
     pub selected_keyframe: Option<(u32, f32)>,
     /// Playhead em segundos, dentro de `[0, ciclo)`.
     pub time: f32,
+    frame_rate: f32,
     pub playing: bool,
     /// Mostra os parâmetros da camada "Advanced".
     pub show_advanced: bool,
@@ -96,6 +107,7 @@ pub struct AnimateSession {
     pub motion_trail_steps: u32,
     draft: Option<ParamDraft>,
     bone_draft: Option<BoneDraft>,
+    ik_draft: Option<IkDraft>,
 }
 
 impl Default for AnimateSession {
@@ -106,6 +118,7 @@ impl Default for AnimateSession {
             active_clip: None,
             selected_keyframe: None,
             time: 0.0,
+            frame_rate: DEFAULT_TIMELINE_FPS,
             playing: false,
             show_advanced: false,
             show_skeleton: true,
@@ -121,11 +134,48 @@ impl Default for AnimateSession {
             motion_trail_steps: 24,
             draft: None,
             bone_draft: None,
+            ik_draft: None,
         }
     }
 }
 
 impl AnimateSession {
+    /// Validated clip shared by preview, timeline and authoring consumers.
+    pub fn resolved_clip<'p>(
+        &self,
+        project: &'p Project,
+    ) -> Result<Option<&'p petunia_project::AnimationAsset>, CommandError> {
+        resolve_authoring_clip(project, self)
+    }
+
+    /// Document restoration may remove the selected clip. Prune only the
+    /// stale session reference, without choosing another clip or changing data.
+    pub(crate) fn clear_stale_clip_selection(&mut self, project: &Project) {
+        let valid = self.active_clip.is_none_or(|id| {
+            self.skeleton.is_some_and(|skeleton| {
+                project
+                    .get_animation(id)
+                    .is_some_and(|asset| asset.tags.contains(&format!("skeleton:{skeleton}")))
+            })
+        });
+        if !valid {
+            self.active_clip = None;
+            self.selected_keyframe = None;
+        }
+    }
+
+    pub fn timeline_frame_rate(&self) -> f32 {
+        self.frame_rate
+    }
+
+    pub fn set_timeline_frame_rate(&mut self, fps: f32) -> bool {
+        if !fps.is_finite() || fps <= 0.0 || !(1.0 / fps).is_finite() {
+            return false;
+        }
+        self.frame_rate = fps;
+        true
+    }
+
     /// Parâmetro em edição (arrasto de slider), se houver: `(chave, valor)`.
     pub fn draft(&self) -> Option<(&str, f32)> {
         self.draft.as_ref().map(|d| (d.key.as_str(), d.value))
@@ -175,6 +225,21 @@ impl AnimateSession {
     /// Descarta o rascunho de transformação do osso (ex: cancelamento por Esc).
     pub fn clear_bone_draft(&mut self) {
         self.bone_draft = None;
+    }
+
+    /// Rascunho temporário da pose IK calculada pelo solver durante arrasto.
+    pub fn ik_draft(&self) -> Option<&IkDraft> {
+        self.ik_draft.as_ref()
+    }
+
+    /// Define o rascunho temporário da cadeia IK.
+    pub fn set_ik_draft(&mut self, draft: IkDraft) {
+        self.ik_draft = Some(draft);
+    }
+
+    /// Descarta o rascunho de IK (ex: cancelamento por Esc).
+    pub fn clear_ik_draft(&mut self) {
+        self.ik_draft = None;
     }
 }
 
@@ -451,11 +516,8 @@ impl AnimatePreview {
         {
             return Some(e.cycle_seconds());
         }
-        if let Some(skel_id) = session.skeleton
-            && let Some(asset) = session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skel_id))
+        if session.skeleton.is_some()
+            && let Some(asset) = resolve_authoring_clip(project, session).ok().flatten()
         {
             return Some(asset.clip.duration.max(0.1));
         }
@@ -490,11 +552,7 @@ impl AnimatePreview {
             }
         } else {
             let skeleton = project.get_skeleton(session.skeleton?)?;
-            let local = if let Some(asset) = session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skeleton.id))
-            {
+            let local = if let Some(asset) = resolve_authoring_clip(project, session).ok()? {
                 asset.clip.sample_pose(skeleton, session.time)
             } else {
                 skeleton.bones.iter().map(|b| b.local_transform).collect()
@@ -505,10 +563,7 @@ impl AnimatePreview {
         // Sobrepõe trilhas com keyframes do clipe se estiver tocando junto com um motion procedural
         if session.motion.is_some()
             && let Some(skeleton) = project.get_skeleton(skeleton_id)
-            && let Some(asset) = session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skeleton_id))
+            && let Some(asset) = resolve_authoring_clip(project, session).ok()?
         {
             for (bi, bone) in skeleton.bones.iter().enumerate() {
                 if let Some(track) = asset.clip.get_track(bone.id)
@@ -559,6 +614,18 @@ impl AnimatePreview {
                         layer.blend_weight,
                         layer.blend_mode,
                     );
+                }
+            }
+        }
+
+        if let Some(ik) = session.ik_draft()
+            && let Some(skeleton) = project.get_skeleton(skeleton_id)
+        {
+            for &(bone_id, rot) in &ik.bone_rotations {
+                if let Some(idx) = skeleton.bone_index(bone_id)
+                    && idx < local.len()
+                {
+                    local[idx].rotation = rot;
                 }
             }
         }
@@ -682,12 +749,7 @@ fn wrap_time(t: f32, cycle: f32) -> f32 {
 fn has_playable_keyframes(project: &Project, session: &AnimateSession) -> bool {
     session
         .skeleton
-        .and_then(|id| {
-            session
-                .active_clip
-                .and_then(|clip| project.get_animation(clip))
-                .or_else(|| project.get_animation_for_skeleton(id))
-        })
+        .and_then(|_| resolve_authoring_clip(project, session).ok().flatten())
         .is_some_and(|asset| {
             asset.clip.tracks.iter().any(|track| {
                 !track.translations.is_empty()
@@ -695,6 +757,39 @@ fn has_playable_keyframes(project: &Project, session: &AnimateSession) -> bool {
                     || !track.scales.is_empty()
             })
         })
+}
+
+/// Resolve a clip once. A stale explicit ID never falls back to another clip.
+fn resolve_authoring_clip<'p>(
+    project: &'p Project,
+    session: &AnimateSession,
+) -> Result<Option<&'p petunia_project::AnimationAsset>, CommandError> {
+    let Some(skeleton_id) = session.skeleton else {
+        return Ok(None);
+    };
+    let tag = format!("skeleton:{skeleton_id}");
+    if let Some(id) = session.active_clip {
+        return project
+            .get_animation(id)
+            .filter(|asset| asset.tags.contains(&tag))
+            .map(Some)
+            .ok_or_else(|| {
+                CommandError::Execution(
+                    "Selected clip is missing or belongs to another skeleton".into(),
+                )
+            });
+    }
+    let mut clips = project
+        .animations
+        .iter()
+        .filter(|asset| asset.tags.contains(&tag));
+    let clip = clips.next();
+    if clips.next().is_some() {
+        return Err(CommandError::Execution(
+            "Select an animation clip explicitly".into(),
+        ));
+    }
+    Ok(clip)
 }
 
 fn no_rig() -> CommandError {
@@ -725,6 +820,7 @@ impl CommandContext<'_> {
                 .find(|m| Some(m.skeleton_id) == a.skeleton)
                 .map(|m| m.id);
         }
+        a.clear_stale_clip_selection(project);
         let has_clip = has_playable_keyframes(project, a);
         if a.motion.is_none() && !has_clip {
             a.playing = false;
@@ -748,6 +844,13 @@ impl CommandContext<'_> {
         } else if a.skeleton.is_none() {
             a.selected_bone = None;
             a.bone_draft = None;
+            a.ik_draft = None;
+        }
+        if a.ik_draft
+            .as_ref()
+            .is_some_and(|ik| project.ik_chains.iter().all(|c| c.id != ik.chain_id))
+        {
+            a.ik_draft = None;
         }
     }
 
@@ -760,40 +863,57 @@ impl CommandContext<'_> {
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
         let time = a.time;
 
-        let transform = if let Some(draft) = a.bone_draft() {
-            if draft.bone_id == bone_id {
-                draft.transform
-            } else {
-                let skel = self
-                    .document
-                    .project
-                    .get_skeleton(skeleton_id)
-                    .ok_or_else(no_rig)?;
-                let bone = skel
-                    .get_bone(bone_id)
-                    .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
-                bone.local_transform
-            }
-        } else {
-            let skel = self
-                .document
-                .project
-                .get_skeleton(skeleton_id)
-                .ok_or_else(no_rig)?;
-            let bone = skel
-                .get_bone(bone_id)
-                .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
-            bone.local_transform
-        };
-
-        self.editor.animate.clear_bone_draft();
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?.map(|asset| asset.id);
+        // Writing an evaluated composite back into its base clip would apply the
+        // layers twice. Keep the draft and ask for explicit layer authoring/bake.
+        if self
+            .document
+            .project
+            .motion_layers
+            .iter()
+            .any(|layer| layer.enabled && layer.blend_weight > 1e-4)
+        {
+            return Err(CommandError::Execution(
+                "Keying blended layers requires an explicit authoring layer or bake".into(),
+            ));
+        }
+        let mut preview = AnimatePreview::default();
+        let (evaluated_skeleton, pose) = preview
+            .local_pose(&self.document.project, a)
+            .ok_or_else(|| CommandError::Execution("Cannot evaluate pose for keyframing".into()))?;
+        if preview.error().is_some() || evaluated_skeleton != skeleton_id {
+            return Err(CommandError::Execution(
+                "Cannot key an invalid procedural pose".into(),
+            ));
+        }
+        let index = self
+            .document
+            .project
+            .get_skeleton(skeleton_id)
+            .and_then(|s| s.bone_index(bone_id))
+            .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
+        let transform = *pose
+            .get(index)
+            .ok_or_else(|| CommandError::Execution("Bone missing from evaluated pose".into()))?;
         self.dispatch(&InsertBoneKeyframeCmd {
             skeleton_id,
+            clip_id,
             bone_id,
             time,
             transform,
             interpolation: Interpolation::Linear,
-        })
+        })?;
+        if clip_id.is_none() {
+            self.editor.animate.active_clip = self
+                .document
+                .project
+                .get_animation_for_skeleton(skeleton_id)
+                .map(|a| a.id);
+        } else {
+            self.editor.animate.active_clip = clip_id;
+        }
+        self.editor.animate.clear_bone_draft();
+        Ok(())
     }
 
     /// Remove o keyframe do osso selecionado na posição atual (ou informada) da timeline (1 passo de Undo).
@@ -805,11 +925,15 @@ impl CommandContext<'_> {
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
         let t = time.unwrap_or(a.time);
 
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?
+            .map(|asset| asset.id)
+            .ok_or_else(|| CommandError::NoChange("No animation clip selected".into()))?;
         self.dispatch(&DeleteBoneKeyframeCmd {
             skeleton_id,
+            clip_id,
             bone_id,
             time: t,
-            tolerance: 0.05,
+            tolerance: 1e-4,
         })
     }
 
@@ -825,8 +949,12 @@ impl CommandContext<'_> {
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
         let time = a.time;
 
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?
+            .map(|asset| asset.id)
+            .ok_or_else(|| CommandError::NoChange("No animation clip selected".into()))?;
         self.dispatch(&SetBoneKeyframeInterpolationCmd {
             skeleton_id,
+            clip_id,
             bone_id,
             time,
             interpolation: interp,
@@ -841,8 +969,12 @@ impl CommandContext<'_> {
             .selected_bone
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
 
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?
+            .map(|asset| asset.id)
+            .ok_or_else(|| CommandError::NoChange("No animation clip selected".into()))?;
         self.dispatch(&ClearBoneTrackCmd {
             skeleton_id,
+            clip_id,
             bone_id,
         })
     }
@@ -946,6 +1078,101 @@ impl CommandContext<'_> {
     /// Altera o modo IK da sessão de animação.
     pub fn animate_set_ik_mode(&mut self, ik_mode: bool) {
         self.editor.animate.ik_mode = ik_mode;
+    }
+
+    /// Resolve interativamente a cadeia IK para o alvo no espaço do mundo (sem Undo a cada movimento) (Task H15).
+    pub fn animate_solve_ik(
+        &mut self,
+        chain_id: Uuid,
+        target_world: [f32; 3],
+    ) -> Result<(), CommandError> {
+        if !target_world.iter().all(|x| x.is_finite()) {
+            return Err(CommandError::Execution(
+                "IK target coordinates are not finite".into(),
+            ));
+        }
+        let chain = self
+            .document
+            .project
+            .ik_chains
+            .iter()
+            .find(|c| c.id == chain_id)
+            .cloned()
+            .ok_or_else(|| CommandError::Execution("IK chain not found".into()))?;
+        let skel = self
+            .document
+            .project
+            .get_skeleton(chain.skeleton_id)
+            .cloned()
+            .ok_or_else(|| CommandError::Execution("Skeleton not found".into()))?;
+
+        // Converte do espaço do mundo para o espaço local da criatura / ativo ativo.
+        let target_local = if let Some(asset) = self
+            .document
+            .project
+            .assets
+            .iter()
+            .find(|a| a.skeleton_id == Some(skel.id))
+        {
+            let to_world = asset.transform.to_mat4();
+            let inv = to_world.inverse();
+            if inv.is_finite() {
+                inv.transform_point3(glam::Vec3::from(target_world))
+                    .to_array()
+            } else {
+                target_world
+            }
+        } else {
+            target_world
+        };
+
+        let mut preview = AnimatePreview::default();
+        let (eval_skel, mut local) = preview
+            .local_pose(&self.document.project, &self.editor.animate)
+            .ok_or_else(|| CommandError::Execution("Cannot evaluate base pose for IK".into()))?;
+        if eval_skel != skel.id {
+            return Err(CommandError::Execution(
+                "Evaluated pose belongs to another skeleton".into(),
+            ));
+        }
+
+        petunia_project::solve_chain(&skel, &mut local, &chain, glam::Vec3::from(target_local))
+            .map_err(|e| CommandError::Execution(format!("IK solver error: {e:?}")))?;
+
+        let mut bone_rotations = Vec::with_capacity(chain.bones.len());
+        for &bone_id in &chain.bones {
+            if let Some(idx) = skel.bone_index(bone_id)
+                && let Some(t) = local.get(idx)
+            {
+                bone_rotations.push((bone_id, t.rotation));
+            }
+        }
+
+        self.editor.animate.set_ik_draft(IkDraft {
+            chain_id,
+            bone_rotations,
+            target_local,
+        });
+        Ok(())
+    }
+
+    /// Descarta a pose provisória de IK (0 passos de Undo) (Task H15).
+    pub fn animate_cancel_ik(&mut self) {
+        self.editor.animate.clear_ik_draft();
+    }
+
+    /// Confirma a pose provisória de IK nos ossos do esqueleto (1 passo atômico de Undo) (Task H15).
+    pub fn animate_commit_ik(&mut self) -> Result<bool, CommandError> {
+        let Some(draft) = self.editor.animate.ik_draft.take() else {
+            return Ok(false);
+        };
+        let skeleton_id = self.editor.animate.skeleton.ok_or_else(no_rig)?;
+        self.dispatch(&ApplyIkPoseCmd {
+            skeleton_id,
+            chain_id: draft.chain_id,
+            bone_rotations: draft.bone_rotations,
+        })?;
+        Ok(true)
     }
 
     /// Define a pose/transformação de um osso via dispatcher (1 passo de Undo).

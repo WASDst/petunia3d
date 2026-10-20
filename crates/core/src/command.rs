@@ -49,7 +49,20 @@ pub enum CommandError {
     PathGenerator(#[from] PathGeneratorError),
 }
 
-pub use crate::context::{CommandContext, EditorView, HostRequest, UiRequest};
+pub use crate::context::{CommandContext, CommandEffects, EditorView, HostRequest, UiRequest};
+
+/// Relatório DTO pós-execução de um comando consolidado (A04).
+/// Devolve rótulo, invalidações (ProjectChanges), efeitos colaterais aplicados (CommandEffects),
+/// contadores de profundidade de Undo/Redo e a revisão atual do documento.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandExecutionReport {
+    pub label: &'static str,
+    pub changes: ProjectChanges,
+    pub effects: CommandEffects,
+    pub undo_depth: usize,
+    pub redo_depth: usize,
+    pub revision: u64,
+}
 
 /// Trait central de comando. Executa contra `CommandContext` (documento, editor e
 /// eventos): comandos não enxergam UI nem recursos de render.
@@ -65,6 +78,12 @@ pub trait Command: Send + Sync {
         true
     }
 
+    /// Geometry edits freeze live primitives by default. Commands that change
+    /// another responsibility must explicitly retain their authored sources.
+    fn freezes_active_primitive(&self) -> bool {
+        true
+    }
+
     /// Domínios persistentes alterados quando a execução termina com sucesso.
     fn changes(&self) -> ProjectChanges {
         if self.is_destructive() {
@@ -72,6 +91,16 @@ pub trait Command: Send + Sync {
         } else {
             ProjectChanges::NONE
         }
+    }
+
+    /// Whole-object lifecycle commands retain their generator; authoring mesh
+    /// edits require an explicit conversion.
+    fn requires_editable_mesh(&self, _state: &EditorView<'_>) -> bool {
+        self.changes()
+            .intersects(ProjectChanges::TOPOLOGY | ProjectChanges::UVS | ProjectChanges::NORMALS)
+            && !self
+                .changes()
+                .intersects(ProjectChanges::PROCEDURAL | ProjectChanges::SPLINES)
     }
 
     /// Valida disponibilidade contextual do comando contra o estado atual (P3D-100).
@@ -94,8 +123,16 @@ impl<T: ?Sized + Command> Command for Box<T> {
         (**self).is_destructive()
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        (**self).freezes_active_primitive()
+    }
+
     fn changes(&self) -> ProjectChanges {
         (**self).changes()
+    }
+
+    fn requires_editable_mesh(&self, state: &EditorView<'_>) -> bool {
+        (**self).requires_editable_mesh(state)
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -253,20 +290,57 @@ impl CommandDispatcher {
     }
 
     pub fn execute(&self, id: &str, state: &mut AppState) -> Result<(), CommandError> {
+        self.execute_detailed(id, state).map(|_| ())
+    }
+
+    /// Executa um comando registrado por id devolvendo o relatório DTO pós-commit (A04).
+    pub fn execute_detailed(
+        &self,
+        id: &str,
+        state: &mut AppState,
+    ) -> Result<CommandExecutionReport, CommandError> {
         let cmd = self
             .registry
             .get(id)
             .ok_or_else(|| CommandError::Execution(format!("Comando '{id}' não registrado")))?
             .clone();
-        Self::dispatch(state, cmd.as_ref())
+        Self::dispatch_detailed(state, cmd.as_ref())
     }
 
     pub fn dispatch(state: &mut AppState, cmd: &dyn Command) -> Result<(), CommandError> {
+        Self::dispatch_detailed(state, cmd).map(|_| ())
+    }
+
+    /// Despacha o comando contra o AppState devolvendo o relatório DTO pós-commit (A04).
+    pub fn dispatch_detailed(
+        state: &mut AppState,
+        cmd: &dyn Command,
+    ) -> Result<CommandExecutionReport, CommandError> {
         let mut ctx = state.command_context();
-        let result = Self::run(&mut ctx, cmd);
+        let report = Self::run_detailed(&mut ctx, cmd)?;
         let effects = ctx.into_effects();
         let host = state.apply_effects(effects);
-        result.and(host)
+        host.map(|()| report)
+    }
+
+    /// Variante para quem já tem um contexto restrito, devolvendo o relatório DTO pós-commit (A04).
+    pub fn run_detailed(
+        ctx: &mut CommandContext<'_>,
+        cmd: &dyn Command,
+    ) -> Result<CommandExecutionReport, CommandError> {
+        let label = cmd.label();
+        let changes = cmd.changes();
+        Self::run(ctx, cmd)?;
+        let (undo_depth, redo_depth) = ctx.document.undo.depth();
+        let revision = ctx.document.project.revision_id();
+        Ok(CommandExecutionReport {
+            label,
+            changes,
+            effects: ctx.effects.clone(),
+            undo_depth,
+            redo_depth,
+            revision,
+        })
     }
 
     /// Fronteira de mutação única: valida (`can_execute`), executa o comando no contexto restrito,
@@ -276,16 +350,34 @@ impl CommandDispatcher {
         cmd.can_execute(&ctx.view())
             .map_err(|reason| CommandError::Execution(reason.into()))?;
         if cmd.is_destructive()
-            && (ctx.modal.is_some() || ctx.mesh_preview.is_some() || ctx.paint_stroke.is_some())
+            && (ctx.modal.is_some()
+                || ctx.mesh_preview.is_some()
+                || ctx.paint_stroke.is_some()
+                || ctx.uv_transform.is_some())
         {
             return Err(CommandError::Execution(
                 "Confirm or cancel the active operation first".into(),
             ));
         }
-        ctx.document.normalize_references();
         let changes = cmd.changes();
+        if cmd.requires_editable_mesh(&ctx.view())
+            && ctx
+                .document
+                .active()
+                .is_some_and(|a| a.geometry_source.is_some())
+        {
+            return Err(CommandError::Execution(
+                "This object is parametric. Make Editable explicitly before editing its mesh"
+                    .into(),
+            ));
+        }
+        ctx.document.normalize_references();
         ctx.document.project.history_selection = ctx.editor.selection.assets.clone();
+        ctx.document.project.history_active_shape = ctx.editor.active_shape;
+        ctx.document.project.history_planar_selection = ctx.editor.planar_selection.clone();
         let original_selection = ctx.editor.selection.clone();
+        let original_shape = ctx.editor.active_shape;
+        let original_planar_selection = ctx.editor.planar_selection.clone();
         let original = cmd.is_destructive().then(|| ctx.document.project.clone());
         // A sessão de criação de primitiva é consumida ao congelar; guardá-la
         // permite restaurar o estado de sessão junto com o projeto se falhar.
@@ -293,11 +385,22 @@ impl CommandDispatcher {
             ctx.editor.primitive_session.clone(),
             ctx.editor.last_primitive,
         );
-        if cmd.is_destructive() {
+        if cmd.is_destructive() && cmd.freezes_active_primitive() {
             ctx.freeze_active_primitive_for_command();
         }
-        let exec_result =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cmd.execute(ctx)));
+        let exec_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            cmd.execute(ctx)?;
+            if ctx.document.project.assets.iter().any(|a| {
+                a.geometry_source.is_some()
+                    && (!a.mesh.verts.is_empty() || !a.mesh.faces.is_empty())
+            }) {
+                return Err(CommandError::Execution("Parametric geometry cannot be edited as an authoring mesh; Make Editable explicitly".into()));
+            }
+            if changes.intersects(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL) {
+                ctx.document.project.promote_planar_contours()?;
+            }
+            Ok(())
+        }));
         let execution_outcome = match exec_result {
             Ok(res) => res,
             Err(panic_payload) => {
@@ -324,6 +427,8 @@ impl CommandDispatcher {
                 ctx.document.project = original;
                 ctx.document.sync_reference_mirror();
                 ctx.editor.selection = original_selection;
+                ctx.editor.active_shape = original_shape;
+                ctx.editor.planar_selection = original_planar_selection;
                 (ctx.editor.primitive_session, ctx.editor.last_primitive) =
                     original_primitive_session;
                 // The project and selection are the same snapshot. Recomputing
@@ -338,8 +443,12 @@ impl CommandDispatcher {
             ctx.document.undo.push_sized(cmd.label(), original, bytes);
         }
         ctx.document.sync_reference_mirror();
-        ctx.sync_selection();
-        ctx.emit_project_changed(changes);
+        let sel_changed = ctx.sync_selection();
+        let mut final_changes = changes;
+        if sel_changed {
+            final_changes = final_changes.difference(ProjectChanges::SELECTION);
+        }
+        ctx.emit_project_changed(final_changes);
         ctx.mark_dirty();
         Ok(())
     }
@@ -400,6 +509,17 @@ impl CommandDispatcher {
     /// Cria e preenche o dispatcher com todos os comandos canônicos do Petunia3D.
     pub fn canonical() -> Self {
         let mut d = Self::new();
+
+        use crate::origin_commands::{OriginPreset, OriginPresetCmd};
+        for (id, preset) in [
+            ("model.origin_geometry", OriginPreset::Geometry),
+            ("model.origin_bottom", OriginPreset::Bottom),
+            ("model.origin_cursor", OriginPreset::Cursor),
+            ("model.origin_selection", OriginPreset::Selection),
+            ("model.geometry_to_origin", OriginPreset::GeometryToOrigin),
+        ] {
+            d.register(id, OriginPresetCmd(preset));
+        }
 
         // 1. Arquivo (File)
         d.register_with_meta(
@@ -799,29 +919,9 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
-                "model.fuse",
-                "Fuse",
-                "Combine the active object with the boolean operand into one",
-                CommandCategory::Model,
-            )
-            .with_docs(DocsTopic::Modeling),
-            BooleanOpCmd::new(petunia_mesh::boolean::BooleanOp::Union),
-        );
-        d.register_with_meta(
-            CommandMetadata::new(
-                "model.cut",
-                "Cut",
-                "Subtract the boolean operand from the active object",
-                CommandCategory::Model,
-            )
-            .with_docs(DocsTopic::Modeling),
-            BooleanOpCmd::new(petunia_mesh::boolean::BooleanOp::Difference),
-        );
-        d.register_with_meta(
-            CommandMetadata::new(
                 "model.join",
                 "Join",
-                "Merge the operand into the active object keeping both topologies",
+                "Merge the other selected objects into the active object keeping every topology",
                 CommandCategory::Model,
             )
             .with_docs(DocsTopic::Modeling),
@@ -829,14 +929,417 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
-                "model.intersect",
-                "Intersect",
-                "Keep only the volume shared with the boolean operand",
+                "measure.clear",
+                "Clear Measurements",
+                "Remove every measurement made with the Measure tool",
                 CommandCategory::Model,
             )
             .with_docs(DocsTopic::Modeling),
-            BooleanOpCmd::new(petunia_mesh::boolean::BooleanOp::Intersection),
+            crate::measure_commands::ClearMeasurementsCmd,
         );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "scene.group",
+                "Group",
+                "Gather the selected objects into a new group of the scene structure",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::scene_commands::GroupSelectionCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "scene.ungroup",
+                "Ungroup",
+                "Dissolve the group of the active object, keeping its objects",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::scene_commands::UngroupCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.shape_builder_solid",
+                "Solid Shape Builder",
+                "Execute 3D solid partition operations with transient RegionPlan",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::unite(),
+        );
+        d.alias("solid.edit", "model.shape_builder_solid");
+        d.alias("model.solid_edit", "model.shape_builder_solid");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_unite",
+                "Solid Unite",
+                "Unite all partition regions into a single solid mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::unite(),
+        );
+        d.alias("solid.unite", "model.solid_unite");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_remove_overlap",
+                "Solid Remove Overlap",
+                "Remove overlapping regions from all solid operands",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::remove_overlap(),
+        );
+        d.alias("solid.remove_overlap", "model.solid_remove_overlap");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_extract_overlap",
+                "Solid Extract Overlap",
+                "Extract overlapping region as a new scene object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::extract_overlap(),
+        );
+        d.alias("solid.extract_overlap", "model.solid_extract_overlap");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_create",
+                "Create Solid Composition",
+                "Create a re-editable solid composition from stable source operands",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::CreateSolidCompositionCmd::new(
+                Vec::new(),
+                crate::solid_commands::SolidOperation::UniteAll,
+            ),
+        );
+        d.alias("solid.composition_create", "model.solid_composition_create");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_bake",
+                "Bake Solid Composition",
+                "Explicitly bake solid composition recipe to editable static mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::BakeSolidCompositionCmd::new(),
+        );
+        d.alias("solid.composition_bake", "model.solid_composition_bake");
+        d.alias("solid.bake", "model.solid_composition_bake");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_toggle_step",
+                "Toggle Solid Composition Step",
+                "Enable or disable a specific step in the solid composition recipe",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::ToggleSolidCompositionStepCmd::new(uuid::Uuid::nil(), true),
+        );
+        d.alias(
+            "solid.composition_toggle",
+            "model.solid_composition_toggle_step",
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_reorder_step",
+                "Reorder Solid Composition Steps",
+                "Reorder evaluation steps in the solid composition recipe",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::ReorderSolidCompositionStepCmd::new(0, 0),
+        );
+        d.alias(
+            "solid.composition_reorder",
+            "model.solid_composition_reorder_step",
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_workplane_to_face",
+                "Align Workplane to Face",
+                "Align drawing workplane to the specified planar face",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::AlignWorkplaneToFaceCmd::new(0),
+        );
+        d.alias("workplane.align_face", "model.align_workplane_to_face");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_workplane_to_selection",
+                "Align Workplane to Selection",
+                "Align drawing workplane to selected faces or opposing face gap",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::AlignWorkplaneToSelectionCmd,
+        );
+        d.alias(
+            "workplane.align_selection",
+            "model.align_workplane_to_selection",
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_objects",
+                "Align Objects",
+                "Align selected objects in 3D space",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_x(),
+        );
+        d.alias("object.align", "model.align_objects");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_center_x",
+                "Align Centers X",
+                "Align centers of selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_x(),
+        );
+        d.alias("align.center_x", "model.align_center_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_center_y",
+                "Align Centers Y",
+                "Align centers of selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_y(),
+        );
+        d.alias("align.center_y", "model.align_center_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_center_z",
+                "Align Centers Z",
+                "Align centers of selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::center_z(),
+        );
+        d.alias("align.center_z", "model.align_center_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_min_x",
+                "Align Left (Min X)",
+                "Align minimum edges of selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::min_x(),
+        );
+        d.alias("align.left", "model.align_min_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_max_x",
+                "Align Right (Max X)",
+                "Align maximum edges of selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::max_x(),
+        );
+        d.alias("align.right", "model.align_max_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_min_y",
+                "Align Bottom (Min Y)",
+                "Align bottom base of selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::min_y(),
+        );
+        d.alias("align.bottom", "model.align_min_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_max_y",
+                "Align Top (Max Y)",
+                "Align top edges of selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::max_y(),
+        );
+        d.alias("align.top", "model.align_max_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_min_z",
+                "Align Back (Min Z)",
+                "Align back edges of selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::min_z(),
+        );
+        d.alias("align.back", "model.align_min_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_max_z",
+                "Align Front (Max Z)",
+                "Align front edges of selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::AlignObjectsCmd::max_z(),
+        );
+        d.alias("align.front", "model.align_max_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.distribute_objects_x",
+                "Distribute Objects X",
+                "Distribute spacing between selected objects along X axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::DistributeObjectsCmd::on_x(),
+        );
+        d.alias("distribute.x", "model.distribute_objects_x");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.distribute_objects_y",
+                "Distribute Objects Y",
+                "Distribute spacing between selected objects along Y axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::DistributeObjectsCmd::on_y(),
+        );
+        d.alias("distribute.y", "model.distribute_objects_y");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.distribute_objects_z",
+                "Distribute Objects Z",
+                "Distribute spacing between selected objects along Z axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::align_commands::DistributeObjectsCmd::on_z(),
+        );
+        d.alias("distribute.z", "model.distribute_objects_z");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.imprint_profile",
+                "Imprint Profile on Surface",
+                "Imprint profile contour and holes onto coplanar surface faces",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::ImprintProfileCmd::new(uuid::Uuid::nil()),
+        );
+        d.alias("surface.imprint", "model.imprint_profile");
+        d.alias("model.surface_imprint", "model.imprint_profile");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.contextual_push_pull",
+                "Contextual Push/Pull",
+                "Push or pull surface region: boundary cap stretches or embedded region extrudes",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::ContextualPushPullCmd::new(1.0),
+        );
+        d.alias("push_pull.contextual", "model.contextual_push_pull");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.scale_to_dimension",
+                "Scale To Dimension",
+                "Scale object along an axis to target dimension in the specified coordinate frame",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::spatial_query::ScaleToDimensionCmd::new(
+                uuid::Uuid::nil(),
+                0,
+                1.0,
+                false,
+                crate::spatial_query::SpatialFrameKind::World,
+            ),
+        );
+        d.alias("transform.scale_to_dimension", "model.scale_to_dimension");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.set_section_plane",
+                "Set Section Plane",
+                "Set or update active non-destructive section inspection plane",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::SetSectionPlaneCmd::new(
+                crate::section_analysis::SectionPlane::default(),
+            ),
+        );
+        d.alias("view.set_section_plane", "model.set_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.clear_section_plane",
+                "Clear Section Plane",
+                "Clear active section inspection plane",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::ClearSectionPlaneCmd,
+        );
+        d.alias("view.clear_section_plane", "model.clear_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.flip_section_plane",
+                "Flip Section Plane",
+                "Invert active section inspection plane normal",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::FlipSectionPlaneCmd,
+        );
+        d.alias("view.flip_section_plane", "model.flip_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.offset_section_plane",
+                "Offset Section Plane",
+                "Adjust active section plane offset numerically",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::OffsetSectionPlaneCmd::new(0.0),
+        );
+        d.alias("view.offset_section_plane", "model.offset_section_plane");
+
         d.register_with_meta(
             CommandMetadata::new(
                 "draw.unite",
@@ -1284,6 +1787,26 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "uv.project_cylindrical",
+                "Cylindrical UV Projection",
+                "Project UVs cylindrically around the Y axis on selected faces (or all)",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvProjectCylindricalCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.project_spherical",
+                "Spherical UV Projection",
+                "Project UVs spherically from the bounding center on selected faces (or all)",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvProjectSphericalCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "uv.equalize_texel_density",
                 "Equalize Texel Density",
                 "Equalize texel density across UV islands",
@@ -1354,6 +1877,18 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.set_transform",
+                "Set Object Transform",
+                "Set absolute position, rotation (Euler XYZ) and scale of an object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            SetAssetTransformCmd::default(),
+        );
+        d.alias("object.set_transform", "model.set_transform");
+        d.alias("asset.set_transform", "model.set_transform");
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.instantiate_asset",
                 "Instantiate Asset",
                 "Instantiate a library asset into the active 3D scene",
@@ -1365,6 +1900,112 @@ impl CommandDispatcher {
                 position: None,
             },
         );
+
+        // Materiais (Material & Shading)
+        use crate::edit_api::AssignMaterialSlotCmd;
+        use crate::material_commands::{
+            CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, RemoveMaterialCmd,
+            SetMaterialPropertiesCmd,
+        };
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.create",
+                "Create Material",
+                "Create a new standard PBR material in the project",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            CreateMaterialCmd::default(),
+        );
+        d.alias("model.create_material", "material.create");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.duplicate",
+                "Duplicate Material",
+                "Duplicate the active or selected material",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            DuplicateMaterialCmd::default(),
+        );
+        d.alias("model.duplicate_material", "material.duplicate");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.remove",
+                "Remove Material",
+                "Remove the specified material from the project",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            RemoveMaterialCmd::default(),
+        );
+        d.alias("model.remove_material", "material.remove");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.edit",
+                "Edit Material",
+                "Edit a scalar or color property of a material",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            EditMaterialCmd::default(),
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.set_properties",
+                "Set Material Properties",
+                "Set multiple PBR properties of a material in a single atomic transaction",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            SetMaterialPropertiesCmd::default(),
+        );
+        d.alias("model.set_material_properties", "material.set_properties");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.assign_slot",
+                "Assign Material Slot",
+                "Assign a material slot to the active object or selected faces",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            AssignMaterialSlotCmd::default(),
+        );
+        d.alias("model.assign_material", "material.assign_slot");
+        d.alias("model.assign_material_slot", "material.assign_slot");
+
+        // Metadados do Objeto (Object Presentation)
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.set_selection_color",
+                "Set Object Selection Color",
+                "Set authored custom selection highlight color for an object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Interface),
+            crate::SetAssetSelectionColorCmd::default(),
+        );
+        d.alias("object.set_selection_color", "model.set_selection_color");
+
+        // Modificadores (Modifiers)
+        use crate::modifier_commands::ModifierCmd;
+        d.register_with_meta(
+            CommandMetadata::new(
+                "modifier.apply",
+                "Apply Modifier",
+                "Bake modifier deformation permanently into base mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ModifierCmd::default(),
+        );
+        d.alias("model.apply_modifier", "modifier.apply");
 
         // 5. Visualização (View)
         d.register_with_meta(
@@ -1873,6 +2514,14 @@ impl Command for InstantiateAssetCmd {
         "instantiate asset"
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::GEOMETRY | ProjectChanges::TRANSFORMS
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.document.assets.iter().any(|a| a.id == self.asset_id) {
             Ok(())
@@ -1882,26 +2531,18 @@ impl Command for InstantiateAssetCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(asset) = state
-            .document
-            .assets
-            .iter()
-            .find(|a| a.id == self.asset_id)
-            .cloned()
-        else {
+        let Some(asset) = state.document.assets.iter().find(|a| a.id == self.asset_id) else {
             return Err(CommandError::Execution("Asset not found".to_string()));
         };
 
-        let mut instance = asset.duplicate();
-        let target_pos = self.position.unwrap_or(state.editor.cursor_3d);
-        for v in &mut instance.mesh.verts {
-            v.pos[0] += target_pos[0];
-            v.pos[1] += target_pos[1];
-            v.pos[2] += target_pos[2];
-        }
+        let target = glam::Vec3::from(self.position.unwrap_or(state.editor.cursor_3d));
+        let instance = asset
+            .duplicate_at_world(target)
+            .map_err(|error| CommandError::Execution(error.to_string()))?;
         let name = instance.name.clone();
         state.document.assets.push(instance);
         state.document.active = state.document.assets.len() - 1;
+        state.set_selection_domain(SelectionDomain::Object);
         state.set_status(format!("Instantiated '{}'", name));
         Ok(())
     }
@@ -1951,6 +2592,10 @@ pub struct DeleteSelectionCmd;
 impl Command for DeleteSelectionCmd {
     fn label(&self) -> &'static str {
         "delete"
+    }
+
+    fn requires_editable_mesh(&self, state: &EditorView<'_>) -> bool {
+        state.edit_mode() != EditMode::Object
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -2012,6 +2657,10 @@ pub struct DuplicateSelectionCmd;
 impl Command for DuplicateSelectionCmd {
     fn label(&self) -> &'static str {
         "duplicate"
+    }
+
+    fn requires_editable_mesh(&self, state: &EditorView<'_>) -> bool {
+        state.edit_mode() != EditMode::Object
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -2077,6 +2726,10 @@ impl Command for SelectAllCmd {
         false
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
             && state.document.active_mesh().is_none()
@@ -2126,6 +2779,10 @@ impl Command for ClearSelectionCmd {
         false
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
             && state.document.active_mesh().is_none()
@@ -2139,6 +2796,8 @@ impl Command for ClearSelectionCmd {
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.selection_domain() == crate::SelectionDomain::Object {
             state.select_object(None, false);
+            state.editor.active_shape = None;
+            state.editor.planar_selection = Default::default();
             return Ok(());
         }
         let Some(mesh) = state.document.active_mesh_mut() else {
@@ -2160,6 +2819,10 @@ impl Command for InvertSelectionCmd {
 
     fn is_destructive(&self) -> bool {
         false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -2215,6 +2878,10 @@ impl Command for SetSelectionDomainCmd {
         false
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_selection_domain(self.0);
         Ok(())
@@ -2232,6 +2899,10 @@ impl Command for CycleSelectionDomainCmd {
 
     fn is_destructive(&self) -> bool {
         false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
@@ -2273,6 +2944,8 @@ impl Command for SeparateSelectionCmd {
         };
         let orig_name = active_asset.name.clone();
         let mut orig_mesh = active_asset.mesh.to_owned_value();
+        let object_transform = active_asset.transform;
+        let legacy_origin = active_asset.origin;
         let mat_id = active_asset.material_id;
         let base_color = active_asset.base_color;
         let collection = active_asset.collection.clone();
@@ -2351,6 +3024,8 @@ impl Command for SeparateSelectionCmd {
         // 3. Adiciona a malha separada como novo objeto/asset na cena
         let new_name = format!("{}_sep", orig_name);
         let mut new_asset = petunia_project::Asset::new(&new_name, sep_mesh);
+        new_asset.set_object_transform(object_transform);
+        new_asset.origin = legacy_origin;
         new_asset.material_id = mat_id;
         new_asset.base_color = base_color;
         new_asset.collection = collection;
@@ -2377,6 +3052,10 @@ impl Command for ClearLocationCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2392,33 +3071,7 @@ impl Command for ClearLocationCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(active) = state.document.active_mut() else {
-            return Err(CommandError::NoActiveAsset);
-        };
-        let delta = [
-            -active.position[0],
-            -active.position[1],
-            -active.position[2],
-        ];
-        active.position = [0.0, 0.0, 0.0];
-        if delta[0].abs() > 1e-6 || delta[1].abs() > 1e-6 || delta[2].abs() > 1e-6 {
-            for v in &mut active.mesh.verts {
-                v.pos[0] += delta[0];
-                v.pos[1] += delta[1];
-                v.pos[2] += delta[2];
-            }
-            if let Some(orig) = active.origin.as_mut() {
-                orig[0] += delta[0];
-                orig[1] += delta[1];
-                orig[2] += delta[2];
-            }
-            active
-                .mesh
-                .validate_invariants()
-                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
-        }
-        state.set_status("Cleared location to [0, 0, 0]");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::Location)
     }
 }
 
@@ -2435,6 +3088,10 @@ impl Command for ClearRotationCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2450,35 +3107,7 @@ impl Command for ClearRotationCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(active) = state.document.active_mut() else {
-            return Err(CommandError::NoActiveAsset);
-        };
-        let rot = active.rotation;
-        active.rotation = [0.0, 0.0, 0.0];
-        if rot[0].abs() > 1e-5 || rot[1].abs() > 1e-5 || rot[2].abs() > 1e-5 {
-            let inv_rot = glam::Quat::from_euler(
-                glam::EulerRot::XYZ,
-                rot[0].to_radians(),
-                rot[1].to_radians(),
-                rot[2].to_radians(),
-            )
-            .inverse();
-            let pivot = glam::Vec3::from(
-                active
-                    .origin
-                    .unwrap_or_else(|| active.mesh.center().to_array()),
-            );
-            for v in &mut active.mesh.verts {
-                let p = glam::Vec3::from(v.pos);
-                v.pos = (pivot + inv_rot * (p - pivot)).to_array();
-            }
-            active
-                .mesh
-                .validate_invariants()
-                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
-        }
-        state.set_status("Cleared rotation to [0, 0, 0]");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::Rotation)
     }
 }
 
@@ -2495,6 +3124,10 @@ impl Command for ClearScaleCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2510,47 +3143,7 @@ impl Command for ClearScaleCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(active) = state.document.active_mut() else {
-            return Err(CommandError::NoActiveAsset);
-        };
-        let scale = active.scale;
-        active.scale = [1.0, 1.0, 1.0];
-        let sx = if scale[0].abs() > 1e-5 {
-            1.0 / scale[0]
-        } else {
-            1.0
-        };
-        let sy = if scale[1].abs() > 1e-5 {
-            1.0 / scale[1]
-        } else {
-            1.0
-        };
-        let sz = if scale[2].abs() > 1e-5 {
-            1.0 / scale[2]
-        } else {
-            1.0
-        };
-        if (scale[0] - 1.0).abs() > 1e-5
-            || (scale[1] - 1.0).abs() > 1e-5
-            || (scale[2] - 1.0).abs() > 1e-5
-        {
-            let inv_scale = glam::Vec3::new(sx, sy, sz);
-            let pivot = glam::Vec3::from(
-                active
-                    .origin
-                    .unwrap_or_else(|| active.mesh.center().to_array()),
-            );
-            for v in &mut active.mesh.verts {
-                let p = glam::Vec3::from(v.pos);
-                v.pos = (pivot + inv_scale * (p - pivot)).to_array();
-            }
-            active
-                .mesh
-                .validate_invariants()
-                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
-        }
-        state.set_status("Cleared scale to [1, 1, 1]");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::Scale)
     }
 }
 
@@ -2567,6 +3160,10 @@ impl Command for ClearAllTransformsCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2582,12 +3179,125 @@ impl Command for ClearAllTransformsCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        ClearScaleCmd.execute(state)?;
-        ClearRotationCmd.execute(state)?;
-        ClearLocationCmd.execute(state)?;
-        state.set_status("Cleared all transforms to default");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::All)
     }
+}
+
+#[derive(Clone, Copy)]
+enum ClearFramePart {
+    Location,
+    Rotation,
+    Scale,
+    All,
+}
+
+fn clear_object_frame(
+    state: &mut CommandContext<'_>,
+    part: ClearFramePart,
+) -> Result<(), CommandError> {
+    let asset = state
+        .document
+        .active_mut()
+        .ok_or(CommandError::NoActiveAsset)?;
+    if asset.locked {
+        return Err(CommandError::Execution("Asset is locked".into()));
+    }
+    if asset.has_legacy_baked_transform() {
+        return clear_legacy_object_frame(asset, part);
+    }
+    let mut transform = asset.transform;
+    match part {
+        ClearFramePart::Location => transform.translation = [0.0; 3],
+        ClearFramePart::Rotation => transform.rotation = [0.0, 0.0, 0.0, 1.0],
+        ClearFramePart::Scale => transform.scale = [1.0; 3],
+        ClearFramePart::All => transform = petunia_project::ObjectTransform::IDENTITY,
+    }
+    if !transform.is_finite() || !transform.to_mat4().inverse().is_finite() {
+        return Err(CommandError::Execution("Invalid object frame".into()));
+    }
+    if transform == asset.transform {
+        return Err(CommandError::NoChange("Object frame already reset".into()));
+    }
+    asset.set_object_transform(transform);
+    state.set_status("Object frame reset");
+    Ok(())
+}
+
+fn clear_legacy_object_frame(
+    asset: &mut petunia_project::Asset,
+    part: ClearFramePart,
+) -> Result<(), CommandError> {
+    use glam::{EulerRot, Mat4, Quat, Vec3};
+    let position = Vec3::from(asset.position);
+    let rotation = Vec3::from(asset.rotation);
+    let scale = Vec3::from(asset.scale);
+    let pivot = asset.origin.map_or_else(|| asset.mesh.center(), Vec3::from);
+    if !position.is_finite() || !rotation.is_finite() || !scale.is_finite() || !pivot.is_finite() {
+        return Err(CommandError::Execution("Invalid legacy transform".into()));
+    }
+    let world = asset.world_matrix();
+    let pivot = world.transform_point3(pivot);
+    let around = |matrix| Mat4::from_translation(pivot) * matrix * Mat4::from_translation(-pivot);
+    let mut matrix = Mat4::IDENTITY;
+    let reset_scale = matches!(part, ClearFramePart::Scale | ClearFramePart::All);
+    let reset_rotation = matches!(part, ClearFramePart::Rotation | ClearFramePart::All);
+    let reset_location = matches!(part, ClearFramePart::Location | ClearFramePart::All);
+    if reset_scale {
+        matrix = around(Mat4::from_scale(scale.recip())) * matrix;
+    }
+    if reset_rotation {
+        let q = Quat::from_euler(
+            EulerRot::XYZ,
+            rotation.x.to_radians(),
+            rotation.y.to_radians(),
+            rotation.z.to_radians(),
+        );
+        matrix = around(Mat4::from_quat(q.inverse())) * matrix;
+    }
+    if reset_location {
+        matrix = Mat4::from_translation(-position) * matrix;
+    }
+    let matrix = world.inverse() * matrix * world;
+    if !matrix.is_finite() {
+        return Err(CommandError::Execution("Invalid legacy transform".into()));
+    }
+    if matrix == Mat4::IDENTITY {
+        return Err(CommandError::NoChange(
+            "Legacy transform already reset".into(),
+        ));
+    }
+    if asset.parametric.is_some() || asset.skeleton_id.is_some() || asset.skin_data.is_some() {
+        return Err(CommandError::Execution(
+            "Resetting baked procedural/rigged transforms requires explicit source compensation"
+                .into(),
+        ));
+    }
+    let mut mesh = (*asset.mesh).clone();
+    for vertex in &mut mesh.verts {
+        let next = matrix.transform_point3(vertex.vec());
+        if !next.is_finite() {
+            return Err(CommandError::Execution("Legacy transform overflow".into()));
+        }
+        vertex.pos = next.to_array();
+    }
+    let origin = asset
+        .origin
+        .map(|p| matrix.transform_point3(Vec3::from(p)).to_array());
+    if origin.is_some_and(|p| !Vec3::from(p).is_finite()) {
+        return Err(CommandError::Execution("Legacy origin overflow".into()));
+    }
+    asset.mesh = mesh.into();
+    asset.origin = origin;
+    if reset_location {
+        asset.position = [0.0; 3];
+    }
+    if reset_rotation {
+        asset.rotation = [0.0; 3];
+    }
+    if reset_scale {
+        asset.scale = [1.0; 3];
+    }
+    Ok(())
 }
 
 /// Comando para subdividir a geometria selecionada na malha ativa.
@@ -2604,6 +3314,8 @@ impl Command for SubdivideSelectionCmd {
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.document.active_mesh().is_none() {
             Err("No active mesh")
+        } else if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
         } else if state.selection.is_empty()
             && state
                 .document
@@ -3286,6 +3998,121 @@ impl Command for ToggleVisibilityAssetCmd {
     }
 }
 
+/// Comando para definir as transformações absolutas (posição, rotação Euler XYZ em graus, escala) de um asset.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SetAssetTransformCmd {
+    pub asset_index: Option<usize>,
+    pub translation: Option<[f32; 3]>,
+    pub rotation_euler_deg: Option<[f32; 3]>,
+    pub scale: Option<[f32; 3]>,
+}
+
+pub type SetObjectTransformCmd = SetAssetTransformCmd;
+
+impl Command for SetAssetTransformCmd {
+    fn label(&self) -> &'static str {
+        "set object transform"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get(idx) else {
+            return Err("No active object");
+        };
+        if asset.locked {
+            return Err("Active object is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get_mut(idx) else {
+            return Err(CommandError::InvalidAssetIndex(idx));
+        };
+        if asset.locked {
+            return Err(CommandError::Execution("Asset is locked".into()));
+        }
+
+        if let Some(pos) = self.translation
+            && !pos.iter().all(|v| v.is_finite())
+        {
+            return Err(CommandError::Execution(
+                "Translation contains non-finite values".into(),
+            ));
+        }
+        if let Some(rot) = self.rotation_euler_deg
+            && !rot.iter().all(|v| v.is_finite())
+        {
+            return Err(CommandError::Execution(
+                "Rotation contains non-finite values".into(),
+            ));
+        }
+        if let Some(scale) = self.scale {
+            if !scale.iter().all(|v| v.is_finite()) {
+                return Err(CommandError::Execution(
+                    "Scale contains non-finite values".into(),
+                ));
+            }
+            if scale.iter().any(|v| v.abs() < 1e-6) {
+                return Err(CommandError::Execution("Scale cannot be zero".into()));
+            }
+        }
+
+        let target_pos = self.translation.unwrap_or(asset.position);
+        let target_rot = self.rotation_euler_deg.unwrap_or(asset.rotation);
+        let target_scale = self.scale.unwrap_or(asset.scale);
+        if let Some((channel, axis)) = asset.transform_locks.first_violation(
+            [asset.position, asset.rotation, asset.scale],
+            [target_pos, target_rot, target_scale],
+        ) {
+            return Err(CommandError::Execution(format!(
+                "{} {} está travada",
+                channel.label(),
+                petunia_project::transform_locks::axis_label(axis)
+            )));
+        }
+
+        if target_pos == asset.position
+            && target_rot == asset.rotation
+            && target_scale == asset.scale
+        {
+            return Err(CommandError::NoChange("Transform unchanged".into()));
+        }
+
+        let quat = glam::Quat::from_euler(
+            glam::EulerRot::XYZ,
+            target_rot[0].to_radians(),
+            target_rot[1].to_radians(),
+            target_rot[2].to_radians(),
+        );
+        let transform = petunia_project::ObjectTransform::from_trs(
+            glam::Vec3::from_array(target_pos),
+            quat,
+            glam::Vec3::from_array(target_scale),
+        );
+        if !transform.is_finite() || !transform.to_mat4().inverse().is_finite() {
+            return Err(CommandError::Execution("Invalid object transform".into()));
+        }
+
+        asset.set_object_transform_with_euler(transform, target_rot);
+        state.set_status("Object transform updated");
+        Ok(())
+    }
+}
+
 /// Comando para definir a coleção organizadora de um asset.
 #[derive(Debug, Clone)]
 pub struct SetAssetCollectionCmd {
@@ -3306,8 +4133,13 @@ impl Command for SetAssetCollectionCmd {
         let Some(asset) = state.document.assets.get_mut(self.asset_index) else {
             return Err(CommandError::InvalidAssetIndex(self.asset_index));
         };
-        asset.collection = self.collection.clone();
+        let left = std::mem::replace(&mut asset.collection, self.collection.clone());
         let name = asset.name.clone();
+        if let Some(group) = left.as_deref()
+            && self.collection.as_deref() != Some(group)
+        {
+            state.document.project.prune_collection_if_empty(group);
+        }
         if let Some(ref col) = self.collection {
             state.set_status(format!("Moved {} to collection {}", name, col));
         } else {
@@ -3496,7 +4328,9 @@ impl Command for ImportObjCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        state.set_status("Import OBJ requested");
+        // O comando pede a importação; quem abre o diálogo é a interface
+        // (comando programático nunca abre janela).
+        state.request_import("obj");
         Ok(())
     }
 }
@@ -3515,7 +4349,8 @@ impl Command for ImportGltfCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        state.set_status("Import glTF/GLB requested");
+        // O comando pede a importação; quem abre o diálogo é a interface.
+        state.request_import("gltf");
         Ok(())
     }
 }
@@ -3646,11 +4481,16 @@ impl Command for RedoCmd {
 #[derive(Debug, Clone)]
 pub struct ExtrudeSelectedCmd {
     pub dist: f32,
+    /// Modo da extrusão (C8); `None` usa o modo da ferramenta.
+    pub mode: Option<petunia_mesh::ExtrudeMode>,
 }
 
 impl Default for ExtrudeSelectedCmd {
     fn default() -> Self {
-        Self { dist: 0.5 }
+        Self {
+            dist: 0.5,
+            mode: None,
+        }
     }
 }
 
@@ -3664,6 +4504,8 @@ impl Command for ExtrudeSelectedCmd {
             Err("Requires Edit mode")
         } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
+        } else if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
         } else if !state.selection.faces.is_empty()
             || state
                 .document
@@ -3682,6 +4524,7 @@ impl Command for ExtrudeSelectedCmd {
         } else {
             state.tools.extrude_dist
         };
+        let mode = self.mode.unwrap_or(state.tools.extrude_mode);
         let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
@@ -3691,9 +4534,9 @@ impl Command for ExtrudeSelectedCmd {
         if !mesh.faces.iter().any(|f| f.selected) {
             return Err(CommandError::EmptySelection);
         }
-        mesh.extrude_selected(dist);
+        mesh.extrude_selected_with_mode(dist, mode);
         state.sync_selection();
-        state.set_status(format!("Extruded faces ({:.2})", dist));
+        state.set_status(format!("Extruded faces ({dist:.2}, {})", mode.id()));
         Ok(())
     }
 }
@@ -3717,6 +4560,8 @@ impl Command for PushPullToolCmd {
             Err("Requires Edit mode")
         } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
+        } else if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
         } else if state
             .document
             .active_mesh()
@@ -3769,85 +4614,8 @@ impl Command for KnifeToolCmd {
     }
 }
 
-/// Operação booleana entre o ativo e o operando escolhido (Fuse/Cut/Intersect).
-#[derive(Debug, Clone, Copy)]
-pub struct BooleanOpCmd {
-    pub op: petunia_mesh::boolean::BooleanOp,
-}
-
-impl BooleanOpCmd {
-    pub const fn new(op: petunia_mesh::boolean::BooleanOp) -> Self {
-        Self { op }
-    }
-
-    const fn label_for(self) -> &'static str {
-        match self.op {
-            petunia_mesh::boolean::BooleanOp::Union => "fuse",
-            petunia_mesh::boolean::BooleanOp::Difference => "cut",
-            petunia_mesh::boolean::BooleanOp::Intersection => "intersect",
-        }
-    }
-}
-
-impl Command for BooleanOpCmd {
-    fn label(&self) -> &'static str {
-        self.label_for()
-    }
-
-    /// Sem checkpoint do dispatcher: `apply_boolean` captura a transação única.
-    /// Com os dois, cada operação empilharia duas entradas de undo.
-    fn is_destructive(&self) -> bool {
-        false
-    }
-
-    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if state.document.active_mesh().is_none() {
-            return Err("No active mesh");
-        }
-        let Some(operand) = state.editor.tools.boolean_operand else {
-            return Err("Choose a boolean operand first");
-        };
-        if !state
-            .document
-            .assets
-            .iter()
-            .any(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand no longer exists");
-        }
-        if state
-            .document
-            .active()
-            .is_some_and(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand cannot be the active object");
-        }
-        Ok(())
-    }
-
-    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        match state.apply_boolean(self.op) {
-            Ok(verts) => {
-                let detail = match &state.editor.tools.boolean_report {
-                    Some(r) if r.fell_back => format!(
-                        "{} triangles (cleanup refused: kernel result kept)",
-                        r.faces
-                    ),
-                    Some(r) => format!(
-                        "{} faces: {} quads, {} n-gons, {} triangles (was {} triangles)",
-                        r.faces, r.quads, r.ngons, r.triangles, r.kernel_triangles
-                    ),
-                    None => format!("{verts} vertices"),
-                };
-                state.set_status(format!("{}: {detail}", self.label_for()));
-                Ok(())
-            }
-            Err(error) => Err(CommandError::Execution(error.to_string())),
-        }
-    }
-}
-
-/// **Join**: funde o operando no ativo preservando as duas topologias.
+/// **Join**: funde os demais objetos selecionados no ativo preservando todas as
+/// topologias lado a lado (sem kernel booleano; booleanas são só por nós).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JoinObjectsCmd;
 
@@ -3856,38 +4624,30 @@ impl Command for JoinObjectsCmd {
         "join"
     }
 
-    /// Sem checkpoint do dispatcher: `join_active_with_operand` captura a única.
+    /// Sem checkpoint do dispatcher: `join_selected_into_active` captura a única.
     fn is_destructive(&self) -> bool {
         false
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if state.document.active_mesh().is_none() {
+        let Some(active) = state.document.active() else {
             return Err("No active mesh");
-        }
-        let Some(operand) = state.editor.tools.boolean_operand else {
-            return Err("Choose a boolean operand first");
         };
-        if !state
-            .document
+        let others = state
+            .selection
             .assets
             .iter()
-            .any(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand no longer exists");
-        }
-        if state
-            .document
-            .active()
-            .is_some_and(|asset| asset.id == operand)
-        {
-            return Err("The boolean operand cannot be the active object");
+            .filter(|id| **id != active.id)
+            .filter(|id| state.document.assets.iter().any(|asset| asset.id == **id))
+            .count();
+        if others == 0 {
+            return Err("Select the objects to join and keep one active");
         }
         Ok(())
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        match state.join_active_with_operand() {
+        match state.join_selected_into_active() {
             Ok(verts) => {
                 state.set_status(format!("Join: {verts} vertices merged"));
                 Ok(())
@@ -4012,7 +4772,9 @@ impl Command for BevelCmd {
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if let Some(mesh) = state.document.active_mesh() {
+        if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
+        } else if let Some(mesh) = state.document.active_mesh() {
             let has_edges = !state.selection.edges.is_empty() || !mesh.selected_edges.is_empty();
             let has_verts =
                 !state.selection.verts.is_empty() || mesh.verts.iter().any(|v| v.selected);
@@ -4310,8 +5072,8 @@ impl Command for ToggleSnapCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        state.editor.snap_enabled = !state.editor.snap_enabled;
-        state.set_status(if state.editor.snap_enabled {
+        state.editor.snap_settings.enabled = !state.editor.snap_settings.enabled;
+        state.set_status(if state.editor.snap_settings.enabled {
             "Magnet snap enabled"
         } else {
             "Magnet snap disabled"
@@ -5349,15 +6111,10 @@ impl Command for UpdateSplineCmd {
         self.spline
             .validate_authoring()
             .map_err(|_| "Spline data is invalid")?;
-        if let Some(profile) = project
-            .profiles
-            .iter()
-            .find(|profile| profile.spline_id == self.spline.id)
-        {
-            profile
-                .validate_authoring(&self.spline)
-                .map_err(|_| "Profile spline data is invalid")?;
-        }
+        validate_profile_edit(project, self.spline.id, |spline| {
+            *spline = self.spline.clone();
+            Ok(())
+        })?;
         Ok(())
     }
 
@@ -5438,6 +6195,9 @@ impl Command for UpdateProfileCmd {
         let current = project
             .get_profile(self.profile.id)
             .ok_or("Profile not found")?;
+        if current.locked {
+            return Err("Shape is locked");
+        }
         if current.spline_id != self.profile.spline_id {
             return Err("Profile spline cannot be replaced");
         }
@@ -5484,6 +6244,24 @@ impl Command for DeleteProfileCmd {
         let profile = project
             .get_profile(self.profile_id)
             .ok_or("Profile not found")?;
+        if profile.locked {
+            return Err("Shape is locked");
+        }
+        if project
+            .assets
+            .iter()
+            .filter_map(|a| a.geometry_source.as_ref())
+            .any(|g| {
+                g.depends_on_shape(profile.id)
+                    || g.depends_on_spline(profile.spline_id)
+                    || profile
+                        .hole_splines
+                        .iter()
+                        .any(|id| g.depends_on_spline(*id))
+            })
+        {
+            return Err("Shape is used by a generator");
+        }
         if project
             .path_generators
             .iter()
@@ -5511,6 +6289,9 @@ impl Command for DeleteProfileCmd {
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let profile = state.document.project.remove_profile(self.profile_id)?;
         state.document.project.remove_spline(profile.spline_id)?;
+        for id in profile.hole_splines {
+            state.document.project.remove_spline(id)?;
+        }
         Ok(())
     }
 }
@@ -5734,28 +6515,34 @@ fn validate_profile_edit(
     spline_id: uuid::Uuid,
     apply: impl FnOnce(&mut SplineResource) -> Result<(), SplineError>,
 ) -> Result<(), &'static str> {
-    let Some(profile) = project
-        .profiles
-        .iter()
-        .find(|profile| profile.spline_id == spline_id)
-    else {
+    let Some(profile) = project.profiles.iter().find(|profile| {
+        profile.spline_id == spline_id || profile.hole_splines.contains(&spline_id)
+    }) else {
         return Ok(());
     };
+    if profile.locked {
+        return Err("Shape is locked");
+    }
     let mut spline = project
         .get_spline(spline_id)
         .ok_or("Spline not found")?
         .clone();
     apply(&mut spline).map_err(|_| "Spline edit is invalid")?;
-    profile
+    if profile.hole_splines.contains(&spline_id) && (!spline.closed || spline.points.len() < 3) {
+        return Err("Inner contours must remain closed with at least three points");
+    }
+    let mut contour_shape = profile.clone();
+    contour_shape.spline_id = spline_id;
+    contour_shape
         .validate_authoring(&spline)
-        .map_err(|_| "Edit would break the Profile (must stay planar and unattached)")
+        .map_err(|_| "Edit would break the shape (contours must stay planar and unattached)")
 }
 
 fn spline_owned_by_profile(project: &petunia_project::Project, spline_id: uuid::Uuid) -> bool {
     project
         .profiles
         .iter()
-        .any(|profile| profile.spline_id == spline_id)
+        .any(|profile| profile.spline_id == spline_id || profile.hole_splines.contains(&spline_id))
 }
 
 #[derive(Debug, Clone)]
@@ -6753,6 +7540,64 @@ impl Command for UvProjectCubeCmd {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.project_cube();
+        state.editor.tools.uv_selection.clear();
+        Ok(())
+    }
+}
+
+/// Projeção UV cilíndrica sobre as faces selecionadas (ou toda a malha se vazio).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvProjectCylindricalCmd;
+
+impl Command for UvProjectCylindricalCmd {
+    fn label(&self) -> &'static str {
+        "uv cylindrical projection"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let faces = {
+            let Some(mesh) = state.document.active_mesh() else {
+                return Err(CommandError::NoActiveAsset);
+            };
+            state.editor.uv_selection.faces(mesh)
+        };
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.project_cylindrical(&faces);
+        state.editor.tools.uv_selection.clear();
+        Ok(())
+    }
+}
+
+/// Projeção UV esférica sobre as faces selecionadas (ou toda a malha se vazio).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvProjectSphericalCmd;
+
+impl Command for UvProjectSphericalCmd {
+    fn label(&self) -> &'static str {
+        "uv spherical projection"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let faces = {
+            let Some(mesh) = state.document.active_mesh() else {
+                return Err(CommandError::NoActiveAsset);
+            };
+            state.editor.uv_selection.faces(mesh)
+        };
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.project_spherical(&faces);
         state.editor.tools.uv_selection.clear();
         Ok(())
     }

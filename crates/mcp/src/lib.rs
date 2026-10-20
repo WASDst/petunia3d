@@ -22,5 +22,8 @@ pub mod server;
 
 pub use rmcp::ErrorData as McpError;
 pub use server::{
-    AuditEntry, McpPolicy, PetuniaMcp, serve_stdio, serve_stdio_blocking, serve_stdio_with,
+    AddPrimitiveParams, AssetSummaryDto, AuditEntry, BatchParams, BatchReport, ExecuteIntentParams,
+    ExportObjParams, IntentParams, IntentReport, McpPluginRegistration, McpPolicy, PetuniaMcp,
+    PluginToolParams, PluginToolReport, SessionStatusDto, serve_stdio, serve_stdio_blocking,
+    serve_stdio_with,
 };

@@ -21,7 +21,10 @@ pub mod instance;
 pub mod manifest;
 pub mod registry;
 
-pub use dispatch::{PluginApiError, answer_query, apply_intents};
+pub use dispatch::{
+    PluginApiError, answer_plugin_query, answer_query, apply_intents, detect_missing_plugins,
+    get_plugin_data, set_plugin_data,
+};
 pub use host::{
     CapabilityError, Host, HostConfig, LuaCommand, PluginCapabilities, PluginError, PluginId,
     ValidatedIntent,

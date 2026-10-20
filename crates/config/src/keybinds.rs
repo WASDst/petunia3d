@@ -9,7 +9,7 @@
 //! ```
 //! Ações desconhecidas no TOML são ignoradas (não quebra).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 
 use self::winit_keys::KeyCode;
@@ -61,6 +61,8 @@ fn parse_key(name: &str) -> Option<KeyCode> {
                 'Y' => KeyCode::KeyY,
                 _ => KeyCode::KeyZ,
             }),
+            '[' => Some(KeyCode::BracketLeft),
+            ']' => Some(KeyCode::BracketRight),
             '/' => Some(KeyCode::Slash),
             '.' => Some(KeyCode::Period),
             ',' => Some(KeyCode::Comma),
@@ -148,16 +150,22 @@ fn parse_key(name: &str) -> Option<KeyCode> {
 /// `"Ctrl+Shift+Z"` -> Binding.
 pub fn parse_binding(s: &str) -> Option<Binding> {
     let mut mods = Mods2::default();
-    let mut key = None;
-    for part in s.split('+') {
-        match part.trim() {
-            "Ctrl" | "Control" => mods.ctrl = true,
-            "Shift" => mods.shift = true,
-            "Alt" => mods.alt = true,
-            other => key = parse_key(other),
+    let mut remaining = s.trim();
+    while let Some((part, rest)) = remaining.split_once('+') {
+        let slot = match part.trim() {
+            "Ctrl" | "Control" => &mut mods.ctrl,
+            "Shift" => &mut mods.shift,
+            "Alt" => &mut mods.alt,
+            _ => break,
+        };
+        if *slot {
+            return None;
         }
+        *slot = true;
+        remaining = rest.trim();
     }
-    key.map(|key| Binding { key, mods })
+    // The remaining key may itself contain '+', e.g. "Numpad +".
+    parse_key(remaining).map(|key| Binding { key, mods })
 }
 
 impl Binding {
@@ -235,6 +243,7 @@ pub const POINTER_CURSOR_PLACE: &str = "pointer.cursor_place";
 /// Modificador da roda para ajuste contextual (contagem/raio).
 pub const POINTER_ADJUST: &str = "pointer.adjust";
 /// Modificador para seleção de loop/conectado via pointer.
+pub const POINTER_INFERENCE_LOCK: &str = "pointer.inference_lock";
 pub const POINTER_LOOP: &str = "pointer.loop";
 /// Modificador que transforma LMB em orbit; usado pelo perfil Maya-like.
 pub const POINTER_ORBIT_LEFT: &str = "pointer.orbit_left";
@@ -251,6 +260,8 @@ pub const POINTER_DECAL_ROTATE: &str = "pointer.decal_rotate";
 #[derive(Debug, Default, Clone)]
 pub struct Keybinds {
     map: HashMap<String, Binding>,
+    /// Explicit tombstones survive inheritance from newer defaults.
+    disabled: HashSet<String>,
     /// Modificadores de ponteiro (`[pointer]`): ação -> modificadores.
     pointer: HashMap<String, Mods2>,
 }
@@ -475,10 +486,11 @@ impl Keybinds {
             }
             if let Some(m) = inner.as_table() {
                 for (action, val) in m {
-                    if let Some(s) = val.as_str()
-                        && let Some(b) = parse_binding(s)
-                    {
-                        self.map.insert(format!("{section}.{action}"), b);
+                    let id = format!("{section}.{action}");
+                    if val.as_bool() == Some(false) {
+                        self.remove_binding(&id);
+                    } else if let Some(b) = val.as_str().and_then(parse_binding) {
+                        self.set_binding(id, b);
                     }
                 }
             }
@@ -538,17 +550,11 @@ impl Keybinds {
     /// Ações (além de `action`) que já usam `binding` num contexto que colide
     /// com o dela: mesmo contexto, ou global/view/window contra qualquer um.
     pub fn conflicts_for(&self, action: &str, binding: &Binding) -> Vec<String> {
-        let context = |a: &str| a.split('.').next().unwrap_or("global").to_string();
-        let shared = |c: &str| matches!(c, "global" | "view" | "window");
-        let mine = context(action);
         let mut out: Vec<String> = self
             .map
             .iter()
             .filter(|(other, b)| {
-                other.as_str() != action && *b == binding && {
-                    let theirs = context(other);
-                    theirs == mine || shared(&theirs) || shared(&mine)
-                }
+                other.as_str() != action && *b == binding && contexts_overlap(action, other)
             })
             .map(|(other, _)| other.clone())
             .collect();
@@ -576,28 +582,31 @@ impl Keybinds {
     pub fn find(&self, key: KeyCode, mods: Mods2) -> Option<&str> {
         self.map
             .iter()
-            .find(|(_, b)| b.key == key && b.mods == mods)
+            .filter(|(_, b)| b.key == key && b.mods == mods)
             .map(|(a, _)| a.as_str())
+            .min()
     }
 
-    /// Resolve within the active workspace before global/view/window actions.
-    /// Unordered map iteration must not route a Model shortcut to Paint.
+    /// Resolve workspace → view → window → global. A collision within the same
+    /// level is unresolved; diagnostics identify the actions to rebind.
     pub fn find_in_context(&self, key: KeyCode, mods: Mods2, context: &str) -> Option<&str> {
-        self.map
-            .iter()
-            .filter(|(action, binding)| {
-                binding.key == key
-                    && binding.mods == mods
-                    && (action.starts_with(&format!("{context}."))
-                        || action.starts_with("global.")
-                        || action.starts_with("view.")
-                        || action.starts_with("window."))
+        let rank = |action: &str| match action.split('.').next().unwrap_or("") {
+            c if c == context => 0,
+            "view" => 1,
+            "window" => 2,
+            "global" => 3,
+            _ => 4,
+        };
+        let candidates = || {
+            self.map.iter().filter(|(action, binding)| {
+                binding.key == key && binding.mods == mods && rank(action) < 4
             })
-            .min_by(|(a, _), (b, _)| {
-                (!a.starts_with(&format!("{context}.")), a.as_str())
-                    .cmp(&(!b.starts_with(&format!("{context}.")), b.as_str()))
-            })
-            .map(|(action, _)| action.as_str())
+        };
+        let best_rank = candidates().map(|(action, _)| rank(action)).min()?;
+        let mut matches = candidates().filter(|(action, _)| rank(action) == best_rank);
+        let (action, _) = matches.next()?;
+        // Ambiguous custom maps need user correction, not alphabetical routing.
+        matches.next().is_none().then_some(action.as_str())
     }
 
     /// Retorna a representação textual do atalho para uma ação (ex: `"model.extrude"` -> `"E"`).
@@ -623,7 +632,9 @@ impl Keybinds {
 
     /// Adiciona ou atualiza um atalho para uma ação.
     pub fn set_binding(&mut self, action: impl Into<String>, binding: Binding) {
-        self.map.insert(action.into(), binding);
+        let action = action.into();
+        self.disabled.remove(&action);
+        self.map.insert(action, binding);
     }
 
     /// Modificador de uma ação de ponteiro (`pointer.alternate`, ...).
@@ -639,7 +650,8 @@ impl Keybinds {
             | POINTER_PAN
             | POINTER_CURSOR_PLACE
             | POINTER_PAINT_STRAIGHT
-            | POINTER_DECAL_SCALE => Mods2 {
+            | POINTER_DECAL_SCALE
+            | POINTER_INFERENCE_LOCK => Mods2 {
                 shift: true,
                 ..Mods2::default()
             },
@@ -659,6 +671,7 @@ impl Keybinds {
 
     /// Remove um atalho de uma ação.
     pub fn remove_binding(&mut self, action: &str) -> Option<Binding> {
+        self.disabled.insert(action.to_string());
         self.map.remove(action)
     }
 
@@ -671,17 +684,24 @@ impl Keybinds {
             let mut parts = action.splitn(2, '.');
             let section = parts.next().unwrap_or("global");
             let subaction = parts.next().unwrap_or(action);
+            sections.entry(section).or_default().insert(
+                subaction,
+                toml::Value::String(binding.to_shortcut_string()).to_string(),
+            );
+        }
+
+        for action in &self.disabled {
+            let (section, subaction) = action.split_once('.').unwrap_or(("global", action));
             sections
                 .entry(section)
                 .or_default()
-                .insert(subaction, binding.to_shortcut_string());
+                .insert(subaction, "false".into());
         }
-
         let mut out = String::new();
         for (sec, entries) in sections {
             out.push_str(&format!("[{sec}]\n"));
             for (act, key) in entries {
-                out.push_str(&format!("{act} = \"{key}\"\n"));
+                out.push_str(&format!("{act} = {key}\n"));
             }
             out.push('\n');
         }
@@ -740,7 +760,7 @@ impl Keybinds {
                             shortcut: bind_a.to_shortcut_string(),
                             kind: ConflictKind::Exact,
                         });
-                    } else if ctx_a == "global" || ctx_b == "global" {
+                    } else if contexts_overlap(act_a, act_b) {
                         conflicts.push(KeyConflict {
                             action_a: act_a.clone(),
                             action_b: act_b.clone(),
@@ -784,16 +804,29 @@ impl Keybinds {
             ("view.camera_persp", "Numpad 0"),
             ("view.camera_opposite", "Numpad 9"),
             ("view.isolate", "Numpad /"),
+            // Menus em torta da vista 3D (ADR-C16, B9). Adicionar usa `model.primitives`.
+            ("view.pie_view", "Alt+V"),
+            ("model.pie_select_domain", "Alt+D"),
             ("window.command_palette", "Ctrl+P"),
             ("window.reference_manager", "Shift+R"),
             ("model.select_vertex", "1"),
             ("model.select_face", "3"),
             ("model.select_edge", "2"),
             ("model.select_object", "4"),
+            ("animate.toggle_play", "Space"),
+            ("animate.step_backward", "Left"),
+            ("animate.step_forward", "Right"),
+            ("animate.insert_keyframe", "I"),
+            ("animate.delete_keyframe", "Delete"),
+            ("animate.jump_to_start", "Home"),
             ("uv.toggle_seam", "U"),
+            ("uv.move", "G"),
+            ("uv.rotate", "R"),
+            ("uv.scale", "S"),
             ("model.transform", "T"),
             ("model.move", "G"),
             ("model.box_select", "B"),
+            ("model.toggle_edit_pivot", "Insert"),
             ("model.tool_select", "W"),
             ("model.rotate", "R"),
             ("model.scale", "S"),
@@ -859,6 +892,7 @@ impl Keybinds {
             (POINTER_CURSOR_PLACE, "Shift"),
             (POINTER_ADJUST, "Ctrl"),
             (POINTER_LOOP, "Alt"),
+            (POINTER_INFERENCE_LOCK, "Shift"),
         ] {
             if let Some(mods) = parse_modifiers(mods) {
                 kb.pointer.insert(action.to_string(), mods);
@@ -866,6 +900,12 @@ impl Keybinds {
         }
         kb
     }
+}
+
+fn contexts_overlap(a: &str, b: &str) -> bool {
+    let a = a.split('.').next().unwrap_or("global");
+    let b = b.split('.').next().unwrap_or("global");
+    a == b || matches!(a, "global" | "view" | "window") || matches!(b, "global" | "view" | "window")
 }
 
 /// Tipos de conflito de atalhos detectados no sistema (P3D-091).

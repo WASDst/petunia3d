@@ -102,7 +102,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .map_or(glam::Vec3::ZERO, |v| v.vec()),
             petunia_core::PenPoint::New(position) => glam::Vec3::from(position),
         });
-        if self.state.session.snap_enabled {
+        if self.state.session.snap_settings.enabled {
             let mask = petunia_core::SnapMask::for_target(self.state.session.snap_settings.target);
             if let Some(hit) = self.screen_snap(
                 glam::Vec2::from_array(pixel),

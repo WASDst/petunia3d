@@ -9,11 +9,13 @@
 
 mod actions;
 mod demo;
+pub mod host;
 #[cfg(feature = "lua-plugins")]
 pub mod plugins;
 mod smoke;
 
 pub use actions::ActionOutcome;
+pub use host::{DesktopHost, SessionLockGuard};
 pub use smoke::smoke_test;
 
 use petunia_core::{AppEvent, AppState, AutosaveService, AutosaveStorage, ModuleRegistry};
@@ -122,9 +124,32 @@ impl Application {
         Some(outcome)
     }
 
-    /// Entrega um evento (fato já ocorrido) aos módulos internos.
+    /// Processa eventos de domínio nativamente na Application, eliminando o acoplamento
+    /// a ModuleRegistry dinâmico para subsistemas canônicos (Model, Paint, UV, Assets).
+    pub fn process_domain_event(&mut self, event: &AppEvent) {
+        match event {
+            AppEvent::MeshChanged { .. } | AppEvent::ActiveAssetChanged { .. } => {
+                let project = &self.state.project;
+                if let Some(o) = project.assets.get(project.active) {
+                    self.state.session.tools.uv_selection.retain_valid(&o.mesh);
+                }
+            }
+            AppEvent::SelectionChanged(_) => {
+                // Invalidações e sincronizações contextuais se necessário
+            }
+            _ => {}
+        }
+    }
+
+    /// Entrega um evento (fato já ocorrido) aos domínios nativos, módulos legados e extensões.
     pub fn dispatch_event(&mut self, event: &AppEvent) {
+        // 1. Processamento nativo direto de domínio (aposentadoria gradual de ModuleRegistry)
+        self.process_domain_event(event);
+
+        // 2. Despacho compatível para módulos legados
         self.registry.dispatch(event, &mut self.state);
+
+        // 3. Extensões / Plugins Lua
         #[cfg(feature = "lua-plugins")]
         for failure in self.plugins.process_event(&mut self.state, event) {
             self.state

@@ -20,7 +20,7 @@ use glam::Vec3;
 use petunia_core::Command;
 
 use crate::projection::project_world_point;
-use crate::{ModelingMode, PetuniaViewport, ProfileEditGesture, ProfileHitTarget, SlintUiBridge};
+use crate::{PetuniaViewport, ProfileEditGesture, ProfileHitTarget, SlintUiBridge};
 use petunia_core::Workspace;
 
 /// Raio (px) para acertar uma aresta ou o contorno de um perfil.
@@ -85,6 +85,9 @@ impl Command for TransformProfileCmd {
         let current = project
             .get_profile(self.profile.id)
             .ok_or("Profile not found")?;
+        if current.locked {
+            return Err("Shape is locked");
+        }
         if current.spline_id != self.spline.id {
             return Err("Profile spline cannot be replaced");
         }
@@ -129,17 +132,25 @@ impl Command for TransformProfileCmd {
 }
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
-    /// Sólo o DRAW mostra as formas persistentes (POLY trabalha em componentes).
+    /// Persistent planar shapes are visible in both modeling presets.
     pub(crate) fn draw_shapes_visible(&self) -> bool {
-        self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw
+        self.state.workspace == Workspace::Model
     }
 
     /// Regiões e contornos em cache; recalcula só quando o documento muda.
-    pub(crate) fn shape_cache(&self) -> std::cell::Ref<'_, ShapeCache> {
+    pub(crate) fn shape_cache(&self) -> Option<std::cell::Ref<'_, ShapeCache>> {
         // Só perfis e splines importam: pintar (cor/textura) não recalcula o arranjo.
         let clock = self.state.project.project.revision_clock();
         let mut revision = [0u64; 11];
         revision[0] = self.state.project.project.profiles.len() as u64;
+        revision[8] = self.profile_authoring_preview.as_ref().map_or(0, |d| {
+            let mut fingerprint = d.spline.geometry_fingerprint() ^ d.profile.content_fingerprint();
+            for contour in &d.inner {
+                fingerprint =
+                    fingerprint.wrapping_mul(0x100000001b3) ^ contour.geometry_fingerprint();
+            }
+            fingerprint as u64
+        });
         revision[9] = clock[9];
         revision[10] = clock[10];
         {
@@ -148,16 +159,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 *slot = Some(self.build_shape_cache(revision));
             }
         }
-        std::cell::Ref::map(self.region_planes_cache.borrow(), |slot| {
-            slot.as_ref().expect("cache preenchido acima")
-        })
+        std::cell::Ref::filter_map(self.region_planes_cache.borrow(), |slot| slot.as_ref()).ok()
     }
 
     fn build_shape_cache(&self, revision: [u64; 11]) -> ShapeCache {
-        let project = &self.state.project.project;
+        let project = self
+            .profile_authoring_preview
+            .as_ref()
+            .filter(|d| d.source.is_some())
+            .map_or(&self.state.project.project, |d| {
+                d.evaluation_project.as_ref()
+            });
         let mut lines = Vec::new();
-        for profile in &project.profiles {
-            let Some(spline) = project.get_spline(profile.spline_id) else {
+        for stored in project.profiles.iter().filter(|p| p.visible) {
+            let (profile, preview_spline) = self
+                .profile_authoring_preview
+                .as_ref()
+                .filter(|d| d.profile.id == stored.id)
+                .map_or((stored, None), |d| (&d.profile, Some(&d.spline)));
+            let Some(spline) = preview_spline.or_else(|| project.get_spline(profile.spline_id))
+            else {
                 continue;
             };
             let Ok(table) = spline.arc_length_table(OUTLINE_TOLERANCE) else {
@@ -180,7 +201,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 closed: spline.closed,
                 hole: false,
             });
-            for hole in &profile.holes {
+            for hole in project
+                .shape_hole_contours(profile, OUTLINE_TOLERANCE)
+                .unwrap_or_default()
+            {
                 lines.push(ProfileLine {
                     id: profile.id,
                     world: hole.iter().copied().map(to_world).collect(),
@@ -191,7 +215,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         ShapeCache {
             revision,
-            planes: self.state.profile_region_planes(),
+            planes: petunia_core::region_push::planar_region_planes(project),
             lines,
         }
     }
@@ -217,7 +241,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !self.draw_shapes_visible() || self.viewport_size[0] <= 1.0 {
             return String::new();
         }
-        let cache = self.shape_cache();
+        let Some(cache) = self.shape_cache() else {
+            return String::new();
+        };
         let mut out = String::new();
         let mut budget = MAX_OVERLAY_POINTS;
         for (plane, regions) in &cache.planes {
@@ -239,11 +265,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !self.draw_shapes_visible() || self.viewport_size[0] <= 1.0 {
             return String::new();
         }
-        let cache = self.shape_cache();
+        let Some(cache) = self.shape_cache() else {
+            return String::new();
+        };
         let mut out = String::new();
         let mut budget = MAX_OVERLAY_POINTS;
         for line in &cache.lines {
-            if Some(line.id) == self.active_profile_id && !line.hole {
+            if Some(line.id) == self.state.session.active_shape && !line.hole {
                 continue;
             }
             if line.world.len() > budget {
@@ -275,7 +303,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         });
         let (cx, cy) = (sum.0 as f32 / count, sum.1 as f32 / count);
         let center_world = origin + right * cx + up * cy;
-        let depth = self.state.profile.depth.max(0.1);
+        let depth = self.state.profile.depth;
         let top_world = center_world + normal * depth;
 
         let camera = &self.state.session.camera;
@@ -310,13 +338,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !self.draw_shapes_visible() || !screen.iter().all(|value| value.is_finite()) {
             return None;
         }
-        let cache = self.shape_cache();
+        let cache = self.shape_cache()?;
         let camera = &self.state.session.camera;
         let mut best: Option<(uuid::Uuid, f32)> = None;
         for line in &cache.lines {
-            if line.hole {
-                continue;
-            }
             let projected: Vec<Option<[f32; 2]>> = line
                 .world
                 .iter()
@@ -353,6 +378,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .project
             .profiles
             .iter()
+            .filter(|profile| profile.visible)
             .find_map(|profile| {
                 let spline = self.state.project.project.get_spline(profile.spline_id)?;
                 if !spline.closed || spline.points.len() < 3 {
@@ -380,8 +406,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .map(|point| [point[0], point[1]])
                     .collect();
                 (petunia_mesh::arrangement::point_in_polygon(&outer, p)
-                    && !profile
-                        .holes
+                    && !self
+                        .state
+                        .project
+                        .project
+                        .shape_hole_contours(profile, OUTLINE_TOLERANCE)
+                        .unwrap_or_default()
                         .iter()
                         .any(|hole| petunia_mesh::arrangement::point_in_polygon(hole, p)))
                 .then_some(profile.id)
@@ -394,8 +424,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         // O segmento selecionado (domínio Curve) pertence à forma anterior.
-        if self.active_profile_id != Some(profile_id) {
-            self.profile_selected_segment = None;
+        if self.state.session.active_shape != Some(profile_id) {
+            self.state.session.planar_selection.segment = None;
         }
         let Some(profile) = self.state.project.project.get_profile(profile_id) else {
             return false;
@@ -406,8 +436,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.profile.up = wp.up.map(|v| v as f32);
         self.state.profile.normal = wp.normal.map(|v| v as f32);
         self.state.profile.workplane_locked = true;
-        self.active_profile_id = Some(profile_id);
-        self.profile_selected_point = None;
+        self.state.session.active_shape = Some(profile_id);
+        self.state.session.planar_selection.point = None;
         self.profile_drag_target = None;
         self.profile_edit_gesture = None;
         self.state.mark_dirty();
@@ -417,7 +447,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Aresta do perfil ativo sob o cursor (px da viewport).
     pub(crate) fn profile_segment_hit(&self, screen: [f32; 2]) -> Option<SegmentHit> {
         const SAMPLES: usize = 24;
-        let (profile, spline) = self.active_profile_resources()?;
+        let (profile, spline) = self.active_contour_resources()?;
         let wp = profile.workplane;
         let [origin, right, up] =
             [wp.origin, wp.right, wp.up].map(|v| glam::DVec3::from_array(v).as_vec3());
@@ -462,24 +492,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             );
             return None;
         }
-        let (_, spline) = self.active_profile_resources()?;
+        let (_, spline) = self.active_contour_resources()?;
         let mut updated = spline.clone();
         let id = updated.split_segment(hit.segment, hit.parameter).ok()?;
-        if let Err(error) = self
-            .state
-            .dispatch(&petunia_core::UpdateSplineCmd { spline: updated })
-        {
-            self.state.set_status(error.to_string());
+        if !self.begin_profile_authoring_preview() {
             return None;
         }
-        let (_, spline) = self.active_profile_resources()?;
+        let target = self.authoring_contour_mut(updated.id)?;
+        updated.revision = target.revision;
+        *target = updated;
+        let (_, spline) = self.active_contour_resources()?;
         let gesture = ProfileEditGesture {
             spline_id: spline.id,
             point_id: id,
-            point_before: spline.point(id).cloned(),
-            revision_before: spline.revision,
         };
-        self.profile_selected_point = Some(id);
+        self.state.session.planar_selection.point = Some(id);
         self.profile_drag_target = Some(ProfileHitTarget::Anchor(id));
         self.profile_edit_gesture = Some(gesture);
         if self.profile_volume_mode.is_some() {
@@ -496,7 +523,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         point: Option<uuid::Uuid>,
         curved: bool,
     ) -> bool {
-        let Some((_, spline)) = self.active_profile_resources() else {
+        let Some((_, spline)) = self.active_contour_resources() else {
             return false;
         };
         let mut updated = spline.clone();

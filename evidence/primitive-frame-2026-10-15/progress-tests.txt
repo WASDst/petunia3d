@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: dados versionados têm documentos e evidências válidos
+ok 1 - dados versionados têm documentos e evidências válidos
+  ---
+  duration_ms: 2.028096
+  type: 'test'
+  ...
+# Subtest: percentual nunca anuncia 100% com checkpoint aberto e usa três dígitos
+ok 2 - percentual nunca anuncia 100% com checkpoint aberto e usa três dígitos
+  ---
+  duration_ms: 0.99675
+  type: 'test'
+  ...
+# Subtest: TODO com trabalho concluído e DONE parcial são rejeitados
+ok 3 - TODO com trabalho concluído e DONE parcial são rejeitados
+  ---
+  duration_ms: 1.63252
+  type: 'test'
+  ...
+# Subtest: IN PROGRESS aceita zero e DONE exige todos os checkpoints com prova
+ok 4 - IN PROGRESS aceita zero e DONE exige todos os checkpoints com prova
+  ---
+  duration_ms: 1.568328
+  type: 'test'
+  ...
+# Subtest: bloqueia duplicação, quarto estado, links ausentes e datas inconsistentes
+ok 5 - bloqueia duplicação, quarto estado, links ausentes e datas inconsistentes
+  ---
+  duration_ms: 3.931907
+  type: 'test'
+  ...
+# Subtest: busca ignora acentos e combina estado e etapa
+ok 6 - busca ignora acentos e combina estado e etapa
+  ---
+  duration_ms: 0.654335
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 64.09921

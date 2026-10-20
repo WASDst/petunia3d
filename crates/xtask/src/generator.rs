@@ -281,40 +281,101 @@ pub fn generate_cheatsheet_md() -> Result<String> {
     Ok(out)
 }
 
-/// Catálogo de ícones a partir do global `PetuniaIcons` do shell Slint (fonte
-/// única: cada propriedade aponta para o SVG do pack, cuja pasta é o grupo).
-fn generate_icon_tokens_md(root_dir: &Path) -> Result<String> {
-    let icon_catalog_path = root_dir.join("crates/ui-slint/ui/petunia_icons.slint");
-    if !icon_catalog_path.exists() {
-        return Ok(String::new());
-    }
-    let content = std::fs::read_to_string(&icon_catalog_path)
-        .with_context(|| format!("Falha ao ler {}", icon_catalog_path.display()))?;
+/// Pack de ícones consumido pelo shell Qt (`PetuniaIcons::get` e `qml.qrc`):
+/// `<pack>/<grupo>/<id>.svg`, onde a pasta é o grupo semântico.
+const ICON_PACK_DIR: &str = "assets/icons/petunia-outline/svg";
 
-    let mut tokens: Vec<(String, String, String)> = Vec::new();
-    for line in content.lines() {
-        let Some(rest) = line.trim().strip_prefix("out property <image> ") else {
-            continue;
-        };
-        let name: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
-            .collect();
-        if name.is_empty() {
+/// Ícone do pack: identificador textual (`IconId`) e grupo semântico.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IconToken {
+    id: String,
+    group: String,
+}
+
+/// Catálogo de ícones a partir do pack SVG que o shell Qt carrega em runtime
+/// (fonte única: o stem de cada arquivo é o `IconId`, sua pasta é o grupo).
+fn generate_icon_tokens_md(root_dir: &Path) -> Result<String> {
+    let pack_dir = root_dir.join(ICON_PACK_DIR);
+    let tokens = scan_icon_pack(&pack_dir)?;
+    Ok(render_icon_tokens_md(&tokens))
+}
+
+/// Varre `<pack>/<grupo>/*.svg` e devolve os tokens ordenados por (grupo, id).
+///
+/// Falha de forma explícita quando o pack não existe, está vazio, contém ids
+/// fora de `[a-z0-9_]+` ou repete um id em grupos diferentes: um catálogo
+/// vazio ou ambíguo nunca deve passar por `docs-generate --check`.
+fn scan_icon_pack(pack_dir: &Path) -> Result<Vec<IconToken>> {
+    let groups = std::fs::read_dir(pack_dir)
+        .with_context(|| format!("Falha ao ler o pack de ícones {}", pack_dir.display()))?;
+
+    let mut tokens: Vec<IconToken> = Vec::new();
+    // `PetuniaIcons::get` resolve só pelo id; o mesmo id em dois grupos é ambíguo.
+    let mut group_of_id: BTreeMap<String, String> = BTreeMap::new();
+    for group_entry in groups {
+        let group_entry =
+            group_entry.with_context(|| format!("Falha ao listar {}", pack_dir.display()))?;
+        let group_path = group_entry.path();
+        // `DirEntry::file_type` não segue symlinks: links não entram no catálogo.
+        let is_dir = group_entry.file_type().is_ok_and(|kind| kind.is_dir());
+        if !is_dir {
             continue;
         }
-        let group = rest
-            .split("petunia-outline/svg/")
-            .nth(1)
-            .and_then(|path| path.split('/').next())
-            .filter(|group| !group.ends_with(".svg"))
-            .unwrap_or("geral")
-            .to_string();
-        tokens.push((name.clone(), name.replace('-', "_"), group));
+        let group = file_name_utf8(&group_path)?;
+
+        let files = std::fs::read_dir(&group_path)
+            .with_context(|| format!("Falha ao ler o grupo {}", group_path.display()))?;
+        for file_entry in files {
+            let file_entry =
+                file_entry.with_context(|| format!("Falha ao listar {}", group_path.display()))?;
+            let file_path = file_entry.path();
+            let is_file = file_entry.file_type().is_ok_and(|kind| kind.is_file());
+            if !is_file || file_path.extension().and_then(|ext| ext.to_str()) != Some("svg") {
+                continue;
+            }
+            let id = file_path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::to_owned)
+                .with_context(|| format!("Nome de ícone não-UTF8: {}", file_path.display()))?;
+            let valid_id = !id.is_empty()
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+            if !valid_id {
+                anyhow::bail!(
+                    "IconId inválido `{id}` em {} (esperado [a-z0-9_]+)",
+                    file_path.display()
+                );
+            }
+            if let Some(other) = group_of_id.insert(id.clone(), group.clone()) {
+                anyhow::bail!("IconId `{id}` duplicado nos grupos `{other}` e `{group}`");
+            }
+            tokens.push(IconToken {
+                id,
+                group: group.clone(),
+            });
+        }
     }
 
-    tokens.sort_by(|a, b| a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0)));
+    if tokens.is_empty() {
+        anyhow::bail!("Nenhum ícone .svg encontrado em {}", pack_dir.display());
+    }
 
+    tokens.sort_by(|a, b| a.group.cmp(&b.group).then_with(|| a.id.cmp(&b.id)));
+
+    Ok(tokens)
+}
+
+fn file_name_utf8(path: &Path) -> Result<String> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+        .with_context(|| format!("Nome de pasta não-UTF8: {}", path.display()))
+}
+
+/// Renderiza a tabela (id, grupo); `tokens` já deve estar ordenado.
+fn render_icon_tokens_md(tokens: &[IconToken]) -> String {
     let mut out = String::new();
     out.push_str("---\n");
     out.push_str("title: Tokens de Ícones Semânticos\n");
@@ -324,25 +385,28 @@ fn generate_icon_tokens_md(root_dir: &Path) -> Result<String> {
     out.push_str("\n\n# Catálogo Canônico de Tokens de Ícones (`IconId`)\n\n");
     out.push_str("> **Single Source of Truth (P3D-086, P3D-119)**\n");
     out.push_str(
-        "> Ícones no Petunia3D são endereçados por tokens semânticos do global Slint `PetuniaIcons` ",
+        "> Ícones no Petunia3D são endereçados por tokens semânticos `IconId`, derivados do pack ",
     );
+    out.push_str(&format!(
+        "SVG `{ICON_PACK_DIR}/<grupo>/<id>.svg` que o shell Qt carrega via `PetuniaIcons::get` ",
+    ));
     out.push_str(
         "(variantes outline/filled trocadas em tempo de execução, sem afetar a lógica).\n\n",
     );
 
     out.push_str(&format!(
-        "Total de tokens declarados em `PetuniaIcons`: **{}**.\n\n",
+        "Total de tokens no pack de ícones: **{}**.\n\n",
         tokens.len()
     ));
 
-    out.push_str("| Propriedade Slint | Identificador Textual (`IconId`) | Grupo Semântico |\n");
-    out.push_str("| :--- | :--- | :--- |\n");
-    for (name, id, group) in tokens {
-        out.push_str(&format!("| `PetuniaIcons.{name}` | `{id}` | {group} |\n"));
+    out.push_str("| Identificador Textual (`IconId`) | Grupo Semântico |\n");
+    out.push_str("| :--- | :--- |\n");
+    for token in tokens {
+        out.push_str(&format!("| `{}` | {} |\n", token.id, token.group));
     }
     out.push('\n');
 
-    Ok(out)
+    out
 }
 
 fn generate_text_tokens_md(root_dir: &Path) -> Result<String> {
@@ -759,11 +823,101 @@ mod tests {
         let root = test_root_dir();
         let cat = GeneratedCatalog::generate(&root).expect("geração falhou");
 
-        assert!(cat.icon_tokens_md.contains("`PetuniaIcons.select-box`"));
-        assert!(cat.icon_tokens_md.contains("`PetuniaIcons.extrude`"));
-        assert!(cat.icon_tokens_md.contains("`PetuniaIcons.bevel`"));
-        assert!(cat.icon_tokens_md.contains("`select_box`"));
-        assert!(cat.icon_tokens_md.contains("`extrude`"));
+        assert!(
+            cat.icon_tokens_md
+                .contains("| `select_box` | selection-transform |")
+        );
+        assert!(cat.icon_tokens_md.contains("| `extrude` | mesh-modeling |"));
+        assert!(cat.icon_tokens_md.contains("| `bevel` | mesh-modeling |"));
+        assert!(
+            !cat.icon_tokens_md.contains("Slint"),
+            "o catálogo não deve mais citar o global Slint PetuniaIcons"
+        );
+        assert!(
+            !cat.icon_tokens_md
+                .contains("Total de tokens no pack de ícones: **0**"),
+            "catálogo de ícones não pode ficar vazio"
+        );
+    }
+
+    /// Pack sintético em diretório temporário, removido ao sair de escopo.
+    struct TempPack(std::path::PathBuf);
+
+    impl TempPack {
+        fn new(name: &str, files: &[&str]) -> Self {
+            let dir = std::env::temp_dir()
+                .join(format!("petunia_xtask_icons_{}_{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("falha ao criar pack temporário");
+            for rel in files {
+                let path = dir.join(rel);
+                std::fs::create_dir_all(path.parent().expect("caminho sem pai"))
+                    .expect("falha ao criar grupo");
+                std::fs::write(&path, "<svg/>").expect("falha ao criar svg");
+            }
+            Self(dir)
+        }
+    }
+
+    impl Drop for TempPack {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn test_scan_icon_pack_sorted_by_group_then_id() {
+        let pack = TempPack::new(
+            "sorted",
+            &[
+                "mesh-modeling/extrude.svg",
+                "interface/zoom_in.svg",
+                "interface/chevron_down.svg",
+                "interface/readme.txt",
+            ],
+        );
+        let tokens = scan_icon_pack(&pack.0).expect("varredura falhou");
+        let pairs: Vec<(&str, &str)> = tokens
+            .iter()
+            .map(|t| (t.group.as_str(), t.id.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                ("interface", "chevron_down"),
+                ("interface", "zoom_in"),
+                ("mesh-modeling", "extrude"),
+            ]
+        );
+
+        let md = render_icon_tokens_md(&tokens);
+        assert!(md.contains("Total de tokens no pack de ícones: **3**."));
+        assert!(md.contains("| `chevron_down` | interface |\n| `zoom_in` | interface |\n"));
+    }
+
+    #[test]
+    fn test_scan_icon_pack_rejects_missing_empty_invalid_and_duplicates() {
+        let missing = std::env::temp_dir().join("petunia_xtask_icons_inexistente");
+        assert!(
+            scan_icon_pack(&missing).is_err(),
+            "pack ausente deve falhar"
+        );
+
+        let empty = TempPack::new("empty", &["interface/nota.txt"]);
+        assert!(
+            scan_icon_pack(&empty.0).is_err(),
+            "pack sem svg deve falhar"
+        );
+
+        let invalid = TempPack::new("invalid", &["interface/Select-Box.svg"]);
+        assert!(
+            scan_icon_pack(&invalid.0).is_err(),
+            "IconId inválido deve falhar"
+        );
+
+        let dup = TempPack::new("dup", &["interface/move.svg", "painting/move.svg"]);
+        let err = scan_icon_pack(&dup.0).expect_err("id duplicado deve falhar");
+        assert!(err.to_string().contains("duplicado"));
     }
 
     #[test]

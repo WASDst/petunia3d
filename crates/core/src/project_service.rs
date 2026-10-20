@@ -9,8 +9,8 @@ use std::path::Path;
 use petunia_mesh::Mesh;
 use petunia_project::ProjectChanges;
 use petunia_project::{
-    BatchExportReport, DeliveryPipeline, ExportOptions, ExportReport, FileFormat, ImportOptions,
-    PipelineError, export, format, palette,
+    BatchExportReport, DeliveryPipeline, DocumentSnapshot, ExportOptions, ExportReport, FileFormat,
+    ImportOptions, PipelineError, export, format, palette,
 };
 
 use crate::state::AppState;
@@ -75,10 +75,24 @@ impl ProjectService {
         state.mark_dirty();
     }
 
-    /// Carrega um arquivo de projeto (.petunia) e sincroniza o estado da aplicação (P3D-001 §Open Project).
-    pub fn load_project(state: &mut AppState, path: &Path) -> Result<(), ProjectServiceError> {
-        let (p, report) = format::load_with_report(path, format::LoadMode::LegacyRepair)
-            .map_err(|e| ProjectServiceError::Format(e.to_string()))?;
+    /// Executa staged load de um projeto em segundo plano/worker, validando container,
+    /// manifest, schema e invariantes em staging antes de tocar na sessão (P02).
+    pub fn staged_load(
+        path: &Path,
+        mode: format::LoadMode,
+    ) -> Result<(DocumentSnapshot, format::LoadReport), ProjectServiceError> {
+        DocumentSnapshot::load_atomic(path, mode)
+            .map_err(|e| ProjectServiceError::Format(e.to_string()))
+    }
+
+    /// Carrega um arquivo de projeto (.petunia) especificando a política de reparo (P02).
+    pub fn load_project_with_mode(
+        state: &mut AppState,
+        path: &Path,
+        mode: format::LoadMode,
+    ) -> Result<format::LoadReport, ProjectServiceError> {
+        let (snapshot, report) = Self::staged_load(path, mode)?;
+        let p = snapshot.into_document();
         state.project.palette = p.palette.clone();
         state.project.project = p;
         // Arquivos carregados começam com revisões em 0; avançar evita o hash
@@ -111,7 +125,12 @@ impl ProjectService {
         let _ = state.ui.recent_projects.save();
         state.set_status(format!("open {}", path.display()));
         state.mark_dirty();
-        Ok(())
+        Ok(report)
+    }
+
+    /// Carrega um arquivo de projeto (.petunia) e sincroniza o estado da aplicação (P3D-001 §Open Project).
+    pub fn load_project(state: &mut AppState, path: &Path) -> Result<(), ProjectServiceError> {
+        Self::load_project_with_mode(state, path, format::LoadMode::LegacyRepair).map(|_| ())
     }
 
     /// Salva o estado atual do projeto no arquivo especificado (.petunia) usando escrita atômica segura (P3D-001 §Save).
@@ -120,7 +139,12 @@ impl ProjectService {
         state.project.project.palette = state.project.palette.clone();
         // O ponto salvo é o estado que foi serializado, e só vale se a gravação der certo.
         let save_point = state.project.save_point();
-        format::save(&state.project.project, path)
+        let snapshot = DocumentSnapshot::from_document(&state.project.project);
+        snapshot
+            .validate_invariants()
+            .map_err(|e| ProjectServiceError::Format(e.to_string()))?;
+        snapshot
+            .save_atomic(path)
             .map_err(|e| ProjectServiceError::Format(e.to_string()))?;
         state.project.project_path = Some(path.to_string_lossy().to_string());
         state.project.mark_saved(save_point);

@@ -1498,5 +1498,65 @@
     "group": "Viewport & scene",
     "label": "Zoom",
     "status": "current"
+  },
+  {
+    "id": "paint_pixel",
+    "group": "Painting",
+    "label": "Pixel Brush",
+    "status": "current"
+  },
+  {
+    "id": "paint_airbrush",
+    "group": "Painting",
+    "label": "Airbrush",
+    "status": "current"
+  },
+  {
+    "id": "paint_spray",
+    "group": "Painting",
+    "label": "Spray",
+    "status": "current"
+  },
+  {
+    "id": "paint_blur",
+    "group": "Painting",
+    "label": "Blur",
+    "status": "current"
+  },
+  {
+    "id": "paint_dodge",
+    "group": "Painting",
+    "label": "Dodge (Lighten)",
+    "status": "current"
+  },
+  {
+    "id": "paint_burn",
+    "group": "Painting",
+    "label": "Burn (Darken)",
+    "status": "current"
+  },
+  {
+    "id": "paint_gradient",
+    "group": "Painting",
+    "label": "Linear Gradient",
+    "status": "current"
+  },
+  {
+    "id": "paint_gradient_radial",
+    "group": "Painting",
+    "label": "Radial Gradient",
+    "status": "current"
+  },
+  {
+    "id": "paint_path",
+    "group": "Painting",
+    "label": "Path Paint",
+    "status": "current"
+  },
+  {
+    "id": "paint_projection",
+    "group": "Painting",
+    "label": "Projection Paint",
+    "status": "current"
   }
 ]

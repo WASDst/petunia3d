@@ -328,7 +328,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let interval_ms = self.preferences.double_tap_interval_ms;
 
         let is_double_tap = if interval_ms > 0 {
-            if let Some((ref last_tool, last_time)) = self.last_tool_press {
+            if let Some((ref last_tool, _, last_time)) = self.last_tool_press {
                 last_tool == id && now.duration_since(last_time).as_millis() <= interval_ms as u128
             } else {
                 false
@@ -377,11 +377,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             // Gramática única: a tecla seleciona a ferramenta persistente; a
             // operação acontece pelo arrasto (ADR 007). O duplo toque continua
             // abrindo o modo que segue o ponteiro.
-            self.last_tool_press = Some((id.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
+            self.last_tool_press = Some((id.to_string(), origin_tool, now));
             self.keyboard_tool_modal_active = false;
             self.activate_parametric_tool(kind);
         } else {
-            self.last_tool_press = Some((id.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
+            self.last_tool_press = Some((id.to_string(), origin_tool, now));
             if self.tool_modal.is_none() {
                 let _ = self.execute_core_command(id);
             }
@@ -401,6 +403,53 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if text == "Enter" && !ctrl && !alt {
             return self.confirm_active_operation();
+        }
+        // Animate owns its authoring/transport keys before geometry fallbacks.
+        if self.state.workspace.is_animate()
+            && self.rename_draft.is_none()
+            && !self.state.is_interacting()
+            && self.drag.is_none()
+        {
+            let action = input::key_code_from_slint(text).and_then(|key| {
+                self.state
+                    .ui
+                    .keybinds
+                    .find_in_context(key, Mods2 { ctrl, shift, alt }, "animate")
+            });
+            let intent = match action {
+                Some("animate.toggle_play") => Some(animate::AnimateIntent::TogglePlay),
+                Some("animate.step_backward") => Some(animate::AnimateIntent::StepFrame(-1)),
+                Some("animate.step_forward") => Some(animate::AnimateIntent::StepFrame(1)),
+                Some("animate.insert_keyframe") => Some(animate::AnimateIntent::InsertKeyframe),
+                Some("animate.delete_keyframe") => {
+                    Some(animate::AnimateIntent::DeleteKeyframe(None))
+                }
+                Some("animate.jump_to_start") => Some(animate::AnimateIntent::JumpToStart),
+                _ => None,
+            };
+            if let Some(intent) = intent {
+                self.apply(UiIntent::Animate(intent));
+                return true;
+            }
+            if matches!(text, "Delete" | "Backspace") {
+                return false;
+            }
+        }
+        if !ctrl && !alt && self.draw_numeric_input(text) {
+            return true;
+        }
+        if text == "Backspace"
+            && !ctrl
+            && !alt
+            && self.state.session.tools.active_tool == "draw_profile"
+            && !self.active_profile_closed()
+            && let Some(id) = self
+                .active_contour_resources()
+                .and_then(|(_, s)| s.points.last())
+                .map(|p| p.id)
+        {
+            self.state.session.planar_selection.point = Some(id);
+            return self.delete_selected_profile_point();
         }
         if self.decal_gesture.is_some() && !ctrl && !alt {
             // Buffer numérico do gesto de decalque (constituição 11).
@@ -991,5 +1040,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         }
         true
+    }
+
+    /// `paint.isolate` (C2): no PAINT, isolar é fantasma (Raio-X) e preserva o
+    /// Raio-X do usuário; nos outros workspaces é o isolamento comum. Exposto
+    /// também como ação de request para o controle da seção Projeção.
+    pub fn toggle_paint_isolate(&mut self) -> bool {
+        if self.state.workspace == Workspace::Paint {
+            self.state.toggle_paint_isolate_ghost();
+        } else {
+            self.state.toggle_isolate();
+        }
+        true
+    }
+
+    /// C8 — modo da operação com vários elementos, escolhido no HUD da
+    /// ferramenta: extrusão (região, faces individuais, ao longo das normais) e
+    /// inset (região, individual). O modo pertence à ferramenta ativa.
+    pub fn set_operation_mode(&mut self, id: &str) -> bool {
+        match self.state.session.tools.active_tool.as_str() {
+            "extrude" => {
+                let Some(mode) = petunia_mesh::ExtrudeMode::from_id(id) else {
+                    return false;
+                };
+                self.state.tools.extrude_mode = mode;
+                true
+            }
+            "inset" => {
+                let Some(mode) = petunia_mesh::InsetMode::from_id(id) else {
+                    return false;
+                };
+                self.state.tools.inset_mode = mode;
+                true
+            }
+            _ => false,
+        }
     }
 }

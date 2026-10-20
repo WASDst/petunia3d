@@ -13,6 +13,7 @@ mod brush_panel;
 pub use brush_panel::BrushPanelModel;
 pub mod color_wheel;
 pub mod commands;
+pub mod context_actions;
 mod decal_tool;
 mod draw_extensions;
 mod draw_shapes;
@@ -30,6 +31,8 @@ mod shape_builder_tool;
 pub mod split_view;
 pub mod theme;
 pub mod thumbnail;
+pub mod tool_catalog;
+pub mod tool_preview;
 pub mod tr;
 pub mod view_layout;
 pub use host::DesktopHost;
@@ -49,7 +52,7 @@ use petunia_config::keybinds::Mods2;
 use petunia_core::PivotPoint;
 use petunia_core::PrimitiveDescriptorExt;
 use petunia_core::{AppState, Camera, SelectionDomain, Workspace};
-use petunia_project::{AlphaMode, Project, ProjectChanges, ShaderProfile};
+use petunia_project::{AlphaMode, Project, ShaderProfile};
 
 /// Mantém o destaque configurável legível sobre o canvas escuro oficial.
 pub fn selection_color_has_contrast(rgb: [u8; 3]) -> bool {
@@ -126,9 +129,13 @@ pub struct ViewportRenderState {
     pub selection_thickness: f32,
     /// Overlays: grade e wireframe opcional sobre as faces.
     pub show_grid: bool,
+    /// Eixos do mundo: liga/desliga geral e cada um (X, Y, Z) — B6.
+    pub show_axes: bool,
+    pub axes_visible: [bool; 3],
+    /// Extensão, ladrilho e opacidade da grade (preferência).
+    pub grid: petunia_render::frame::RenderGrid,
     /// Componente sob o cursor (preselection).
     pub hover: petunia_core::HoverTarget,
-    pub boolean_operand: Option<uuid::Uuid>,
     /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
     pub studio_light_follows_camera: bool,
     /// Matcap procedural no Solid (preferência).
@@ -156,8 +163,16 @@ impl Default for ViewportRenderState {
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
             show_grid: true,
+            show_axes: true,
+            axes_visible: [true, false, true],
+            grid: petunia_render::frame::RenderGrid {
+                size: 20.0,
+                spacing: 1.0,
+                opacity: 0.5,
+                show_isometric_guide: false,
+                isometric_angle_deg: 30.0,
+            },
             hover: petunia_core::HoverTarget::None,
-            boolean_operand: None,
             studio_light_follows_camera: true,
             matcap: false,
             ambient_occlusion: false,
@@ -234,6 +249,22 @@ pub struct GizmoModel {
     /// Projeção em tela do 3D Cursor para o overlay da viewport.
     pub cursor_screen: [f32; 2],
     pub cursor_visible: bool,
+    /// Pivô de transformação projetado (ponto médio, caixa, cursor...): marcador
+    /// próprio, distinto do 3D Cursor e do gizmo.
+    pub pivot_visible: bool,
+    pub pivot_screen: [f32; 2],
+    /// Origem do objeto ativo projetada (pode diferir do pivô).
+    pub origin_marker_visible: bool,
+    pub origin_marker_screen: [f32; 2],
+    /// O modo Editar pivô está ligado: o gizmo move só a origem.
+    pub pivot_editing: bool,
+    /// Trechos dos anéis de rotação voltados para a câmera (profundidade).
+    pub x_ring_front: String,
+    pub y_ring_front: String,
+    pub z_ring_front: String,
+    /// Espessura do traço e comprimento das hastes (preferências do gizmo).
+    pub thickness: f32,
+    pub size: f32,
 }
 
 impl GizmoModel {
@@ -257,6 +288,9 @@ impl GizmoModel {
             &mut self.plane_xz_commands,
             &mut self.plane_xy_commands,
             &mut self.view_roll_commands,
+            &mut self.x_ring_front,
+            &mut self.y_ring_front,
+            &mut self.z_ring_front,
         ] {
             commands.clear();
         }
@@ -427,6 +461,8 @@ const PARAMETRIC_HANDLE_TARGET: u8 = 4;
 /// Ferramenta que segue a gramática única (constituição 11, ADR 007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GrammarTool {
+    /// Select by click/area; transform only via explicit handles.
+    Select,
     /// Move, Rotate e Scale: arrasto livre ("haul") ou pelas alças do gizmo.
     Transform(TransformKind),
     /// Extrude, Inset, Round Edge e Push/Pull: o valor segue o cursor.
@@ -445,6 +481,7 @@ pub enum GrammarTool {
     /// alça do ponto novo; arrastar um nó/alça o move; a alça de profundidade
     /// e o volume em edição seguem o arrasto.
     DrawProfile,
+    PlanarPrimitive(PlanarPrimitiveKind),
     /// Knife: cliques em arestas definem os segmentos; Enter aplica.
     Knife,
     /// Loop Cut: clique posiciona sobre o anel; arrastar desliza; soltar aplica.
@@ -512,6 +549,16 @@ impl PolyPenMode {
 /// Gesto da gramática única em andamento.
 #[derive(Debug, Clone, Copy)]
 enum ToolGesture {
+    ProtectedSelection,
+    SelectionBox {
+        anchor: [f32; 2],
+        current: [f32; 2],
+        mode: viewport_intents::RegionSelectionMode,
+    },
+    PlanarPrimitive {
+        kind: PlanarPrimitiveKind,
+        anchor: [f64; 2],
+    },
     Transform {
         gizmo: bool,
     },
@@ -613,6 +660,12 @@ pub enum UiIntent {
     ToggleInspector,
     /// DRAW: vista planar ↔ câmera livre (só a vista muda).
     TogglePlanarNavigation,
+    SetNavigationAnchor(petunia_core::NavigationAnchor),
+    SetSelectThrough(bool),
+    BeginUvTransform(petunia_core::UvTransformKind),
+    UpdateUvTransform(petunia_mesh::UvTransform),
+    CommitUvTransform,
+    CancelUvTransform,
     ExecuteCommand(CommandId),
     DismissTopOverlay,
     ScrubTransform {
@@ -620,6 +673,12 @@ pub enum UiIntent {
         axis: usize,
         delta: f32,
         fine: bool,
+    },
+    SetAssetTransform {
+        asset_index: Option<usize>,
+        translation: Option<[f32; 3]>,
+        rotation_euler_deg: Option<[f32; 3]>,
+        scale: Option<[f32; 3]>,
     },
     ViewportGesture(ViewportGesture),
     SaveProjectTo(PathBuf),
@@ -749,6 +808,26 @@ pub enum UiIntent {
     SetModelingMode(ModelingMode),
     /// "Olhar para o plano": alinha a câmera ao plano sob comando (cap. 01).
     ProfileLookAtPlane,
+    /// Perfil de assistência visual (VSP-001).
+    SetVisualAssistanceProfile(petunia_core::VisualAssistanceProfile),
+    /// Modo de trabalho Clay na viewport (VSP-002).
+    SetClayMode(petunia_core::ClayMode),
+    /// Ancoragem de iluminação de modelagem na viewport (VSP-002).
+    SetClayLighting(petunia_core::LightingAnchor),
+    /// Alterna exibição da Companion View desacoplada (VSP-004).
+    ToggleCompanionView,
+    /// Define modo de disparo da Companion View (VSP-004).
+    SetCompanionViewTrigger(petunia_core::CompanionViewTrigger),
+    /// Inicia uma transformação modal temporária (G/R/S) guardando a ferramenta de origem (H11).
+    BeginModalTransform(TransformKind),
+    /// Confirma a transformação modal ativa retornando à ferramenta de origem (H11).
+    CommitModalTransform,
+    /// Cancela a transformação modal ativa retornando à ferramenta de origem sem criar Undo (H11).
+    CancelModalTransform,
+    /// Define restrição de eixo ou plano para a transformação modal (H11).
+    SetModalConstraint(petunia_core::ModalConstraint),
+    /// Define preferência de ativação da ferramenta (Drag vs Instant) (H11).
+    SetToolActivation(petunia_core::ToolActivation),
 }
 
 // Presentation ViewModels and Data Transfer Objects (DTOs) for the Slint shell.
@@ -972,6 +1051,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     parametric_tool: Option<ToolModalKind>,
     tool_gesture: Option<ToolGesture>,
     tool_press_extend: bool,
+    tool_press_subtract: bool,
     /// Alt no último evento da gramática (quebrar tangente no perfil).
     tool_pointer_alt: bool,
     /// Modificador de "ação alternativa" no último press (Ctrl no preset
@@ -1061,19 +1141,11 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub preferences_path_override: Option<std::path::PathBuf>,
     /// Home (cap. 23) aberta: só no arranque sem projeto, se a preferência pedir.
     pub home_open: bool,
-    /// Rastreamento de duplo toque em atalhos de ferramenta: (nome da ferramenta, instante).
-    pub last_tool_press: Option<(String, std::time::Instant)>,
+    /// Rastreamento de duplo toque em atalhos de ferramenta: (nome da ferramenta, ferramenta de origem prévia, instante).
+    pub last_tool_press: Option<(String, String, std::time::Instant)>,
     pub slice_trim: bool,
     pub micro_inspector_open: bool,
     pub micro_inspector_pos: [f32; 2],
-    pub paint_show_uv_overlay: bool,
-    pub uv_show_texture: bool,
-    pub active_profile_id: Option<uuid::Uuid>,
-    pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
-    pub profile_drag_target: Option<ProfileHitTarget>,
-    pub profile_selected_point: Option<uuid::Uuid>,
-    /// Domínio Curve do DRAW: segmento selecionado do perfil ativo.
-    pub profile_selected_segment: Option<usize>,
     /// Domínio Region do DRAW: região fechada selecionada (alvo do Push/Pull).
     pub region_selected: Option<petunia_core::RegionHit>,
     /// Pré-seleção do Draw: onde o próximo clique cairia (ponto encaixado ou
@@ -1087,9 +1159,6 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// DRAW usa navegação planar (ortográfica, normal ao Workplane, sem
     /// orbit) enquanto isto for verdadeiro; desligar volta à câmera livre.
     pub draw_planar_navigation: bool,
-    /// Câmera de antes da navegação planar, restaurada ao sair dela
-    /// (estado de ViewportSession; nunca vai para o documento).
-    pub(crate) planar_saved_camera: Option<petunia_core::Camera>,
     /// Regiões por plano, recalculadas só quando o documento muda.
     region_planes_cache: std::cell::RefCell<Option<draw_shapes::ShapeCache>>,
     /// Planos editáveis do Shape Builder, por revisão (perfis em uso por geradores ficam de fora).
@@ -1111,15 +1180,64 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_preview_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_transform_gesture: Option<ProfileTransformGesture>,
-    profile_dimension_gesture: Option<(
-        petunia_project::ProfileResource,
+    pub paint_show_uv_overlay: bool,
+    pub uv_show_texture: bool,
+    pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
+    pub profile_sweep_path: Option<uuid::Uuid>,
+    planar_primitive_numeric: bool,
+    profile_authoring_preview: Option<bridge::profile_draft::ProfileAuthoringPreview>,
+    profile_volume_diagnostic: Option<String>,
+    profile_region_revision: Option<u64>,
+    profile_region_source: Option<(
         petunia_project::SplineResource,
+        petunia_project::PlanarShape,
     )>,
+    generator_parameter_preview: Option<(uuid::Uuid, petunia_project::GeometryGenerator, u64)>,
+    profile_generator_draft: Option<(petunia_project::GeometryGenerator, [u64; 2])>,
+    pub profile_drag_target: Option<ProfileHitTarget>,
+    pub draw_component_context: String,
+    /// Domínio Curve do DRAW: segmento selecionado do perfil ativo.
+    /// Domínio Region do DRAW: região fechada selecionada (alvo do Push/Pull).
+    /// Pré-seleção do Draw: onde o próximo clique cairia (ponto encaixado ou
+    /// face que viraria o plano), mostrada com o marcador de snap.
+    draw_inference_toggle: bool,
+    draw_inference_held: bool,
+    draw_inference_guide: Option<(glam::Vec3, glam::Vec3)>,
+    draw_revolve_axis: petunia_project::RevolutionAxis,
+    draw_caps: [bool; 2],
+    /// Região de perfil sob o cursor (Push/Pull e Draw), destacada no hover.
+    /// DRAW ou POLY: mesmos documento, seleção, câmera e Inspector; muda o
+    /// trilho de ferramentas (ADR 007).
+    /// DRAW usa navegação planar (ortográfica, normal ao Workplane, sem
+    /// orbit) enquanto isto for verdadeiro; desligar volta à câmera livre.
+
+    /// Câmera de antes da navegação planar, restaurada ao sair dela
+    /// (estado de ViewportSession; nunca vai para o documento).
+
+    /// Regiões por plano, recalculadas só quando o documento muda.
+    /// Planos editáveis do Shape Builder, por revisão (perfis em uso por geradores ficam de fora).
+    /// Gesto do Shape Builder em andamento.
+    solid_shape_builder: Option<petunia_core::SolidShapeBuilderSession>,
+    solid_hover: Option<usize>,
+    solid_cycle: usize,
+    solid_xray: bool,
+    solid_pointer: [f32; 2],
+    /// Último clique num nó do perfil (duplo clique alterna reto ↔ curva).
+    /// Ferramenta usada antes da atual; `Space` alterna entre as duas.
+    /// Cena de consultas da viewport (picking/oclusão), por geometria.
+    /// Geometria de snap (todos os objetos visíveis), por gesto ou revisão.
+    /// Edição de atalhos (perfis do usuário, captura de tecla).
+    /// Id do objeto de prévia do volume de perfil (só desenho; ver
+    /// `show_new_object_preview`). `Some` enquanto há prévia.
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
     pub clipboard: Option<GeometryClipboard>,
     /// Runtime do workspace Animate (cache do avaliador, relógio de reprodução).
     pub animate: animate::AnimateRuntime,
+    pub active_profile_id: Option<uuid::Uuid>,
+    pub profile_selected_point: Option<uuid::Uuid>,
+    /// Domínio Curve do DRAW: segmento selecionado do perfil ativo.
+    pub profile_selected_segment: Option<usize>,
 }
 
 /// Dados da área de transferência de geometria.
@@ -1129,8 +1247,7 @@ pub enum GeometryClipboard {
     Asset(Box<petunia_project::Asset>),
 }
 
-/// Modo do workspace de modelagem (ADR 007): DRAW trabalha no nível de forma,
-/// POLY no nível de componente.
+/// Presentation preset of the same modeling workspace; capabilities are shared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModelingMode {
     Draw,
@@ -1165,7 +1282,14 @@ impl ModelingMode {
             "transform",
             "push_pull",
         ];
-        const DRAW: [&str; 2] = ["draw_profile", "shape_builder"];
+        const DRAW: [&str; 6] = [
+            "draw_profile",
+            "shape_builder",
+            "draw_rectangle",
+            "draw_circle",
+            "draw_ellipse",
+            "draw_polygon",
+        ];
         SHARED.contains(&tool)
             || match self {
                 Self::Draw => DRAW.contains(&tool),
@@ -1186,14 +1310,12 @@ pub enum ProfileHitTarget {
 struct ProfileEditGesture {
     spline_id: uuid::Uuid,
     point_id: uuid::Uuid,
-    point_before: Option<petunia_core::SplinePoint>,
-    revision_before: u64,
 }
 
 #[derive(Debug, Clone)]
 struct ProfileTransformGesture {
     project_before: Project,
-    profile_id: uuid::Uuid,
+    selected_points: std::collections::HashSet<uuid::Uuid>,
     spline: petunia_core::SplineResource,
     profile: petunia_core::ProfileResource,
     kind: TransformKind,
@@ -1222,9 +1344,6 @@ pub struct ContextMenuState {
 
 /// Id reservado que representa um divisor entre grupos de itens de menu.
 pub const MENU_SEPARATOR: &str = "-";
-
-/// Passo das guias angulares ao desenhar perfis no DRAW (graus).
-const DRAW_ANGLE_STEP_DEGREES: f32 = 15.0;
 
 /// Menus da barra superior do shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1276,6 +1395,7 @@ impl MenuKind {
                 ("file.save_as", T::FILE_SAVE_AS, "Ctrl+Shift+S"),
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("file.import_obj", T::FILE_IMPORT_OBJ, ""),
+                ("file.import_gltf", T::FILE_IMPORT_GLTF, ""),
             ],
             Self::Edit => &[
                 ("edit.undo", T::EDIT_UNDO, "Ctrl+Z"),
@@ -1426,3 +1546,7 @@ mod numpad_key_tests {
         assert_eq!(numpad_key("KP_Enter"), None);
     }
 }
+
+mod solid_shape_builder_tool;
+
+pub use bridge::planar_primitives::PlanarPrimitiveKind;

@@ -131,3 +131,5 @@ mod tests {
         assert!(!caps(3, 3, true).supports_core_33());
     }
 }
+
+mod surface_materials;

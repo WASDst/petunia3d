@@ -12,260 +12,297 @@ description: Catálogo canônico de identificadores de ícones IconId (P3D-119)
 # Catálogo Canônico de Tokens de Ícones (`IconId`)
 
 > **Single Source of Truth (P3D-086, P3D-119)**
-> Ícones no Petunia3D são endereçados por tokens semânticos do global Slint `PetuniaIcons` (variantes outline/filled trocadas em tempo de execução, sem afetar a lógica).
+> Ícones no Petunia3D são endereçados por tokens semânticos `IconId`, derivados do pack SVG `assets/icons/petunia-outline/svg/<grupo>/<id>.svg` que o shell Qt carrega via `PetuniaIcons::get` (variantes outline/filled trocadas em tempo de execução, sem afetar a lógica).
 
-Total de tokens declarados em `PetuniaIcons`: **250**.
+Total de tokens no pack de ícones: **287**.
 
-| Propriedade Slint | Identificador Textual (`IconId`) | Grupo Semântico |
-| :--- | :--- | :--- |
-| `PetuniaIcons.bone` | `bone` | future-roadmap |
-| `PetuniaIcons.cloth` | `cloth` | future-roadmap |
-| `PetuniaIcons.hair` | `hair` | future-roadmap |
-| `PetuniaIcons.keyframe` | `keyframe` | future-roadmap |
-| `PetuniaIcons.particles` | `particles` | future-roadmap |
-| `PetuniaIcons.timeline` | `timeline` | future-roadmap |
-| `PetuniaIcons.annotate` | `annotate` | interface |
-| `PetuniaIcons.backface-culling` | `backface_culling` | interface |
-| `PetuniaIcons.chevron-down` | `chevron_down` | interface |
-| `PetuniaIcons.chevron-left` | `chevron_left` | interface |
-| `PetuniaIcons.chevron-right` | `chevron_right` | interface |
-| `PetuniaIcons.chevron-up` | `chevron_up` | interface |
-| `PetuniaIcons.close` | `close` | interface |
-| `PetuniaIcons.delete` | `delete` | interface |
-| `PetuniaIcons.duplicate` | `duplicate` | interface |
-| `PetuniaIcons.export` | `export` | interface |
-| `PetuniaIcons.eye` | `eye` | interface |
-| `PetuniaIcons.eye-hidden` | `eye_hidden` | interface |
-| `PetuniaIcons.file` | `file` | interface |
-| `PetuniaIcons.filter` | `filter` | interface |
-| `PetuniaIcons.folder` | `folder` | interface |
-| `PetuniaIcons.grid-view` | `grid_view` | interface |
-| `PetuniaIcons.help` | `help` | interface |
-| `PetuniaIcons.import` | `import` | interface |
-| `PetuniaIcons.jump-end` | `jump_end` | interface |
-| `PetuniaIcons.jump-start` | `jump_start` | interface |
-| `PetuniaIcons.list-view` | `list_view` | interface |
-| `PetuniaIcons.lock` | `lock` | interface |
-| `PetuniaIcons.measure` | `measure` | interface |
-| `PetuniaIcons.minimize` | `minimize` | interface |
-| `PetuniaIcons.minus` | `minus` | interface |
-| `PetuniaIcons.more-vert` | `more_vert` | interface |
-| `PetuniaIcons.new-file` | `new_file` | interface |
-| `PetuniaIcons.open-project` | `open_project` | interface |
-| `PetuniaIcons.pause` | `pause` | interface |
-| `PetuniaIcons.pin` | `pin` | interface |
-| `PetuniaIcons.play` | `play` | interface |
-| `PetuniaIcons.plus` | `plus` | interface |
-| `PetuniaIcons.redo` | `redo` | interface |
-| `PetuniaIcons.refresh` | `refresh` | interface |
-| `PetuniaIcons.save` | `save` | interface |
-| `PetuniaIcons.save-as` | `save_as` | interface |
-| `PetuniaIcons.search` | `search` | interface |
-| `PetuniaIcons.settings` | `settings` | interface |
-| `PetuniaIcons.step-backward` | `step_backward` | interface |
-| `PetuniaIcons.step-forward` | `step_forward` | interface |
-| `PetuniaIcons.stop` | `stop` | interface |
-| `PetuniaIcons.tool-duplicate` | `tool_duplicate` | interface |
-| `PetuniaIcons.trash` | `trash` | interface |
-| `PetuniaIcons.undo` | `undo` | interface |
-| `PetuniaIcons.unlock` | `unlock` | interface |
-| `PetuniaIcons.warning` | `warning` | interface |
-| `PetuniaIcons.bevel` | `bevel` | mesh-modeling |
-| `PetuniaIcons.boolean-cut` | `boolean_cut` | mesh-modeling |
-| `PetuniaIcons.boolean-fuse` | `boolean_fuse` | mesh-modeling |
-| `PetuniaIcons.boolean-intersect` | `boolean_intersect` | mesh-modeling |
-| `PetuniaIcons.boolean-join` | `boolean_join` | mesh-modeling |
-| `PetuniaIcons.connect` | `connect` | mesh-modeling |
-| `PetuniaIcons.dissolve` | `dissolve` | mesh-modeling |
-| `PetuniaIcons.extrude` | `extrude` | mesh-modeling |
-| `PetuniaIcons.extrude-individual` | `extrude_individual` | mesh-modeling |
-| `PetuniaIcons.flip-diagonal` | `flip_diagonal` | mesh-modeling |
-| `PetuniaIcons.flip-normals` | `flip_normals` | mesh-modeling |
-| `PetuniaIcons.inset` | `inset` | mesh-modeling |
-| `PetuniaIcons.knife` | `knife` | mesh-modeling |
-| `PetuniaIcons.loop-cut` | `loop_cut` | mesh-modeling |
-| `PetuniaIcons.make-face` | `make_face` | mesh-modeling |
-| `PetuniaIcons.merge` | `merge` | mesh-modeling |
-| `PetuniaIcons.mirror` | `mirror` | mesh-modeling |
-| `PetuniaIcons.modifier` | `modifier` | mesh-modeling |
-| `PetuniaIcons.normals-overlay` | `normals_overlay` | mesh-modeling |
-| `PetuniaIcons.pushpull` | `pushpull` | mesh-modeling |
-| `PetuniaIcons.revolve` | `revolve` | mesh-modeling |
-| `PetuniaIcons.revolve-profile` | `revolve_profile` | mesh-modeling |
-| `PetuniaIcons.separate` | `separate` | mesh-modeling |
-| `PetuniaIcons.slice` | `slice` | mesh-modeling |
-| `PetuniaIcons.spin` | `spin` | mesh-modeling |
-| `PetuniaIcons.subdivide` | `subdivide` | mesh-modeling |
-| `PetuniaIcons.symmetrize` | `symmetrize` | mesh-modeling |
-| `PetuniaIcons.tool-bevel` | `tool_bevel` | mesh-modeling |
-| `PetuniaIcons.tool-connect` | `tool_connect` | mesh-modeling |
-| `PetuniaIcons.tool-dissolve` | `tool_dissolve` | mesh-modeling |
-| `PetuniaIcons.tool-extrude` | `tool_extrude` | mesh-modeling |
-| `PetuniaIcons.tool-inset` | `tool_inset` | mesh-modeling |
-| `PetuniaIcons.tool-knife` | `tool_knife` | mesh-modeling |
-| `PetuniaIcons.tool-loopcut` | `tool_loopcut` | mesh-modeling |
-| `PetuniaIcons.tool-merge` | `tool_merge` | mesh-modeling |
-| `PetuniaIcons.tool-poly-pen` | `tool_poly_pen` | mesh-modeling |
-| `PetuniaIcons.tool-pushpull` | `tool_pushpull` | mesh-modeling |
-| `PetuniaIcons.tool-slice` | `tool_slice` | mesh-modeling |
-| `PetuniaIcons.tool-spin` | `tool_spin` | mesh-modeling |
-| `PetuniaIcons.tool-subdivide` | `tool_subdivide` | mesh-modeling |
-| `PetuniaIcons.weld` | `weld` | mesh-modeling |
-| `PetuniaIcons.bake-decal` | `bake_decal` | painting |
-| `PetuniaIcons.bake-reference` | `bake_reference` | painting |
-| `PetuniaIcons.delete-layer` | `delete_layer` | painting |
-| `PetuniaIcons.maximize` | `maximize` | painting |
-| `PetuniaIcons.new-layer` | `new_layer` | painting |
-| `PetuniaIcons.paint` | `paint` | painting |
-| `PetuniaIcons.paint-2d` | `paint_2d` | painting |
-| `PetuniaIcons.paint-3d` | `paint_3d` | painting |
-| `PetuniaIcons.paint-brush` | `paint_brush` | painting |
-| `PetuniaIcons.paint-clone` | `paint_clone` | painting |
-| `PetuniaIcons.paint-decal` | `paint_decal` | painting |
-| `PetuniaIcons.paint-eraser` | `paint_eraser` | painting |
-| `PetuniaIcons.paint-fill` | `paint_fill` | painting |
-| `PetuniaIcons.paint-layer` | `paint_layer` | painting |
-| `PetuniaIcons.paint-line` | `paint_line` | painting |
-| `PetuniaIcons.paint-mask` | `paint_mask` | painting |
-| `PetuniaIcons.paint-palette` | `paint_palette` | painting |
-| `PetuniaIcons.paint-picker` | `paint_picker` | painting |
-| `PetuniaIcons.paint-rect` | `paint_rect` | painting |
-| `PetuniaIcons.paint-smudge` | `paint_smudge` | painting |
-| `PetuniaIcons.add-primitive` | `add_primitive` | primitives |
-| `PetuniaIcons.capsule` | `capsule` | primitives |
-| `PetuniaIcons.circle` | `circle` | primitives |
-| `PetuniaIcons.cone` | `cone` | primitives |
-| `PetuniaIcons.cube` | `cube` | primitives |
-| `PetuniaIcons.cylinder` | `cylinder` | primitives |
-| `PetuniaIcons.icosphere` | `icosphere` | primitives |
-| `PetuniaIcons.object-mesh` | `object_mesh` | primitives |
-| `PetuniaIcons.plane` | `plane` | primitives |
-| `PetuniaIcons.primitives` | `primitives` | primitives |
-| `PetuniaIcons.sphere` | `sphere` | primitives |
-| `PetuniaIcons.torus` | `torus` | primitives |
-| `PetuniaIcons.wedge` | `wedge` | primitives |
-| `PetuniaIcons.command-palette` | `command_palette` | production-extension |
-| `PetuniaIcons.export-glb` | `export_glb` | production-extension |
-| `PetuniaIcons.export-obj` | `export_obj` | production-extension |
-| `PetuniaIcons.output` | `output` | production-extension |
-| `PetuniaIcons.plugin` | `plugin` | production-extension |
-| `PetuniaIcons.render` | `render` | production-extension |
-| `PetuniaIcons.script` | `script` | production-extension |
-| `PetuniaIcons.data-tab-01` | `data_tab_01` | properties |
-| `PetuniaIcons.data-tab-02` | `data_tab_02` | properties |
-| `PetuniaIcons.data-tab-03` | `data_tab_03` | properties |
-| `PetuniaIcons.data-tab-04` | `data_tab_04` | properties |
-| `PetuniaIcons.data-tab-05` | `data_tab_05` | properties |
-| `PetuniaIcons.data-tab-06` | `data_tab_06` | properties |
-| `PetuniaIcons.data-tab-07` | `data_tab_07` | properties |
-| `PetuniaIcons.data-tab-08` | `data_tab_08` | properties |
-| `PetuniaIcons.data-tab-09` | `data_tab_09` | properties |
-| `PetuniaIcons.data-tab-10` | `data_tab_10` | properties |
-| `PetuniaIcons.data-tab-11` | `data_tab_11` | properties |
-| `PetuniaIcons.data-tab-12` | `data_tab_12` | properties |
-| `PetuniaIcons.data-tab-13` | `data_tab_13` | properties |
-| `PetuniaIcons.data-tab-14` | `data_tab_14` | properties |
-| `PetuniaIcons.data-tab-15` | `data_tab_15` | properties |
-| `PetuniaIcons.bounding-box` | `bounding_box` | selection-transform |
-| `PetuniaIcons.cursor-3d` | `cursor_3d` | selection-transform |
-| `PetuniaIcons.deselect-all` | `deselect_all` | selection-transform |
-| `PetuniaIcons.grow-selection` | `grow_selection` | selection-transform |
-| `PetuniaIcons.invert-selection` | `invert_selection` | selection-transform |
-| `PetuniaIcons.mode-edit` | `mode_edit` | selection-transform |
-| `PetuniaIcons.mode-object` | `mode_object` | selection-transform |
-| `PetuniaIcons.move` | `move` | selection-transform |
-| `PetuniaIcons.orientation-global` | `orientation_global` | selection-transform |
-| `PetuniaIcons.origin` | `origin` | selection-transform |
-| `PetuniaIcons.pivot-median` | `pivot_median` | selection-transform |
-| `PetuniaIcons.proportional-editing` | `proportional_editing` | selection-transform |
-| `PetuniaIcons.rotate` | `rotate` | selection-transform |
-| `PetuniaIcons.scale` | `scale` | selection-transform |
-| `PetuniaIcons.select` | `select` | selection-transform |
-| `PetuniaIcons.select-all` | `select_all` | selection-transform |
-| `PetuniaIcons.select-box` | `select_box` | selection-transform |
-| `PetuniaIcons.select-brush` | `select_brush` | selection-transform |
-| `PetuniaIcons.select-edge` | `select_edge` | selection-transform |
-| `PetuniaIcons.select-face` | `select_face` | selection-transform |
-| `PetuniaIcons.select-lasso` | `select_lasso` | selection-transform |
-| `PetuniaIcons.select-linked` | `select_linked` | selection-transform |
-| `PetuniaIcons.select-vertex` | `select_vertex` | selection-transform |
-| `PetuniaIcons.selection-center` | `selection_center` | selection-transform |
-| `PetuniaIcons.shrink-selection` | `shrink_selection` | selection-transform |
-| `PetuniaIcons.snap-magnet` | `snap_magnet` | selection-transform |
-| `PetuniaIcons.tool-position` | `tool_position` | selection-transform |
-| `PetuniaIcons.tool-rotate` | `tool_rotate` | selection-transform |
-| `PetuniaIcons.tool-scale` | `tool_scale` | selection-transform |
-| `PetuniaIcons.tool-transform` | `tool_transform` | selection-transform |
-| `PetuniaIcons.transform` | `transform` | selection-transform |
-| `PetuniaIcons.draw-profile` | `draw_profile` | shape-first |
-| `PetuniaIcons.generate-volume` | `generate_volume` | shape-first |
-| `PetuniaIcons.parts` | `parts` | shape-first |
-| `PetuniaIcons.profile-closed` | `profile_closed` | shape-first |
-| `PetuniaIcons.reference-image` | `reference_image` | shape-first |
-| `PetuniaIcons.reference-manager` | `reference_manager` | shape-first |
-| `PetuniaIcons.shape-layer` | `shape_layer` | shape-first |
-| `PetuniaIcons.symmetry-axis` | `symmetry_axis` | shape-first |
-| `PetuniaIcons.thickness` | `thickness` | shape-first |
-| `PetuniaIcons.tool-profile` | `tool_profile` | shape-first |
-| `PetuniaIcons.trace-silhouette` | `trace_silhouette` | shape-first |
-| `PetuniaIcons.material` | `material` | uv-materials |
-| `PetuniaIcons.metallic` | `metallic` | uv-materials |
-| `PetuniaIcons.normal-map` | `normal_map` | uv-materials |
-| `PetuniaIcons.opacity` | `opacity` | uv-materials |
-| `PetuniaIcons.pack-islands` | `pack_islands` | uv-materials |
-| `PetuniaIcons.project-from-reference` | `project_from_reference` | uv-materials |
-| `PetuniaIcons.project-from-view` | `project_from_view` | uv-materials |
-| `PetuniaIcons.relax` | `relax` | uv-materials |
-| `PetuniaIcons.roughness` | `roughness` | uv-materials |
-| `PetuniaIcons.shader` | `shader` | uv-materials |
-| `PetuniaIcons.stitch` | `stitch` | uv-materials |
-| `PetuniaIcons.texture` | `texture` | uv-materials |
-| `PetuniaIcons.unwrap-auto` | `unwrap_auto` | uv-materials |
-| `PetuniaIcons.uv-checker` | `uv_checker` | uv-materials |
-| `PetuniaIcons.uv-editor` | `uv_editor` | uv-materials |
-| `PetuniaIcons.uv-island` | `uv_island` | uv-materials |
-| `PetuniaIcons.uv-move` | `uv_move` | uv-materials |
-| `PetuniaIcons.uv-pack` | `uv_pack` | uv-materials |
-| `PetuniaIcons.uv-project-reference` | `uv_project_reference` | uv-materials |
-| `PetuniaIcons.uv-project-view` | `uv_project_view` | uv-materials |
-| `PetuniaIcons.uv-relax` | `uv_relax` | uv-materials |
-| `PetuniaIcons.uv-rotate` | `uv_rotate` | uv-materials |
-| `PetuniaIcons.uv-scale` | `uv_scale` | uv-materials |
-| `PetuniaIcons.uv-seam` | `uv_seam` | uv-materials |
-| `PetuniaIcons.uv-stitch` | `uv_stitch` | uv-materials |
-| `PetuniaIcons.uv-unwrap` | `uv_unwrap` | uv-materials |
-| `PetuniaIcons.asset-library` | `asset_library` | viewport-scene |
-| `PetuniaIcons.axis-gizmo` | `axis_gizmo` | viewport-scene |
-| `PetuniaIcons.camera` | `camera` | viewport-scene |
-| `PetuniaIcons.collection` | `collection` | viewport-scene |
-| `PetuniaIcons.frame-all` | `frame_all` | viewport-scene |
-| `PetuniaIcons.frame-selection` | `frame_selection` | viewport-scene |
-| `PetuniaIcons.grid-overlay` | `grid_overlay` | viewport-scene |
-| `PetuniaIcons.hierarchy` | `hierarchy` | viewport-scene |
-| `PetuniaIcons.isolate` | `isolate` | viewport-scene |
-| `PetuniaIcons.orbit` | `orbit` | viewport-scene |
-| `PetuniaIcons.overlays` | `overlays` | viewport-scene |
-| `PetuniaIcons.pan` | `pan` | viewport-scene |
-| `PetuniaIcons.save-asset` | `save_asset` | viewport-scene |
-| `PetuniaIcons.shade-flat` | `shade_flat` | viewport-scene |
-| `PetuniaIcons.shade-smooth` | `shade_smooth` | viewport-scene |
-| `PetuniaIcons.shading-material` | `shading_material` | viewport-scene |
-| `PetuniaIcons.shading-rendered` | `shading_rendered` | viewport-scene |
-| `PetuniaIcons.shading-solid` | `shading_solid` | viewport-scene |
-| `PetuniaIcons.shading-wireframe` | `shading_wireframe` | viewport-scene |
-| `PetuniaIcons.view-back` | `view_back` | viewport-scene |
-| `PetuniaIcons.view-bottom` | `view_bottom` | viewport-scene |
-| `PetuniaIcons.view-front` | `view_front` | viewport-scene |
-| `PetuniaIcons.view-left` | `view_left` | viewport-scene |
-| `PetuniaIcons.view-lit` | `view_lit` | viewport-scene |
-| `PetuniaIcons.view-material` | `view_material` | viewport-scene |
-| `PetuniaIcons.view-orthographic` | `view_orthographic` | viewport-scene |
-| `PetuniaIcons.view-perspective` | `view_perspective` | viewport-scene |
-| `PetuniaIcons.view-right` | `view_right` | viewport-scene |
-| `PetuniaIcons.view-solid` | `view_solid` | viewport-scene |
-| `PetuniaIcons.view-top` | `view_top` | viewport-scene |
-| `PetuniaIcons.view-wire` | `view_wire` | viewport-scene |
-| `PetuniaIcons.wire-overlay` | `wire_overlay` | viewport-scene |
-| `PetuniaIcons.xray` | `xray` | viewport-scene |
-| `PetuniaIcons.zoom` | `zoom` | viewport-scene |
+| Identificador Textual (`IconId`) | Grupo Semântico |
+| :--- | :--- |
+| `bone` | future-roadmap |
+| `cloth` | future-roadmap |
+| `hair` | future-roadmap |
+| `keyframe` | future-roadmap |
+| `particles` | future-roadmap |
+| `timeline` | future-roadmap |
+| `annotate` | interface |
+| `backface_culling` | interface |
+| `bolt` | interface |
+| `bookmark_add` | interface |
+| `check` | interface |
+| `chevron_down` | interface |
+| `chevron_left` | interface |
+| `chevron_right` | interface |
+| `chevron_up` | interface |
+| `circle_dot` | interface |
+| `close` | interface |
+| `collapse` | interface |
+| `cpu` | interface |
+| `delete` | interface |
+| `display` | interface |
+| `duplicate` | interface |
+| `expand` | interface |
+| `export` | interface |
+| `eye` | interface |
+| `eye_hidden` | interface |
+| `favorite` | interface |
+| `file` | interface |
+| `filter` | interface |
+| `folder` | interface |
+| `grid_view` | interface |
+| `help` | interface |
+| `import` | interface |
+| `jump_end` | interface |
+| `jump_start` | interface |
+| `keyboard` | interface |
+| `language` | interface |
+| `link` | interface |
+| `list_view` | interface |
+| `lock` | interface |
+| `measure` | interface |
+| `minimize` | interface |
+| `minus` | interface |
+| `more_horiz` | interface |
+| `more_vert` | interface |
+| `new_file` | interface |
+| `open_project` | interface |
+| `panel_left` | interface |
+| `pause` | interface |
+| `picture_in_picture` | interface |
+| `pin` | interface |
+| `play` | interface |
+| `plus` | interface |
+| `pointer` | interface |
+| `redo` | interface |
+| `refresh` | interface |
+| `reset_view` | interface |
+| `save` | interface |
+| `save_as` | interface |
+| `search` | interface |
+| `settings` | interface |
+| `shape_circle` | interface |
+| `shape_square` | interface |
+| `shape_square_dashed` | interface |
+| `sort_az` | interface |
+| `sort_updown` | interface |
+| `split_view` | interface |
+| `step_backward` | interface |
+| `step_forward` | interface |
+| `stop` | interface |
+| `terminal` | interface |
+| `tool_duplicate` | interface |
+| `trash` | interface |
+| `tune` | interface |
+| `undo` | interface |
+| `unlock` | interface |
+| `warning` | interface |
+| `bevel` | mesh-modeling |
+| `boolean_cut` | mesh-modeling |
+| `boolean_fuse` | mesh-modeling |
+| `boolean_intersect` | mesh-modeling |
+| `boolean_join` | mesh-modeling |
+| `connect` | mesh-modeling |
+| `dissolve` | mesh-modeling |
+| `extrude` | mesh-modeling |
+| `extrude_individual` | mesh-modeling |
+| `flip_diagonal` | mesh-modeling |
+| `flip_normals` | mesh-modeling |
+| `inset` | mesh-modeling |
+| `knife` | mesh-modeling |
+| `loop_cut` | mesh-modeling |
+| `make_face` | mesh-modeling |
+| `merge` | mesh-modeling |
+| `mirror` | mesh-modeling |
+| `modifier` | mesh-modeling |
+| `normals_overlay` | mesh-modeling |
+| `pushpull` | mesh-modeling |
+| `revolve` | mesh-modeling |
+| `revolve_profile` | mesh-modeling |
+| `separate` | mesh-modeling |
+| `slice` | mesh-modeling |
+| `spin` | mesh-modeling |
+| `subdivide` | mesh-modeling |
+| `symmetrize` | mesh-modeling |
+| `tool_bevel` | mesh-modeling |
+| `tool_connect` | mesh-modeling |
+| `tool_dissolve` | mesh-modeling |
+| `tool_extrude` | mesh-modeling |
+| `tool_inset` | mesh-modeling |
+| `tool_knife` | mesh-modeling |
+| `tool_loopcut` | mesh-modeling |
+| `tool_merge` | mesh-modeling |
+| `tool_poly_pen` | mesh-modeling |
+| `tool_pushpull` | mesh-modeling |
+| `tool_slice` | mesh-modeling |
+| `tool_spin` | mesh-modeling |
+| `tool_subdivide` | mesh-modeling |
+| `weld` | mesh-modeling |
+| `bake_decal` | painting |
+| `bake_reference` | painting |
+| `delete_layer` | painting |
+| `maximize` | painting |
+| `new_layer` | painting |
+| `paint` | painting |
+| `paint_2d` | painting |
+| `paint_3d` | painting |
+| `paint_airbrush` | painting |
+| `paint_blur` | painting |
+| `paint_brush` | painting |
+| `paint_burn` | painting |
+| `paint_clone` | painting |
+| `paint_decal` | painting |
+| `paint_dodge` | painting |
+| `paint_eraser` | painting |
+| `paint_fill` | painting |
+| `paint_gradient` | painting |
+| `paint_gradient_radial` | painting |
+| `paint_layer` | painting |
+| `paint_line` | painting |
+| `paint_mask` | painting |
+| `paint_palette` | painting |
+| `paint_path` | painting |
+| `paint_picker` | painting |
+| `paint_pixel` | painting |
+| `paint_projection` | painting |
+| `paint_rect` | painting |
+| `paint_smudge` | painting |
+| `paint_spray` | painting |
+| `add_primitive` | primitives |
+| `capsule` | primitives |
+| `circle` | primitives |
+| `cone` | primitives |
+| `cube` | primitives |
+| `cylinder` | primitives |
+| `icosphere` | primitives |
+| `object_mesh` | primitives |
+| `plane` | primitives |
+| `primitives` | primitives |
+| `sphere` | primitives |
+| `torus` | primitives |
+| `wedge` | primitives |
+| `command_palette` | production-extension |
+| `export_glb` | production-extension |
+| `export_obj` | production-extension |
+| `output` | production-extension |
+| `plugin` | production-extension |
+| `render` | production-extension |
+| `script` | production-extension |
+| `data_tab_01` | properties |
+| `data_tab_02` | properties |
+| `data_tab_03` | properties |
+| `data_tab_04` | properties |
+| `data_tab_05` | properties |
+| `data_tab_06` | properties |
+| `data_tab_07` | properties |
+| `data_tab_08` | properties |
+| `data_tab_09` | properties |
+| `data_tab_10` | properties |
+| `data_tab_11` | properties |
+| `data_tab_12` | properties |
+| `data_tab_13` | properties |
+| `data_tab_14` | properties |
+| `data_tab_15` | properties |
+| `bounding_box` | selection-transform |
+| `cursor_3d` | selection-transform |
+| `deselect_all` | selection-transform |
+| `grow_selection` | selection-transform |
+| `invert_selection` | selection-transform |
+| `mode_edit` | selection-transform |
+| `mode_object` | selection-transform |
+| `move` | selection-transform |
+| `orientation_global` | selection-transform |
+| `origin` | selection-transform |
+| `pivot_median` | selection-transform |
+| `proportional_editing` | selection-transform |
+| `rotate` | selection-transform |
+| `scale` | selection-transform |
+| `select` | selection-transform |
+| `select_all` | selection-transform |
+| `select_box` | selection-transform |
+| `select_brush` | selection-transform |
+| `select_edge` | selection-transform |
+| `select_face` | selection-transform |
+| `select_lasso` | selection-transform |
+| `select_linked` | selection-transform |
+| `select_vertex` | selection-transform |
+| `selection_center` | selection-transform |
+| `shrink_selection` | selection-transform |
+| `snap_magnet` | selection-transform |
+| `tool_position` | selection-transform |
+| `tool_rotate` | selection-transform |
+| `tool_scale` | selection-transform |
+| `tool_transform` | selection-transform |
+| `transform` | selection-transform |
+| `draw_profile` | shape-first |
+| `generate_volume` | shape-first |
+| `parts` | shape-first |
+| `profile_closed` | shape-first |
+| `reference_image` | shape-first |
+| `reference_manager` | shape-first |
+| `shape_layer` | shape-first |
+| `spline_curve` | shape-first |
+| `symmetry_axis` | shape-first |
+| `thickness` | shape-first |
+| `tool_profile` | shape-first |
+| `trace_silhouette` | shape-first |
+| `material` | uv-materials |
+| `metallic` | uv-materials |
+| `normal_map` | uv-materials |
+| `opacity` | uv-materials |
+| `pack_islands` | uv-materials |
+| `project_from_reference` | uv-materials |
+| `project_from_view` | uv-materials |
+| `relax` | uv-materials |
+| `roughness` | uv-materials |
+| `shader` | uv-materials |
+| `stitch` | uv-materials |
+| `texture` | uv-materials |
+| `unwrap_auto` | uv-materials |
+| `uv_checker` | uv-materials |
+| `uv_editor` | uv-materials |
+| `uv_island` | uv-materials |
+| `uv_move` | uv-materials |
+| `uv_pack` | uv-materials |
+| `uv_project_reference` | uv-materials |
+| `uv_project_view` | uv-materials |
+| `uv_relax` | uv-materials |
+| `uv_rotate` | uv-materials |
+| `uv_scale` | uv-materials |
+| `uv_seam` | uv-materials |
+| `uv_stitch` | uv-materials |
+| `uv_unwrap` | uv-materials |
+| `asset_library` | viewport-scene |
+| `axis_gizmo` | viewport-scene |
+| `camera` | viewport-scene |
+| `collection` | viewport-scene |
+| `frame_all` | viewport-scene |
+| `frame_selection` | viewport-scene |
+| `grid_overlay` | viewport-scene |
+| `hierarchy` | viewport-scene |
+| `isolate` | viewport-scene |
+| `library` | viewport-scene |
+| `orbit` | viewport-scene |
+| `overlays` | viewport-scene |
+| `pan` | viewport-scene |
+| `save_asset` | viewport-scene |
+| `shade_flat` | viewport-scene |
+| `shade_smooth` | viewport-scene |
+| `shading_material` | viewport-scene |
+| `shading_rendered` | viewport-scene |
+| `shading_solid` | viewport-scene |
+| `shading_wireframe` | viewport-scene |
+| `view_back` | viewport-scene |
+| `view_bottom` | viewport-scene |
+| `view_front` | viewport-scene |
+| `view_left` | viewport-scene |
+| `view_lit` | viewport-scene |
+| `view_material` | viewport-scene |
+| `view_orthographic` | viewport-scene |
+| `view_perspective` | viewport-scene |
+| `view_right` | viewport-scene |
+| `view_solid` | viewport-scene |
+| `view_top` | viewport-scene |
+| `view_wire` | viewport-scene |
+| `wire_overlay` | viewport-scene |
+| `xray` | viewport-scene |
+| `zoom` | viewport-scene |
 

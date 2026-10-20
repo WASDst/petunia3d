@@ -100,6 +100,21 @@ Plugin pode declarar overlays passivos ou ações semânticas registradas. O hos
 7. Version incompatibility e erro de schema produzem diagnóstico.
 8. MCP exposable é opt-in adicional e não aumenta capabilities automaticamente.
 
+### Matriz de implementação e conformidade (E01)
+
+| Requisito / Gate | Status | Evidência / Teste | Escopo & Garantia |
+|---|---|---|---|
+| Gate 1: PermissionDenied sem tocar Document | `[x] DONE` | `test_gate1_missing_capability_denied_without_altering_document` | Comando não concedido rejeitado; Document e Undo inalterados |
+| Gate 2: Unload/reload limpo sem leaks | `[x] DONE` | `test_gate2_unload_and_reload_cleans_handlers_without_leaks` | Disable/uninstall dropa instâncias, handlers e assinaturas; re-enable cria state novo |
+| Gate 3: Atomic Batch e Rollback em falha | `[x] DONE` | `test_gate3_atomic_batch_rollback_on_failure_and_single_undo_on_success` | Batch atômico via `AppState::transaction`: 1 undo rotulado no sucesso; rollback total em falha |
+| Gate 4: Stale reference / ID inexistente | `[x] DONE` | `test_gate4_stale_reference_returns_error_and_never_targets_active_object` | Target inexistente falha com `PluginApiError::StaleReference`, nunca atinge objeto ativo |
+| Gate 5: Instruction budget e timeouts | `[x] DONE` | `test_gate5_infinite_loop_aborts_cleanly_via_instruction_budget` | Loops infinitos interrompidos por teto de instruções sem travar aplicação |
+| Gate 6: Sandbox defense in depth | `[x] DONE` | `test_gate6_sandbox_defense_in_depth_blocks_os_io_and_bytecode` | `io`, `os`, `package`, bytecode binário e dump suprimidos do ambiente |
+| Gate 7: Version incompatibility & manifest | `[x] DONE` | `test_gate7_manifest_validation_and_version_incompatibility` | Mismatch de API version, semver malformado, path traversal rejeitados com diagnóstico |
+| Gate 8: MCP exposable restrito | `[x] DONE` | `test_gate8_mcp_exposable_grants_no_underlying_capabilities` | `McpExposable` é opt-in sem concessão automática de capabilities de escrita |
+| Gate 9: Dados autorais namespaced | `[x] DONE` | `test_gate9_namespaced_plugin_data_persistence_and_missing_diagnostic` | `set_plugin_data`, schema versionado, persistência e detecção de missing plugins sem descarte |
+
+
 ## Não objetivos V1
 
 Marketplace, plugins binários arbitrários, API de shaders GPU, macro runtime de Slint/markup livre, rede irrestrita e ECS universal. São ampliações que exigem requisitos e segurança próprios.

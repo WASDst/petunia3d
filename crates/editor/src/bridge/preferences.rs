@@ -189,6 +189,59 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Comprimento das hastes dos gizmos de transformação (px lógicos).
+    /// Alça do gizmo do Selecionar (0 = mover, 1 = girar, 2 = escalar) — B11.
+    pub fn set_select_gizmo_handle(&mut self, family: usize, enabled: bool) -> bool {
+        let Some(slot) = self.state.ui.select_gizmo_handles.get_mut(family) else {
+            return false;
+        };
+        if *slot == enabled {
+            return false;
+        }
+        *slot = enabled;
+        self.gizmo_hover = None;
+        self.state.mark_dirty();
+        true
+    }
+
+    pub fn set_gizmo_size(&mut self, size: f32) -> bool {
+        if !size.is_finite() {
+            return false;
+        }
+        let size = size.clamp(48.0, 160.0);
+        if (self.state.ui.gizmo_size - size).abs() < f32::EPSILON {
+            return false;
+        }
+        self.state.ui.gizmo_size = size;
+        true
+    }
+
+    /// Espessura do traço dos gizmos de transformação (px lógicos).
+    pub fn set_gizmo_thickness(&mut self, thickness: f32) -> bool {
+        if !thickness.is_finite() {
+            return false;
+        }
+        let thickness = thickness.clamp(1.0, 6.0);
+        if (self.state.ui.gizmo_thickness - thickness).abs() < f32::EPSILON {
+            return false;
+        }
+        self.state.ui.gizmo_thickness = thickness;
+        true
+    }
+
+    /// Opacidade do cubo de navegação (0,2..=1).
+    pub fn set_nav_cube_opacity(&mut self, opacity: f32) -> bool {
+        if !opacity.is_finite() {
+            return false;
+        }
+        let opacity = opacity.clamp(0.2, 1.0);
+        if (self.state.ui.nav_cube_opacity - opacity).abs() < f32::EPSILON {
+            return false;
+        }
+        self.state.ui.nav_cube_opacity = opacity;
+        true
+    }
+
     pub fn set_language(&mut self, lang: &str) -> bool {
         // Embedded catalogs and the English legacy tag remain valid even if
         // a host overrides the list of additional locale catalogs.
@@ -276,6 +329,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.preferences.multiselection_measure_tag = self.state.ui.multiselection_measure_tag;
         self.preferences.selection_rgb = self.state.ui.selection_rgb;
         self.preferences.selection_thickness = self.state.ui.selection_thickness;
+        self.preferences.gizmo_size = self.state.ui.gizmo_size;
+        self.preferences.gizmo_thickness = self.state.ui.gizmo_thickness;
+        self.preferences.nav_cube_opacity = self.state.ui.nav_cube_opacity;
         self.preferences.model_quick_actions = self.state.ui.model_quick_actions.clone();
         self.preferences.active_keymap_id = self.state.ui.active_keymap_id.clone();
         self.preferences.theme_id = self.state.ui.active_theme_id.clone();

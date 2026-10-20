@@ -10,6 +10,8 @@ redo = "Ctrl+Y"
 save_project = "Ctrl+S"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+box_select = "Shift+B"
 transform = "E"
 rotate = "R"
 scale = "T"

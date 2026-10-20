@@ -310,8 +310,8 @@ pub(super) struct TextureTarget {
 /// Formato do alvo auxiliar.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum AuxFormat {
-    /// Máscara do contorno (R = selecionado, G = ativo).
-    Rg8,
+    /// Máscara do contorno (RGB = cor do contorno, A = coberto).
+    Rgba8,
     /// Oclusão ambiente.
     R8,
     /// Profundidade amostrável do pré-passe de AO.
@@ -329,9 +329,9 @@ impl TextureTarget {
         // SAFETY: caller keeps the context current on this thread.
         unsafe {
             let (internal, layout, kind, filter, attachment) = match format {
-                AuxFormat::Rg8 => (
-                    glow::RG8,
-                    glow::RG,
+                AuxFormat::Rgba8 => (
+                    glow::RGBA8,
+                    glow::RGBA,
                     glow::UNSIGNED_BYTE,
                     glow::NEAREST,
                     glow::COLOR_ATTACHMENT0,

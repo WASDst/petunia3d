@@ -21,7 +21,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.camera.pan(dx, dy);
             }
             ViewportGesture::Zoom { delta } => {
-                self.state.session.camera.zoom(delta);
+                if self.state.session.navigation_anchor == petunia_core::NavigationAnchor::Cursor3D
+                {
+                    let anchor = glam::Vec3::from(self.state.session.cursor_3d);
+                    self.state.session.camera.zoom_about(anchor, delta);
+                } else {
+                    self.state.session.camera.zoom(delta);
+                }
             }
         }
         self.state.mark_dirty();
@@ -62,20 +68,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
     }
 
-    /// Orbita a câmera usando Cursor 3D ou seleção como pivô quando aplicável.
+    /// Explicit navigation mode; transform pivots and active tools are unrelated.
     pub fn orbit_viewport(&mut self, dx: f32, dy: f32) -> bool {
         if !dx.is_finite() || !dy.is_finite() {
             return false;
         }
-        if self.state.session.tools.active_tool == "cursor"
-            || self.state.session.tools.active_tool == "cursor_3d"
-            || self.state.session.pivot_point == petunia_core::PivotPoint::Cursor3D
-        {
-            self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
-        } else if let Some(center) = self.selection_pivot() {
-            self.state.session.camera.target = center;
+        if self.state.session.navigation_anchor == petunia_core::NavigationAnchor::Cursor3D {
+            let anchor = glam::Vec3::from(self.state.session.cursor_3d);
+            if !self.state.session.camera.orbit_about(anchor, dx, dy) {
+                return false;
+            }
+        } else {
+            self.state.session.camera.orbit(dx, dy);
         }
-        self.state.session.camera.orbit(dx, dy);
         self.state.mark_dirty();
         true
     }
@@ -84,7 +89,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn viewport_render_state(&self) -> ViewportRenderState {
         ViewportRenderState {
             shading: self.state.session.shading,
-            xray: self.state.session.show_xray,
+            xray: self.state.session.show_xray
+                || (self.solid_shape_builder.is_some() && self.solid_xray),
             show_triangulation: self.state.session.show_triangulation,
             // Na PAINT a textura que se pinta aparece sempre; nos outros
             // workspaces ela segue opcional (toggle ou Material/Rendered).
@@ -98,8 +104,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             selection_rgb: self.state.ui.selection_rgb,
             selection_thickness: self.state.ui.selection_thickness,
             show_grid: self.state.session.show_grid,
+            show_axes: self.state.session.show_axes,
+            axes_visible: self.state.session.grid_settings.axes,
+            grid: petunia_render::frame::RenderGrid {
+                size: self.state.session.grid_settings.size,
+                spacing: self.state.session.grid_settings.spacing,
+                opacity: self.state.session.grid_settings.opacity,
+                show_isometric_guide: self.state.session.grid_settings.show_isometric_guide,
+                isometric_angle_deg: self.state.session.grid_settings.isometric_angle_deg,
+            },
             hover: self.state.session.tools.hover,
-            boolean_operand: self.state.session.tools.boolean_operand,
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
             matcap: self.preferences.viewport_matcap,
             ambient_occlusion: self.preferences.viewport_ambient_occlusion,

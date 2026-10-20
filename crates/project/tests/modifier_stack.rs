@@ -62,10 +62,108 @@ fn modifier_stack_roundtrips_through_project_format() {
     let loaded = format::load(&path).unwrap();
     let _ = std::fs::remove_file(&path);
 
+    // Carregar migra a pilha legada para o Operation Graph sem perda (O02).
     assert_eq!(loaded.assets.len(), 1);
-    assert_eq!(loaded.assets[0].modifiers.len(), 2);
-    assert_eq!(loaded.assets[0].modifiers[0].id, mirror_id);
-    assert_eq!(loaded.assets[0].modifiers, project.assets[0].modifiers);
+    assert!(loaded.assets[0].modifiers.is_empty());
+    let operations = loaded.op_graph.operations_on(loaded.assets[0].id);
+    assert_eq!(operations.len(), 2);
+    assert_eq!(operations[0].id, mirror_id, "o nó herda o UUID do modifier");
+    assert_eq!(
+        operations[0].type_id,
+        petunia_project::op_graph::TYPE_MIRROR
+    );
+    assert_eq!(
+        operations[1].type_id,
+        petunia_project::op_graph::TYPE_SYMMETRY
+    );
+    assert_eq!(
+        loaded.assets[0].evaluated_mesh().verts.len(),
+        project.assets[0].evaluated_mesh().verts.len()
+    );
+}
+
+#[test]
+fn legacy_modifier_migration_is_lossless_and_ordered_before_graph_operations() {
+    use petunia_project::op_graph::{ParamValue, TYPE_MIRROR, TYPE_SYMMETRY};
+
+    let mut project = Project::new();
+    project.assets.clear();
+    let mut mesh = Mesh::cube(2.0);
+    for vertex in &mut mesh.verts {
+        vertex.pos[0] += 1.5;
+        vertex.pos[1] += 0.4;
+    }
+    let mut asset = Asset::new("Legacy", mesh);
+    let mirror = ModifierInstance::mirror(0, 0.0);
+    let mut symmetry = ModifierInstance::symmetry(1, false, 0.002);
+    symmetry.enabled = false;
+    let ids = (mirror.id, symmetry.id);
+    asset.modifiers.push(mirror);
+    asset.modifiers.push(symmetry);
+    let asset_id = asset.id;
+    project.assets.push(asset);
+    project.active = 0;
+    let before = project.assets[0].evaluated_mesh();
+
+    // Uma operação de grafo pré-existente deve continuar depois do legado.
+    let object = project.op_graph.ensure_object_node(asset_id).unwrap();
+    let later = project
+        .op_graph
+        .add_node(
+            TYPE_MIRROR,
+            &[("axis", ParamValue::Choice("z".into()))],
+            [0.0; 2],
+        )
+        .unwrap();
+    project.op_graph.set_enabled(later, false).unwrap();
+    project.op_graph.connect(later, 0, object, 0).unwrap();
+
+    assert_eq!(project.migrate_legacy_modifiers(), 2);
+    assert!(project.assets[0].modifiers.is_empty());
+    let ops = project.op_graph.operations_on(asset_id);
+    let order: Vec<_> = ops.iter().map(|op| op.id).collect();
+    assert_eq!(order, vec![ids.0, ids.1, later]);
+    assert_eq!(ops[1].type_id, TYPE_SYMMETRY);
+    assert!(!ops[1].enabled, "estado desligado preservado");
+    assert_eq!(
+        ops[1].params.get("axis"),
+        Some(&ParamValue::Choice("y".into()))
+    );
+    assert_eq!(
+        ops[1].params.get("positive_to_negative"),
+        Some(&ParamValue::Bool(false))
+    );
+
+    // Mesmo resultado geométrico (a operação extra está desligada).
+    let after = project.assets[0].evaluated_mesh();
+    assert_eq!(after.verts.len(), before.verts.len());
+    assert_eq!(after.faces.len(), before.faces.len());
+    for (a, b) in after.verts.iter().zip(&before.verts) {
+        let d = (0..3)
+            .map(|i| (a.pos[i] - b.pos[i]).abs())
+            .fold(0.0_f32, f32::max);
+        assert!(d < 1e-5);
+    }
+    // Idempotente.
+    assert_eq!(project.migrate_legacy_modifiers(), 0);
+}
+
+#[test]
+fn legacy_modifier_with_out_of_range_weld_keeps_legacy_stack() {
+    let mut project = Project::new();
+    project.assets.clear();
+    let mut asset = Asset::new("Weld", Mesh::cube(2.0));
+    asset.modifiers.push(ModifierInstance::mirror(0, 50.0));
+    project.assets.push(asset);
+    project.active = 0;
+    let graph_before = project.op_graph.clone();
+    assert_eq!(project.migrate_legacy_modifiers(), 0);
+    assert_eq!(
+        project.assets[0].modifiers.len(),
+        1,
+        "sem perda: legado intacto"
+    );
+    assert_eq!(project.op_graph.nodes.len(), graph_before.nodes.len());
 }
 
 #[test]

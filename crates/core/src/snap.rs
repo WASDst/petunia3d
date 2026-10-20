@@ -10,17 +10,19 @@ use serde::{Deserialize, Serialize};
 /// Alvo de snapping configurado pelo usuário.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SnapTarget {
-    #[default]
     Grid,
     Increment,
     Vertex,
     Edge,
     Face,
+    #[default]
+    Smart,
 }
 
 impl SnapTarget {
-    pub fn all() -> [Self; 5] {
+    pub fn all() -> [Self; 6] {
         [
+            Self::Smart,
             Self::Grid,
             Self::Increment,
             Self::Vertex,
@@ -31,6 +33,7 @@ impl SnapTarget {
 
     pub fn key(&self) -> &'static str {
         match self {
+            Self::Smart => "snap.smart",
             Self::Grid => "snap.grid",
             Self::Increment => "snap.increment",
             Self::Vertex => "snap.vertex",
@@ -41,6 +44,7 @@ impl SnapTarget {
 
     pub fn label(&self) -> &'static str {
         match self {
+            Self::Smart => "Smart",
             Self::Grid => "Grid",
             Self::Increment => "Increment",
             Self::Vertex => "Point",
@@ -63,6 +67,8 @@ pub enum SnapElement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapSettings {
     pub enabled: bool,
+    #[serde(default = "default_angle_step")]
+    pub angle_step_degrees: f32,
     pub target: SnapTarget,
     pub element: SnapElement,
     pub grid_spacing: f32,
@@ -74,6 +80,10 @@ pub struct SnapSettings {
     pub radius_pixels: f32,
 }
 
+fn default_angle_step() -> f32 {
+    15.0
+}
+
 fn default_radius_pixels() -> f32 {
     crate::inference::DEFAULT_SNAP_RADIUS_PIXELS
 }
@@ -83,7 +93,8 @@ impl Default for SnapSettings {
         Self {
             // Snapping contextual por padrão (capítulo 01, "Smart Snap").
             enabled: true,
-            target: SnapTarget::Grid,
+            angle_step_degrees: default_angle_step(),
+            target: SnapTarget::Smart,
             element: SnapElement::Closest,
             grid_spacing: 1.0,
             snap_distance: 0.35,
@@ -219,6 +230,12 @@ pub fn snap_point(query: SnapQuery) -> SnapResult {
     }
 
     match query.settings.target {
+        SnapTarget::Smart => SnapResult {
+            point: query.point,
+            snapped: false,
+            target: SnapTarget::Smart,
+            distance: 0.0,
+        },
         SnapTarget::Grid => {
             let snapped_pt = snap_point_to_grid(query.point, query.settings.grid_spacing);
             SnapResult {

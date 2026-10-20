@@ -1,4 +1,5 @@
 #pragma once
+#include "petunia_bound_form.h"
 #include "petunia_editor_api.h"
 #include <QComboBox>
 #include <QFormLayout>
@@ -12,12 +13,28 @@
 
 QPainterPath petuniaPath(const QString &commands);
 
+class QKeyEvent;
+class QResizeEvent;
+class QToolButton;
+
 class PetuniaEditorCanvas : public QWidget {
     Q_OBJECT
   public:
     explicit PetuniaEditorCanvas(const QString &mode,
                                  QWidget *parent = nullptr);
     void sync(const QJsonObject &state);
+    /// Estado de vista local (não é documento): leitura para testes e status.
+    qreal zoom() const { return m_zoom; }
+    QPointF pan() const { return m_pan; }
+    /// Teclas de navegação que o canvas trata antes dos atalhos globais
+    /// (Esc, Home, +/−, setas com ou sem Ctrl/Shift; o dope sheet só Esc/Home).
+    bool ownsKey(const QKeyEvent *event) const;
+    /// Ponto do widget (px) que corresponde a (u, v) no canvas (origem do v embaixo).
+    /// Existe para testes de interface que clicam e arrastam em ilhas UV.
+    QPointF uvToWidget(const QPointF &uv) const {
+        const QRectF r = canvasRect();
+        return QPointF(r.left() + uv.x() * r.width(), r.top() + (1.0 - uv.y()) * r.height());
+    }
   signals:
     void editorChanged();
 
@@ -28,18 +45,23 @@ class PetuniaEditorCanvas : public QWidget {
     void mouseReleaseEvent(QMouseEvent *) override;
     void wheelEvent(QWheelEvent *) override;
     void tabletEvent(QTabletEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
+    void focusOutEvent(QFocusEvent *) override;
     void enterEvent(QEnterEvent *) override;
     void leaveEvent(QEvent *) override;
 
   private:
     QRectF canvasRect() const;
     QPointF normalized(const QPointF &) const;
+    /// Zoom mantendo `anchor` (px do widget) sobre o mesmo ponto do canvas.
+    void zoomAt(qreal factor, const QPointF &anchor);
     void stroke(const QPointF &, int phase);
     /// Relê o raster da camada ativa do documento (nunca do widget).
     bool reloadCanvasImage();
     /// Anel do pincel sobre o canvas, com o mesmo diâmetro do carimbo.
     void drawPaintCursor(QPainter &) const;
+    void drawPaintGhost(QPainter &) const;
     bool isPaintBrushTool() const;
     QString m_mode;
     QJsonObject m_state;
@@ -50,82 +72,28 @@ class PetuniaEditorCanvas : public QWidget {
     bool m_panning{false}, m_stroking{false}, m_uvDragging{false},
         m_selecting{false};
     QPointF m_press, m_dragDelta;
+    /// Shift no pressionar do UV: o soltar sem arrastar não refaz a seleção.
+    bool m_uvPressExtend{false};
+    /// Alternância do wireframe UV sobre a pintura (canvas de Paint).
+    QToolButton *m_uvOverlayButton{nullptr};
+    void placeOverlayButton();
     QString m_dragRevision, m_dragAsset, m_dragSelection;
     qreal m_pressure{1.0};
 };
 
-/// Native widgets read the shared DTO; every control sends a typed adapter
-/// action.
-class PetuniaEditorPanel : public QWidget {
+/// Formulários dos diálogos do host (Preferências, Referências, Biblioteca)
+/// em abas. Os workspaces usam seções nativas do Shell v2
+/// (`petunia_workspace_sections`); o canvas 2D é `PetuniaEditorCanvas`.
+class PetuniaEditorPanel : public PetuniaBoundForm {
     Q_OBJECT
   public:
     explicit PetuniaEditorPanel(const QString &mode, QWidget *parent = nullptr);
-    void sync(const QJsonObject &state);
-    PetuniaEditorCanvas *canvas() const { return m_canvas; }
-    QStringList missingBindings(const QJsonObject &state) const;
-  signals:
-    void editorChanged();
 
   private:
     QFormLayout *page(const QString &title);
-    void button(QFormLayout *, const QString &label, const QString &action,
-                QJsonObject args = {}, const QString &enabledKey = {});
-    void number(QFormLayout *, const QString &label, const QString &key,
-                const QString &action, const QString &arg, qreal min, qreal max,
-                qreal step = 0.01, QJsonObject args = {});
-    void check(QFormLayout *, const QString &label, const QString &key,
-               const QString &action,
-               const QString &arg = QStringLiteral("value"),
-               QJsonObject args = {});
-    void choice(QFormLayout *, const QString &label, const QString &key,
-                const QString &action, const QString &arg,
-                const QStringList &ids, const QStringList &labels = {},
-                QJsonObject args = {});
-    void text(QFormLayout *, const QString &label, const QString &key,
-              const QString &action, const QString &arg, QJsonObject args = {});
-    void colorField(QFormLayout *, const QString &label, const QString &key,
-                    const QString &action, const QString &arg, QJsonObject args = {});
-    void xyz(QFormLayout *, const QString &label, const QString &keyPrefix,
-             const QString &action,
-             const QString &arg = QStringLiteral("text"),
-             QJsonObject baseArgs = {});
-    void rows(QFormLayout *, const QString &label, const QString &key,
-              const QString &action, const QString &arg = QStringLiteral("id"),
-              QJsonObject args = {});
-    void fileButton(QFormLayout *, const QString &label, const QString &action,
-                    const QString &filter, bool save = false,
-                    QJsonObject args = {});
-    void send(const QString &action, QJsonObject args = {});
-    void setupModel();
-    void setupPaint();
-    void setupPaintGizmo();
-    void setupUv();
-    void setupAnimate();
     void setupSettings();
     void setupReferences();
     void setupAssets();
-    void updateDynamic(const QJsonObject &state);
-    struct Binding {
-        QWidget *widget;
-        QString key;
-        QString enabledKey;
-        QString labelKey;
-    };
-    QList<Binding> m_bindings;
-    struct RowBinding {
-        QListWidget *widget;
-        QString key;
-        QString action;
-        QString arg;
-        QJsonObject args;
-    };
-    QList<RowBinding> m_rows;
     QString m_mode;
-    QJsonObject m_state;
     QTabWidget *m_tabs{nullptr};
-    PetuniaEditorCanvas *m_canvas{nullptr};
-    QComboBox *m_gizmoAxisCombo{nullptr};
-    QFormLayout *m_dynamic{nullptr};
-    QString m_dynamicSignature;
-    bool m_syncing{false};
 };

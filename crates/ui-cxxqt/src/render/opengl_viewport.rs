@@ -16,7 +16,7 @@ pub struct QtViewportRenderer {
     pub app: crate::editor::QtEditor,
     surfaces: HashMap<u64, GlSurface>,
     software: HashMap<u64, SoftwareSurface>,
-    cameras: HashMap<u64, Camera>,
+    viewports: HashMap<u64, petunia_core::ViewportSession>,
     active_view: u64,
     dimensions: HashMap<u64, (u32, u32, f32)>,
     width: u32,
@@ -48,7 +48,7 @@ impl QtViewportRenderer {
             app,
             surfaces: HashMap::new(),
             software: HashMap::new(),
-            cameras: HashMap::new(),
+            viewports: HashMap::new(),
             active_view: 1,
             dimensions: HashMap::new(),
             width: 800,
@@ -58,16 +58,16 @@ impl QtViewportRenderer {
     pub fn activate(&mut self, id: u64) {
         let bank = |id: u64| if id == 3 { 1 } else { id }; // PiP shares the primary camera; split is independent.
         if id != self.active_view {
-            self.cameras.insert(
+            self.viewports.insert(
                 bank(self.active_view),
-                self.app.state.session.camera.clone(),
+                self.app.state.session.viewport_session(),
             );
             let next = self
-                .cameras
+                .viewports
                 .get(&bank(id))
                 .cloned()
-                .unwrap_or_else(|| self.app.state.session.camera.clone());
-            self.app.state.session.camera = next;
+                .unwrap_or_else(|| self.app.state.session.viewport_session());
+            self.app.state.session.set_viewport_session(next);
             self.active_view = id;
         }
         if let Some((w, h, dpr)) = self.dimensions.get(&id).copied() {
@@ -122,7 +122,9 @@ impl QtViewportRenderer {
         self.app.state.session.camera.zoom(delta);
     }
     pub fn reset_camera(&mut self) {
-        self.app.state.session.camera.reset();
+        self.app
+            .controller
+            .apply(petunia_editor::UiIntent::ResetCamera);
     }
     pub fn paint_into_qt_fbo(&mut self, fbo: u32, width: u32, height: u32) {
         self.paint_surface(1, fbo, width, height, 1.)
@@ -306,6 +308,9 @@ impl GlSurface {
             show_uv_checker: state.show_uv_checker,
             edit_mode_is_edit: state.selection_domain.is_component(),
             show_grid: state.show_grid,
+            show_axes: state.show_axes,
+            axes_visible: state.axes_visible,
+            grid: state.grid,
             edge_mode: state.edge_mode,
             pixel_ratio: ratio,
             matcap: state.matcap,
@@ -514,274 +519,6 @@ pub extern "C" fn petunia_qt_camera_reset() {
 }
 
 // Application & Outliner FFI
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_execute_command(cmd: *const std::ffi::c_char) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if cmd.is_null() {
-                return false;
-            }
-            let c_str = unsafe { std::ffi::CStr::from_ptr(cmd) };
-            let Ok(cmd_str) = c_str.to_str() else {
-                return false;
-            };
-            if let Ok(mut guard) = renderer.try_borrow_mut() {
-                match cmd_str {
-                    "app.undo" | "edit.undo" => guard.app.undo(),
-                    "app.redo" | "edit.redo" => guard.app.redo(),
-                    "project.new" | "file.new" => {
-                        guard.app.new_document();
-                        true
-                    }
-                    _ => guard.app.execute_registered_command(cmd_str).is_ok(),
-                }
-            } else {
-                false
-            }
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_undo() -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(mut guard) = renderer.try_borrow_mut() {
-                guard.app.undo()
-            } else {
-                false
-            }
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_redo() -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(mut guard) = renderer.try_borrow_mut() {
-                guard.app.redo()
-            } else {
-                false
-            }
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_asset_count() -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                guard.app.state.project.assets.len() as i32
-            } else {
-                0
-            }
-        })
-        .unwrap_or(0)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_asset_name(
-    index: i32,
-    buf: *mut std::ffi::c_char,
-    max_len: i32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if buf.is_null() || max_len <= 0 {
-                return false;
-            }
-            if let Ok(guard) = renderer.try_borrow_mut()
-                && let Some(asset) = guard.app.state.project.assets.get(index as usize)
-            {
-                let bytes = asset.name.as_bytes();
-                let copy_len = bytes.len().min((max_len - 1) as usize);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
-                    *buf.add(copy_len) = 0;
-                }
-                return true;
-            }
-            false
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_asset_visible(index: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                guard
-                    .app
-                    .state
-                    .project
-                    .assets
-                    .get(index as usize)
-                    .map(|a| a.visible)
-                    .unwrap_or(true)
-            } else {
-                true
-            }
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_toggle_visibility(index: i32, visible: bool) {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(mut host) = renderer.try_borrow_mut()
-                && let Some(asset) = host.app.state.project.assets.get(index as usize)
-                && asset.visible != visible
-            {
-                let id = asset.id.to_string();
-                host.app
-                    .controller
-                    .apply(petunia_editor::UiIntent::ToggleSceneAssetVisibility(id));
-            }
-        })
-        .unwrap_or(())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_select_asset(index: i32) {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(mut host) = renderer.try_borrow_mut() {
-                select_index(&mut host.app, index);
-            }
-        })
-        .unwrap_or(())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_active_asset() -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                if guard.app.state.project.active < guard.app.state.project.assets.len() {
-                    guard.app.state.project.active as i32
-                } else {
-                    -1
-                }
-            } else {
-                -1
-            }
-        })
-        .unwrap_or(0)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_asset_position(
-    index: i32,
-    x: *mut f32,
-    y: *mut f32,
-    z: *mut f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if x.is_null() || y.is_null() || z.is_null() {
-                return false;
-            }
-            if let Ok(guard) = renderer.try_borrow_mut()
-                && let Some(asset) = guard.app.state.project.assets.get(index as usize)
-            {
-                unsafe {
-                    *x = asset.position[0];
-                    *y = asset.position[1];
-                    *z = asset.position[2];
-                }
-                return true;
-            }
-            false
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_asset_position(index: i32, x: f32, y: f32, z: f32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            set_absolute_transform(
-                &mut host.app,
-                index,
-                petunia_editor::TransformKind::Position,
-                [x, y, z],
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_is_dirty() -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                guard.app.state.is_document_dirty()
-            } else {
-                false
-            }
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_selected_count() -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                match guard.app.state.selection_domain() {
-                    petunia_core::SelectionDomain::Object => {
-                        guard.app.state.session.selection.assets.len() as i32
-                    }
-                    petunia_core::SelectionDomain::Vertex => {
-                        guard.app.state.session.selection.verts.len() as i32
-                    }
-                    petunia_core::SelectionDomain::Edge => {
-                        guard.app.state.session.selection.edges.len() as i32
-                    }
-                    petunia_core::SelectionDomain::Face => {
-                        guard.app.state.session.selection.faces.len() as i32
-                    }
-                }
-            } else {
-                0
-            }
-        })
-        .unwrap_or(0)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_selection_domain() -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                match guard.app.state.selection_domain() {
-                    petunia_core::SelectionDomain::Vertex => 1,
-                    petunia_core::SelectionDomain::Edge => 2,
-                    petunia_core::SelectionDomain::Face => 3,
-                    petunia_core::SelectionDomain::Object => 0,
-                }
-            } else {
-                0
-            }
-        })
-        .unwrap_or(0)
-}
 
 #[unsafe(no_mangle)]
 /// # Safety
@@ -866,200 +603,6 @@ pub extern "C" fn petunia_qt_tablet_paint_stroke(
 }
 
 #[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_asset_rotation(
-    index: i32,
-    rx: *mut f32,
-    ry: *mut f32,
-    rz: *mut f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if rx.is_null() || ry.is_null() || rz.is_null() {
-                return false;
-            }
-            if let Ok(guard) = renderer.try_borrow_mut()
-                && let Some(asset) = guard.app.state.project.assets.get(index as usize)
-            {
-                unsafe {
-                    *rx = asset.rotation[0];
-                    *ry = asset.rotation[1];
-                    *rz = asset.rotation[2];
-                }
-                return true;
-            }
-            false
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_asset_rotation(index: i32, rx: f32, ry: f32, rz: f32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            set_absolute_transform(
-                &mut host.app,
-                index,
-                petunia_editor::TransformKind::Rotation,
-                [rx, ry, rz],
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_asset_scale(
-    index: i32,
-    sx: *mut f32,
-    sy: *mut f32,
-    sz: *mut f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if sx.is_null() || sy.is_null() || sz.is_null() {
-                return false;
-            }
-            if let Ok(guard) = renderer.try_borrow_mut()
-                && let Some(asset) = guard.app.state.project.assets.get(index as usize)
-            {
-                unsafe {
-                    *sx = asset.scale[0];
-                    *sy = asset.scale[1];
-                    *sz = asset.scale[2];
-                }
-                return true;
-            }
-            false
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_asset_scale(index: i32, sx: f32, sy: f32, sz: f32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            set_absolute_transform(
-                &mut host.app,
-                index,
-                petunia_editor::TransformKind::Scale,
-                [sx, sy, sz],
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_asset_color(
-    index: i32,
-    r: *mut f32,
-    g: *mut f32,
-    b: *mut f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if r.is_null() || g.is_null() || b.is_null() {
-                return false;
-            }
-            if let Ok(guard) = renderer.try_borrow_mut()
-                && let Some(asset) = guard.app.state.project.assets.get(index as usize)
-            {
-                let color = asset.material(&guard.app.state.project.project).map_or(
-                    asset.base_color,
-                    |material| {
-                        [
-                            material.base_color[0],
-                            material.base_color[1],
-                            material.base_color[2],
-                        ]
-                    },
-                );
-                unsafe {
-                    *r = color[0];
-                    *g = color[1];
-                    *b = color[2];
-                }
-                return true;
-            }
-            false
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_asset_color(index: i32, r: f32, g: f32, b: f32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if ![r, g, b].iter().all(|v| v.is_finite()) || !select_index(&mut host.app, index) {
-                return false;
-            }
-            host.app.controller.set_active_material_base_color(r, g, b)
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_scene_stats(
-    verts_out: *mut i32,
-    tris_out: *mut i32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if verts_out.is_null() || tris_out.is_null() {
-                return false;
-            }
-            if let Ok(guard) = renderer.try_borrow_mut() {
-                unsafe {
-                    *verts_out = guard.app.state.project.scene_verts() as i32;
-                    *tris_out = guard.app.state.project.scene_tris() as i32;
-                }
-                return true;
-            }
-            false
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_selection_domain(domain: i32) {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(mut guard) = renderer.try_borrow_mut() {
-                let target_domain = match domain {
-                    1 => petunia_core::SelectionDomain::Vertex,
-                    2 => petunia_core::SelectionDomain::Edge,
-                    3 => petunia_core::SelectionDomain::Face,
-                    _ => petunia_core::SelectionDomain::Object,
-                };
-                guard.app.state.set_selection_domain(target_domain);
-                guard.app.state.sync_selection();
-                guard.app.state.mark_dirty();
-                guard.app.state.project.bump_selection();
-            }
-        })
-        .unwrap_or(())
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn petunia_qt_app_frame_selection() {
     crate::render::opengl_viewport::VIEWPORT_RENDERER
         .with(|renderer| {
@@ -1086,10 +629,68 @@ pub extern "C" fn petunia_qt_camera_set_preset(preset: i32) {
                     8 => petunia_core::camera::ViewPreset::PseudoIsometric2To1,
                     _ => petunia_core::camera::ViewPreset::Persp,
                 };
-                guard.app.state.session.camera.set_preset(p);
+                guard.app.controller.set_view_preset(p);
             }
         })
         .unwrap_or(())
+}
+
+/// Aponta a câmera para o objeto a partir da direção `(x, y, z)` (do alvo até o
+/// olho), mantendo a projeção atual. Usado pelas arestas e cantos do cubo de
+/// navegação. Direção nula ou não finita é recusada.
+#[unsafe(no_mangle)]
+pub extern "C" fn petunia_qt_camera_set_view_direction(x: f32, y: f32, z: f32) -> bool {
+    let direction = glam::Vec3::new(x, y, z);
+    if !direction.is_finite() || direction.length_squared() < 1.0e-8 {
+        return false;
+    }
+    let direction = direction.normalize();
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            if let Ok(mut guard) = renderer.try_borrow_mut() {
+                let camera = &mut guard.app.state.session.camera;
+                // Olhando de cima ou de baixo o azimute é indefinido: mantém o atual.
+                if direction.x.abs() > 1.0e-4 || direction.z.abs() > 1.0e-4 {
+                    camera.yaw = direction.x.atan2(direction.z);
+                }
+                camera.pitch = direction.y.clamp(-1.0, 1.0).asin();
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
+}
+
+/// Gira a câmera até o azimute `yaw_degrees`, mantendo a elevação (anel de
+/// bússola do cubo de navegação).
+#[unsafe(no_mangle)]
+pub extern "C" fn petunia_qt_camera_set_yaw(yaw_degrees: f32) -> bool {
+    if !yaw_degrees.is_finite() {
+        return false;
+    }
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            if let Ok(mut guard) = renderer.try_borrow_mut() {
+                guard.app.state.session.camera.yaw = yaw_degrees.to_radians();
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
+}
+
+/// `true` quando a projeção atual é ortográfica.
+#[unsafe(no_mangle)]
+pub extern "C" fn petunia_qt_camera_is_ortho() -> bool {
+    crate::render::opengl_viewport::VIEWPORT_RENDERER
+        .with(|renderer| {
+            renderer.try_borrow_mut().is_ok_and(|guard| {
+                guard.app.state.session.camera.proj == petunia_core::Projection::Ortho
+            })
+        })
+        .unwrap_or(false)
 }
 
 #[unsafe(no_mangle)]
@@ -1097,7 +698,10 @@ pub extern "C" fn petunia_qt_camera_toggle_projection() {
     crate::render::opengl_viewport::VIEWPORT_RENDERER
         .with(|renderer| {
             if let Ok(mut guard) = renderer.try_borrow_mut() {
-                guard.app.state.session.camera.toggle_projection();
+                guard
+                    .app
+                    .controller
+                    .apply(petunia_editor::UiIntent::ToggleProjection);
             }
         })
         .unwrap_or(())
@@ -1256,7 +860,7 @@ pub unsafe extern "C" fn petunia_qt_app_load_project(path_cstr: *const std::ffi:
             };
             match host.app.open(std::path::Path::new(&path)) {
                 Ok(()) => {
-                    host.cameras.clear();
+                    host.viewports.clear();
                     host.active_view = 1;
                     true
                 }
@@ -1605,489 +1209,13 @@ pub extern "C" fn petunia_qt_viewport_hover(
 // MODIFIERS STACK FFI
 // =========================================================================
 
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_modifier_count(asset_index: i32) -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return 0;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return 0;
-            }
-            guard.app.state.project.assets[asset_index as usize]
-                .modifiers
-                .len() as i32
-        })
-        .unwrap_or(0)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_modifier_info(
-    asset_index: i32,
-    mod_index: i32,
-    name_buf: *mut std::ffi::c_char,
-    max_len: i32,
-    enabled: *mut bool,
-    axis: *mut i32,
-    weld: *mut f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            if mod_index < 0 || mod_index as usize >= asset.modifiers.len() {
-                return false;
-            }
-            let modifier = &asset.modifiers[mod_index as usize];
-            let (name, ax, w) = match &modifier.kind {
-                petunia_project::ModifierKind::Mirror { axis, weld } => {
-                    ("Mirror", *axis as i32, *weld)
-                }
-                petunia_project::ModifierKind::Symmetry { axis, weld, .. } => {
-                    ("Symmetry", *axis as i32, *weld)
-                }
-            };
-
-            if !name_buf.is_null() && max_len > 0 {
-                let bytes = name.as_bytes();
-                let len = bytes.len().min((max_len - 1) as usize);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        bytes.as_ptr() as *const std::ffi::c_char,
-                        name_buf,
-                        len,
-                    );
-                    *name_buf.add(len) = 0;
-                }
-            }
-            if !enabled.is_null() {
-                unsafe {
-                    *enabled = modifier.enabled;
-                }
-            }
-            if !axis.is_null() {
-                unsafe {
-                    *axis = ax;
-                }
-            }
-            if !weld.is_null() {
-                unsafe {
-                    *weld = w;
-                }
-            }
-            true
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_add_modifier(
-    asset_index: i32,
-    kind: i32, // 0 = Mirror, 1 = Symmetry
-    axis: i32,
-    weld: f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset_id = guard.app.state.project.assets[asset_index as usize].id;
-            let instance = if kind == 0 {
-                petunia_project::ModifierInstance::mirror(
-                    axis.clamp(0, 2) as usize,
-                    weld.max(0.0001),
-                )
-            } else {
-                petunia_project::ModifierInstance::symmetry(
-                    axis.clamp(0, 2) as usize,
-                    true,
-                    weld.max(0.0001),
-                )
-            };
-
-            let res = guard
-                .app
-                .state
-                .dispatch(&petunia_core::ModifierCmd {
-                    op: petunia_core::ModifierOp::Add {
-                        asset: asset_id,
-                        instance,
-                    },
-                })
-                .is_ok();
-            if res {
-                guard.app.state.mark_dirty();
-            }
-            res
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_toggle_modifier(
-    asset_index: i32,
-    mod_index: i32,
-    enabled: bool,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            if mod_index < 0 || mod_index as usize >= asset.modifiers.len() {
-                return false;
-            }
-            let mod_id = asset.modifiers[mod_index as usize].id;
-            let res = guard
-                .app
-                .state
-                .dispatch(&petunia_core::ModifierCmd {
-                    op: petunia_core::ModifierOp::SetEnabled {
-                        modifier: mod_id,
-                        enabled,
-                    },
-                })
-                .is_ok();
-            if res {
-                guard.app.state.mark_dirty();
-            }
-            res
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_remove_modifier(asset_index: i32, mod_index: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            if mod_index < 0 || mod_index as usize >= asset.modifiers.len() {
-                return false;
-            }
-            let mod_id = asset.modifiers[mod_index as usize].id;
-            let res = guard
-                .app
-                .state
-                .dispatch(&petunia_core::ModifierCmd {
-                    op: petunia_core::ModifierOp::Remove { modifier: mod_id },
-                })
-                .is_ok();
-            if res {
-                guard.app.state.mark_dirty();
-            }
-            res
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_apply_modifier(asset_index: i32, mod_index: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            if mod_index < 0 || mod_index as usize >= asset.modifiers.len() {
-                return false;
-            }
-            let mod_id = asset.modifiers[mod_index as usize].id;
-            let res = guard
-                .app
-                .state
-                .dispatch(&petunia_core::ModifierCmd {
-                    op: petunia_core::ModifierOp::Apply { modifier: mod_id },
-                })
-                .is_ok();
-            if res {
-                guard.app.state.mark_dirty();
-            }
-            res
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_move_modifier(asset_index: i32, mod_index: i32, up: bool) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            if mod_index < 0 || mod_index as usize >= asset.modifiers.len() {
-                return false;
-            }
-            let mod_id = asset.modifiers[mod_index as usize].id;
-            let res = guard
-                .app
-                .state
-                .dispatch(&petunia_core::ModifierCmd {
-                    op: petunia_core::ModifierOp::Move {
-                        modifier: mod_id,
-                        up,
-                    },
-                })
-                .is_ok();
-            if res {
-                guard.app.state.mark_dirty();
-            }
-            res
-        })
-        .unwrap_or(false)
-}
-
 // =========================================================================
 // PBR MATERIAL & SURFACE SHADING FFI
 // =========================================================================
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_material_pbr(
-    asset_index: i32,
-    roughness: *mut f32,
-    metallic: *mut f32,
-    emission_strength: *mut f32,
-    profile: *mut i32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            let mat = asset
-                .material_id
-                .and_then(|id| {
-                    guard
-                        .app
-                        .state
-                        .project
-                        .project
-                        .materials
-                        .iter()
-                        .find(|m| m.id == id)
-                })
-                .or_else(|| guard.app.state.project.project.materials.first());
-
-            let Some(m) = mat else {
-                return false;
-            };
-            unsafe {
-                if !roughness.is_null() {
-                    *roughness = m.roughness;
-                }
-                if !metallic.is_null() {
-                    *metallic = m.metallic;
-                }
-                if !emission_strength.is_null() {
-                    *emission_strength = m.emission_strength;
-                }
-                if !profile.is_null() {
-                    *profile = match m.profile {
-                        petunia_project::material::ShaderProfile::Pbr => 0,
-                        petunia_project::material::ShaderProfile::Unlit => 1,
-                        petunia_project::material::ShaderProfile::Toon => 2,
-                        petunia_project::material::ShaderProfile::Glass => 3,
-                        petunia_project::material::ShaderProfile::Emissive => 4,
-                    };
-                }
-            }
-            true
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_material_pbr(
-    asset_index: i32,
-    roughness: f32,
-    metallic: f32,
-    emission_strength: f32,
-    profile: i32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if ![roughness, metallic, emission_strength]
-                .iter()
-                .all(|v| v.is_finite())
-                || !select_index(&mut host.app, asset_index)
-            {
-                return false;
-            }
-            let b = &mut host.app.controller;
-            let mut changed = b.set_active_material_scalar("roughness", roughness);
-            changed |= b.set_active_material_scalar("metallic", metallic);
-            changed |= b.set_active_material_scalar("emission-strength", emission_strength);
-            changed | b.set_active_material_profile(profile)
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_surface_shading(asset_index: i32) -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return 0;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return 0;
-            }
-            match guard.app.state.project.assets[asset_index as usize].surface_shading {
-                petunia_mesh::shading::SurfaceShading::Flat => 0,
-                petunia_mesh::shading::SurfaceShading::Smooth => 1,
-            }
-        })
-        .unwrap_or(0)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_surface_shading(asset_index: i32, shading: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if !select_index(&mut guard.app, asset_index) {
-                return false;
-            }
-            guard
-                .app
-                .execute_registered_command(if shading == 1 {
-                    "model.shade_smooth"
-                } else {
-                    "model.shade_flat"
-                })
-                .is_ok()
-        })
-        .unwrap_or(false)
-}
-
 // =========================================================================
 // QUICK ACTIONS FFI
 // =========================================================================
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_quick_action(action: *const std::ffi::c_char) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if action.is_null() {
-                return false;
-            }
-            let c_str = unsafe { std::ffi::CStr::from_ptr(action) };
-            let Ok(act) = c_str.to_str() else {
-                return false;
-            };
-
-            let Ok(mut guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            match act {
-                "subdivide" => {
-                    let res = guard
-                        .app
-                        .state
-                        .dispatch(&petunia_core::command::SubdivideSelectionCmd)
-                        .is_ok();
-                    guard.app.state.mark_dirty();
-                    res
-                }
-                "invert_selection" => {
-                    let res = guard
-                        .app
-                        .state
-                        .dispatch(&petunia_core::InvertSelectionCmd)
-                        .is_ok();
-                    guard.app.state.mark_dirty();
-                    res
-                }
-                "select_all" => {
-                    let res = guard
-                        .app
-                        .state
-                        .dispatch(&petunia_core::SelectAllCmd)
-                        .is_ok();
-                    guard.app.state.mark_dirty();
-                    res
-                }
-                "deselect_all" => {
-                    let res = guard
-                        .app
-                        .state
-                        .dispatch(&petunia_core::ClearSelectionCmd)
-                        .is_ok();
-                    guard.app.state.mark_dirty();
-                    res
-                }
-                "origin_to_geometry" => {
-                    let _ = guard.app.state.set_origin_geometry();
-                    guard.app.state.mark_dirty();
-                    true
-                }
-                "origin_to_bottom" => {
-                    let _ = guard.app.state.set_origin_bottom();
-                    guard.app.state.mark_dirty();
-                    true
-                }
-                "symmetrize" => {
-                    let res = guard
-                        .app
-                        .state
-                        .dispatch(&petunia_core::SymmetrizeCmd {
-                            axis: 0,
-                            positive_to_negative: true,
-                            eps: 1e-4,
-                        })
-                        .is_ok();
-                    guard.app.state.mark_dirty();
-                    res
-                }
-                _ => guard.app.execute_registered_command(act).is_ok(),
-            }
-        })
-        .unwrap_or(false)
-}
 
 // =========================================================================
 // GIZMO 3D INTERACTIVE HANDLES MATH & HIT TESTING
@@ -2312,247 +1440,9 @@ pub extern "C" fn petunia_qt_gizmo_drag_axis(
 // UV DIAGNOSTICS & GEOMETRY EXTRACTION FFI
 // =========================================================================
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_uv_diagnostics(
-    asset_index: i32,
-    island_count: *mut i32,
-    overlap_ratio: *mut f32,
-    mean_stretch: *mut f32,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return false;
-            }
-            let asset = &guard.app.state.project.assets[asset_index as usize];
-            let diag = asset.mesh.uv_diagnostics();
-            if !island_count.is_null() {
-                unsafe {
-                    *island_count = diag.island_count as i32;
-                }
-            }
-            if !overlap_ratio.is_null() {
-                unsafe {
-                    *overlap_ratio = diag.overlap_ratio;
-                }
-            }
-            if !mean_stretch.is_null() {
-                unsafe {
-                    *mean_stretch = diag.mean_stretch;
-                }
-            }
-            true
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_get_uv_face_count(asset_index: i32) -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return 0;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return 0;
-            }
-            guard.app.state.project.assets[asset_index as usize]
-                .mesh
-                .faces
-                .len() as i32
-        })
-        .unwrap_or(0)
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-/// The UV output buffer holds max_verts pairs of f32 coordinates.
-pub unsafe extern "C" fn petunia_qt_app_get_uv_face_verts(
-    asset_index: i32,
-    face_idx: i32,
-    out_uvs: *mut f32,
-    max_verts: i32,
-) -> i32 {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(guard) = renderer.try_borrow_mut() else {
-                return 0;
-            };
-            if asset_index < 0 || asset_index as usize >= guard.app.state.project.assets.len() {
-                return 0;
-            }
-            let mesh = &guard.app.state.project.assets[asset_index as usize].mesh;
-            if face_idx < 0 || face_idx as usize >= mesh.faces.len() {
-                return 0;
-            }
-            let face = &mesh.faces[face_idx as usize];
-            let n = face.uv.len().min(max_verts as usize);
-            if !out_uvs.is_null() {
-                for i in 0..n {
-                    unsafe {
-                        *out_uvs.add(i * 2) = face.uv[i][0];
-                        *out_uvs.add(i * 2 + 1) = face.uv[i][1];
-                    }
-                }
-            }
-            n as i32
-        })
-        .unwrap_or(0)
-}
-
 // =========================================================================
 // TIMELINE & DOPESHEET KEYFRAMES FFI
 // =========================================================================
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// C string inputs must be valid and null-terminated. Non-null output pointers
-/// must reference writable scalar storage or buffers of the advertised length.
-pub unsafe extern "C" fn petunia_qt_app_get_timeline_info(
-    current_frame: *mut i32,
-    total_frames: *mut i32,
-    is_playing: *mut bool,
-) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            let vm = host.app.controller.animate_view_model();
-            let frames = vm.total_frames.max(1);
-            unsafe {
-                if !current_frame.is_null() {
-                    *current_frame = vm.current_frame;
-                }
-                if !total_frames.is_null() {
-                    *total_frames = frames;
-                }
-                if !is_playing.is_null() {
-                    *is_playing = vm.playing;
-                }
-            }
-            true
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_set_timeline_frame(frame: i32) {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            if let Ok(mut host) = renderer.try_borrow_mut() {
-                host.app
-                    .controller
-                    .apply_animate(petunia_editor::animate::AnimateIntent::JumpToStart);
-                host.app.controller.apply_animate(
-                    petunia_editor::animate::AnimateIntent::StepFrame(frame.max(0)),
-                );
-            }
-        })
-        .unwrap_or(())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_toggle_playback() -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            host.app
-                .controller
-                .apply_animate(petunia_editor::animate::AnimateIntent::TogglePlay);
-            host.app.controller.animate_view_model().playing
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_has_keyframe(asset_index: i32, frame: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0 || asset_index as usize >= host.app.state.project.assets.len() {
-                return false;
-            }
-            let vm = host.app.controller.animate_view_model();
-            vm.tracks
-                .iter()
-                .filter(|t| vm.selected_bone == Some(t.bone_id))
-                .any(|t| t.keyframes.iter().any(|k| k.frame == frame))
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_insert_keyframe(asset_index: i32, frame: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0
-                || asset_index as usize >= host.app.state.project.assets.len()
-                || frame < 0
-                || !host.app.controller.animate_view_model().can_keyframe
-            {
-                return false;
-            }
-            host.app
-                .controller
-                .apply_animate(petunia_editor::animate::AnimateIntent::JumpToStart);
-            host.app
-                .controller
-                .apply_animate(petunia_editor::animate::AnimateIntent::StepFrame(
-                    frame.max(0),
-                ));
-            host.app
-                .controller
-                .apply_animate(petunia_editor::animate::AnimateIntent::InsertKeyframe);
-            let vm = host.app.controller.animate_view_model();
-            vm.tracks
-                .iter()
-                .filter(|t| vm.selected_bone == Some(t.bone_id))
-                .any(|t| t.keyframes.iter().any(|k| k.frame == frame))
-        })
-        .unwrap_or(false)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn petunia_qt_app_delete_keyframe(asset_index: i32, frame: i32) -> bool {
-    crate::render::opengl_viewport::VIEWPORT_RENDERER
-        .with(|renderer| {
-            let Ok(mut host) = renderer.try_borrow_mut() else {
-                return false;
-            };
-            if asset_index < 0
-                || asset_index as usize >= host.app.state.project.assets.len()
-                || frame < 0
-                || !host.app.controller.animate_view_model().can_keyframe
-            {
-                return false;
-            }
-            host.app.controller.apply_animate(
-                petunia_editor::animate::AnimateIntent::DeleteKeyframe(Some(frame as f32 / 24.)),
-            );
-            let vm = host.app.controller.animate_view_model();
-            !vm.tracks
-                .iter()
-                .filter(|t| vm.selected_bone == Some(t.bone_id))
-                .any(|t| t.keyframes.iter().any(|k| k.frame == frame))
-        })
-        .unwrap_or(false)
-}
 
 /// # Safety
 /// The loader must resolve functions for the current owning Qt GL context.
@@ -2657,24 +1547,27 @@ fn set_absolute_transform(
     if !value.iter().all(|v| v.is_finite()) || !select_index(editor, index) {
         return false;
     }
-    let Some(asset) = editor.state.project.active() else {
-        return false;
+    let intent = match kind {
+        petunia_editor::TransformKind::Position => petunia_editor::UiIntent::SetAssetTransform {
+            asset_index: Some(index as usize),
+            translation: Some(value),
+            rotation_euler_deg: None,
+            scale: None,
+        },
+        petunia_editor::TransformKind::Rotation => petunia_editor::UiIntent::SetAssetTransform {
+            asset_index: Some(index as usize),
+            translation: None,
+            rotation_euler_deg: Some(value),
+            scale: None,
+        },
+        petunia_editor::TransformKind::Scale => petunia_editor::UiIntent::SetAssetTransform {
+            asset_index: Some(index as usize),
+            translation: None,
+            rotation_euler_deg: None,
+            scale: Some(value),
+        },
     };
-    let previous = match kind {
-        petunia_editor::TransformKind::Position => asset.position,
-        petunia_editor::TransformKind::Rotation => asset.rotation,
-        petunia_editor::TransformKind::Scale => asset.scale,
-    };
-    for axis in 0..3 {
-        if (value[axis] - previous[axis]).abs() > 1e-6
-            && editor
-                .controller
-                .commit_transform_text(kind, axis, &value[axis].to_string())
-                .is_err()
-        {
-            return false;
-        }
-    }
+    editor.controller.apply(intent);
     true
 }
 /// The active paint layer is the only editable canvas, copied after size checks.
@@ -2767,4 +1660,38 @@ pub unsafe extern "C" fn petunia_qt_software_frame_rgba(
             len
         })
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod split_view_tests {
+    use super::*;
+
+    /// U05: cada vista (principal, split) tem câmera e tamanho lógico próprios; o
+    /// ponteiro de uma vista é mapeado com as dimensões dela, nunca da outra.
+    #[test]
+    fn activating_a_view_switches_its_logical_size_ratio_and_camera() {
+        let mut host = QtViewportRenderer::new();
+        host.dimensions.insert(1, (800, 600, 1.0));
+        host.dimensions.insert(2, (400, 300, 2.0));
+
+        host.activate(1);
+        assert_eq!(host.app.controller.viewport_size, [800.0, 600.0]);
+        host.app.state.session.camera.yaw = 0.25;
+
+        host.activate(2);
+        assert_eq!(host.app.controller.viewport_size, [400.0, 300.0]);
+        host.app.state.session.camera.yaw = -1.0;
+
+        host.activate(1);
+        assert_eq!(host.app.controller.viewport_size, [800.0, 600.0]);
+        assert_eq!(
+            host.app.state.session.camera.yaw, 0.25,
+            "câmera da vista principal preservada"
+        );
+        host.activate(2);
+        assert_eq!(
+            host.app.state.session.camera.yaw, -1.0,
+            "split tem câmera independente"
+        );
+    }
 }

@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::Canvas;
+use crate::material::Material;
 use crate::paint_layers::{PaintEffect, apply_effect};
 
 /// Versão do schema do graph (serializada; cap. 42: "schema versionado").
@@ -168,6 +169,17 @@ pub enum NodeSpec {
     Output {
         channel: RecipeOutputChannel,
     },
+    /// Material PBR com parâmetros escalares e entradas de mapa (O04).
+    PbrMaterial {
+        base_color: [f32; 4],
+        roughness: f32,
+        metallic: f32,
+        emission_strength: f32,
+    },
+    /// Atribui o material avaliado a um slot da malha (O04).
+    AssignMaterial {
+        slot: usize,
+    },
 }
 
 impl NodeSpec {
@@ -179,7 +191,10 @@ impl NodeSpec {
             | Self::ValueInput { .. }
             | Self::Gradient { .. }
             | Self::Checker { .. } => vec![],
-            Self::Effect { .. } | Self::Tint { .. } => vec![SocketType::Texture],
+            Self::Effect { .. }
+            | Self::Tint { .. }
+            | Self::PbrMaterial { .. }
+            | Self::AssignMaterial { .. } => vec![SocketType::Texture],
             Self::Mix { .. } | Self::Multiply => vec![SocketType::Texture, SocketType::Texture],
             Self::Output { .. } => vec![SocketType::Texture],
         }
@@ -197,7 +212,9 @@ impl NodeSpec {
             | Self::Mix { .. }
             | Self::Multiply
             | Self::Gradient { .. }
-            | Self::Checker { .. } => vec![SocketType::Texture],
+            | Self::Checker { .. }
+            | Self::PbrMaterial { .. }
+            | Self::AssignMaterial { .. } => vec![SocketType::Texture],
         }
     }
 }
@@ -525,6 +542,98 @@ impl SurfaceRecipe {
         outputs.sort_by_key(|(ch, _)| ch.ordinal());
         Ok(outputs)
     }
+
+    /// Avaliação com cache por revisão (O04): evita recomputar quando nem o graph nem o canvas mudaram.
+    pub fn evaluate_cached(
+        &self,
+        source: &Canvas,
+        cache: &mut SurfaceRecipeCache,
+    ) -> RecipeResult<Vec<(RecipeOutputChannel, SocketValue)>> {
+        if let (Some(outputs), true) = (
+            &cache.cached_outputs,
+            cache.is_valid(self.param_revision, source),
+        ) {
+            return Ok(outputs.clone());
+        }
+        let outputs = self.evaluate(source)?;
+        cache.last_revision = self.param_revision;
+        cache.last_source_len = source.pixels.len();
+        cache.cached_outputs = Some(outputs.clone());
+        Ok(outputs)
+    }
+
+    /// Avalia a receita e preenche/atualiza os canais de um `Material` PBR (O04).
+    pub fn evaluate_to_material(
+        &self,
+        source: &Canvas,
+        base_material: Option<&Material>,
+    ) -> RecipeResult<Material> {
+        let evaluated_channels = self.evaluate(source)?;
+        let mut mat = base_material
+            .cloned()
+            .unwrap_or_else(|| Material::new("Recipe Material"));
+        for (channel, val) in evaluated_channels {
+            match (channel, val) {
+                (RecipeOutputChannel::BaseColor, SocketValue::Texture(canvas)) => {
+                    mat.albedo_texture = Some(canvas);
+                }
+                (RecipeOutputChannel::BaseColor, SocketValue::Color(rgba)) => {
+                    mat.base_color = rgba;
+                }
+                (RecipeOutputChannel::Roughness, SocketValue::Texture(canvas)) => {
+                    mat.roughness_texture = Some(canvas);
+                }
+                (RecipeOutputChannel::Roughness, SocketValue::Value(v)) => {
+                    mat.roughness = v.clamp(0.0, 1.0);
+                }
+                (RecipeOutputChannel::Metallic, SocketValue::Texture(canvas)) => {
+                    mat.metallic_texture = Some(canvas);
+                }
+                (RecipeOutputChannel::Metallic, SocketValue::Value(v)) => {
+                    mat.metallic = v.clamp(0.0, 1.0);
+                }
+                (RecipeOutputChannel::Emission, SocketValue::Texture(canvas)) => {
+                    mat.emission_texture = Some(canvas);
+                }
+                (RecipeOutputChannel::Emission, SocketValue::Color(rgb)) => {
+                    mat.emission_color = [rgb[0], rgb[1], rgb[2]];
+                    mat.emission_strength = rgb[3].max(1.0);
+                }
+                (RecipeOutputChannel::Height, SocketValue::Texture(canvas)) => {
+                    mat.height_texture = Some(canvas);
+                }
+                (RecipeOutputChannel::Height, SocketValue::Value(v)) => {
+                    mat.normal_scale = v;
+                }
+                _ => {}
+            }
+        }
+        Ok(mat)
+    }
+
+    /// Bake da receita de superfície para um Material estático persistente com novo UUID (O04).
+    pub fn bake(&self, source: &Canvas, name: &str) -> RecipeResult<Material> {
+        let mut mat = self.evaluate_to_material(source, None)?;
+        mat.name = name.to_string();
+        mat.id = Uuid::new_v4();
+        Ok(mat)
+    }
+}
+
+/// Cache determinístico de avaliação da receita por revisão e tamanho da fonte (O04).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SurfaceRecipeCache {
+    pub last_revision: u64,
+    pub last_source_len: usize,
+    pub cached_outputs: Option<Vec<(RecipeOutputChannel, SocketValue)>>,
+}
+
+impl SurfaceRecipeCache {
+    pub fn is_valid(&self, revision: u64, source: &Canvas) -> bool {
+        self.cached_outputs.is_some()
+            && self.last_revision == revision
+            && self.last_source_len == source.pixels.len()
+    }
 }
 
 /// Avalia um único node (entradas lidas do memo via arestas de entrada).
@@ -594,6 +703,26 @@ fn evaluate_node(
         } => SocketValue::Texture(checker_canvas(
             source.w, source.h, *cell_size, *color_a, *color_b,
         )),
+        NodeSpec::PbrMaterial {
+            base_color,
+            roughness: _,
+            metallic: _,
+            emission_strength: _,
+        } => {
+            let mut tex = expect_texture(&inputs, node.id, 0)?;
+            for px in tex.pixels.chunks_mut(4) {
+                for (i, c) in base_color.iter().enumerate().take(3) {
+                    px[i] = ((px[i] as f32 / 255.0 * c) * 255.0)
+                        .round()
+                        .clamp(0.0, 255.0) as u8;
+                }
+            }
+            SocketValue::Texture(tex)
+        }
+        NodeSpec::AssignMaterial { .. } => {
+            let tex = expect_texture(&inputs, node.id, 0)?;
+            SocketValue::Texture(tex)
+        }
         NodeSpec::Output { .. } => inputs.first().cloned().ok_or(RecipeError::MissingInput {
             node: node.id,
             socket: 0,
@@ -935,5 +1064,135 @@ mod tests {
         let back: SurfaceRecipe = serde_json::from_str(&json).unwrap();
         assert_eq!(back.schema_version, RECIPE_SCHEMA_VERSION);
         assert_eq!(back, recipe);
+    }
+
+    #[test]
+    fn pbr_material_and_assign_node_inputs_outputs() {
+        let pbr = NodeSpec::PbrMaterial {
+            base_color: [0.8, 0.2, 0.2, 1.0],
+            roughness: 0.3,
+            metallic: 0.9,
+            emission_strength: 0.0,
+        };
+        assert_eq!(pbr.inputs(), vec![SocketType::Texture]);
+        assert_eq!(pbr.outputs(), vec![SocketType::Texture]);
+
+        let assign = NodeSpec::AssignMaterial { slot: 1 };
+        assert_eq!(assign.inputs(), vec![SocketType::Texture]);
+        assert_eq!(assign.outputs(), vec![SocketType::Texture]);
+    }
+
+    #[test]
+    fn evaluate_to_material_and_bake_populates_material() {
+        let mut recipe = SurfaceRecipe::new("Procedural Gold");
+        let input = Uuid::from_u128(61);
+        let pbr = Uuid::from_u128(62);
+        let out_albedo = Uuid::from_u128(63);
+        let out_roughness = Uuid::from_u128(64);
+
+        recipe
+            .add_node(RecipeNode {
+                id: input,
+                spec: NodeSpec::TextureInput,
+                exposed: vec![],
+            })
+            .unwrap();
+        recipe
+            .add_node(RecipeNode {
+                id: pbr,
+                spec: NodeSpec::PbrMaterial {
+                    base_color: [1.0, 0.8, 0.2, 1.0],
+                    roughness: 0.25,
+                    metallic: 1.0,
+                    emission_strength: 0.0,
+                },
+                exposed: vec![],
+            })
+            .unwrap();
+        recipe
+            .add_node(RecipeNode {
+                id: out_albedo,
+                spec: NodeSpec::Output {
+                    channel: RecipeOutputChannel::BaseColor,
+                },
+                exposed: vec![],
+            })
+            .unwrap();
+        let checker_roughness = Uuid::from_u128(65);
+        recipe
+            .add_node(RecipeNode {
+                id: checker_roughness,
+                spec: NodeSpec::Checker {
+                    cell_size: 2,
+                    color_a: [0.2, 0.2, 0.2, 1.0],
+                    color_b: [0.8, 0.8, 0.8, 1.0],
+                },
+                exposed: vec![],
+            })
+            .unwrap();
+        recipe
+            .add_node(RecipeNode {
+                id: out_roughness,
+                spec: NodeSpec::Output {
+                    channel: RecipeOutputChannel::Roughness,
+                },
+                exposed: vec![],
+            })
+            .unwrap();
+
+        recipe.connect(input, 0, pbr, 0).unwrap();
+        recipe.connect(pbr, 0, out_albedo, 0).unwrap();
+        recipe
+            .connect(checker_roughness, 0, out_roughness, 0)
+            .unwrap();
+
+        let canvas = source();
+        let mat = recipe.evaluate_to_material(&canvas, None).unwrap();
+        assert!(mat.albedo_texture.is_some());
+        assert!(mat.roughness_texture.is_some());
+
+        // Bake cria material estático com novo UUID e nome solicitado
+        let baked = recipe.bake(&canvas, "Static Gold").unwrap();
+        assert_eq!(baked.name, "Static Gold");
+        assert_ne!(baked.id, mat.id);
+        assert!(baked.albedo_texture.is_some());
+    }
+
+    #[test]
+    fn cached_evaluation_avoids_recomputation_when_revision_matches() {
+        let mut recipe = SurfaceRecipe::new("Cached Recipe");
+        let input = Uuid::from_u128(71);
+        let out = Uuid::from_u128(72);
+        recipe
+            .add_node(RecipeNode {
+                id: input,
+                spec: NodeSpec::TextureInput,
+                exposed: vec![],
+            })
+            .unwrap();
+        recipe
+            .add_node(RecipeNode {
+                id: out,
+                spec: NodeSpec::Output {
+                    channel: RecipeOutputChannel::BaseColor,
+                },
+                exposed: vec![],
+            })
+            .unwrap();
+        recipe.connect(input, 0, out, 0).unwrap();
+
+        let canvas = source();
+        let mut cache = SurfaceRecipeCache::default();
+        assert!(!cache.is_valid(recipe.param_revision, &canvas));
+
+        let first = recipe.evaluate_cached(&canvas, &mut cache).unwrap();
+        assert!(cache.is_valid(recipe.param_revision, &canvas));
+
+        let second = recipe.evaluate_cached(&canvas, &mut cache).unwrap();
+        assert_eq!(first, second);
+
+        // Incrementar param_revision invalida o cache
+        recipe.param_revision += 1;
+        assert!(!cache.is_valid(recipe.param_revision, &canvas));
     }
 }

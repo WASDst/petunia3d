@@ -60,7 +60,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn build_uv_editor(&self) -> UvEditorModel {
         const BOX: f32 = 256.0;
         const MAX_FACES: usize = 2_000;
-        let Some(mesh) = self.state.project.active_mesh() else {
+        let Some(mesh) = self
+            .state
+            .session
+            .tools
+            .uv_transform
+            .as_ref()
+            .map(|session| session.preview_mesh())
+            .or_else(|| self.state.project.active_mesh())
+        else {
             return UvEditorModel::default();
         };
         let face_count = mesh.faces.len();
@@ -157,6 +165,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         let islands = mesh.uv_islands();
+        let island_rows = islands
+            .iter()
+            .take(UV_ISLAND_ROWS_MAX)
+            .enumerate()
+            .map(|(index, island)| {
+                let area = island.area();
+                let center = island
+                    .faces
+                    .first()
+                    .and_then(|&fi| mesh.faces.get(fi))
+                    .filter(|face| !face.uv.is_empty())
+                    .map(|face| {
+                        let n = face.uv.len() as f32;
+                        [
+                            face.uv.iter().map(|uv| uv[0]).sum::<f32>() / n,
+                            face.uv.iter().map(|uv| uv[1]).sum::<f32>() / n,
+                        ]
+                    })
+                    .filter(|center| center.iter().all(|value| value.is_finite()))
+                    .unwrap_or([0.0, 0.0]);
+                UvIslandRowModel {
+                    index,
+                    center,
+                    face_count: island.faces.len(),
+                    area: if area.is_finite() { area } else { 0.0 },
+                    selected: !island.faces.is_empty()
+                        && island.faces.iter().all(|fi| uv_faces.contains(fi)),
+                }
+            })
+            .collect();
         UvEditorModel {
             layout_commands: commands,
             seam_commands,
@@ -173,7 +211,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .unwrap_or(-1),
             uv_selected_count: uv_faces.len(),
             truncated: face_count > MAX_FACES,
+            islands: island_rows,
         }
+    }
+
+    /// Seleciona em UV todas as faces da ilha `index` (ordem de
+    /// `Mesh::uv_islands`). Índice inválido ou malha sem UV: `false`.
+    pub fn uv_select_island(&mut self, index: usize, extend: bool) -> bool {
+        let Some(faces) = self
+            .state
+            .project
+            .active_mesh()
+            .and_then(|mesh| mesh.uv_islands().into_iter().nth(index))
+            .map(|island| island.faces)
+        else {
+            return false;
+        };
+        if !self.state.uv_select_faces(&faces, extend) {
+            return false;
+        }
+        self.state.mark_dirty();
+        true
     }
 
     /// Clique no editor UV 2D: seleciona a face cuja ilha contém o ponto.
@@ -182,6 +240,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// convenção do domínio; o editor desenha com origem em cima e converte
     /// antes de chamar.
     pub fn uv_editor_click(&mut self, u: f32, v: f32, extend: bool) -> bool {
+        if self.state.session.tools.uv_transform.is_some() {
+            return false;
+        }
         /// Raio de pick de canto/edge: 6 px no editor de 256 px.
         const PICK_RADIUS: f32 = 6.0 / 256.0;
         if !u.is_finite() || !v.is_finite() {
@@ -219,6 +280,59 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             &[("face", face), ("0", total.to_string())],
         ));
         true
+    }
+
+    /// Pressionar no editor UV (início de um clique ou de um arrasto): se o alvo
+    /// já faz parte da seleção, a seleção é **mantida** (o arrasto move todos);
+    /// senão age como o clique. Devolve `true` se algum alvo foi atingido; com
+    /// `false` o editor começa uma caixa de seleção.
+    pub fn uv_editor_press(&mut self, u: f32, v: f32, extend: bool) -> bool {
+        if self.state.session.tools.uv_transform.is_some() || !u.is_finite() || !v.is_finite() {
+            return false;
+        }
+        const PICK_RADIUS: f32 = 6.0 / 256.0;
+        let hit = self
+            .state
+            .uv_press(glam::Vec2::new(u, v), PICK_RADIUS, extend);
+        self.state.mark_dirty();
+        hit
+    }
+
+    /// Seleção por caixa no editor UV. Os pontos são frações da textura com a
+    /// origem no canto superior esquerdo (como o canvas desenha).
+    #[allow(clippy::too_many_arguments)]
+    pub fn uv_box_select(
+        &mut self,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        extend: bool,
+        subtract: bool,
+    ) -> bool {
+        if self.state.session.tools.uv_transform.is_some()
+            || ![x0, y0, x1, y1].iter().all(|value| value.is_finite())
+        {
+            return false;
+        }
+        let min = glam::Vec2::new(x0.min(x1), 1.0 - y0.max(y1));
+        let max = glam::Vec2::new(x0.max(x1), 1.0 - y0.min(y1));
+        let changed = self.state.uv_box_select(min, max, extend, subtract);
+        if changed {
+            let total = self
+                .state
+                .project
+                .active_mesh()
+                .map_or(0, |mesh| self.state.session.uv_selection.faces(mesh).len());
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_UV_FACE_SELECTED_TOTAL),
+                &[("face", "-".to_string()), ("0", total.to_string())],
+            ));
+        }
+        self.state.mark_dirty();
+        changed
     }
 
     /// Move os cantos UV selecionados (um comando = um Undo).

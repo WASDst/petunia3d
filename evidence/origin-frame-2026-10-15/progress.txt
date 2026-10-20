@@ -1,0 +1,1 @@
+PASS: 104 processos, 71 documentos cobertos; {"TODO":46,"IN PROGRESS":42,"DONE":16}; estados/checkpoints/evidências consistentes.

@@ -24,7 +24,7 @@ Esses dois caminhos não podem continuar misturados.
 
 ---
 
-# Diagnóstico atual
+# Diagnóstico da baseline anterior a H19
 
 ## Object Mode ainda move a Mesh
 
@@ -309,9 +309,7 @@ Workplane já cobre boa parte do caso custom.
 
 # Pivot Policy
 
-Pivot é estado do EditorSession.
-
-Não é propriedade do objeto.
+Nesta seção, **Pivot Policy** é o nome legado do **centro de transformação**, estado do EditorSession. O **pivô do objeto** pertence ao objeto e corresponde a Object Origin, definido abaixo. Não confundir os dois conceitos.
 
 V1:
 
@@ -342,7 +340,7 @@ Se não houver active element válido, o comando deve ficar indisponível ou ind
 
 ## 3D Cursor
 
-Usa cursor transitório do editor.
+Copia explicitamente a posição mundial do cursor para um centro da sessão. A cópia é fixa; mover o cursor depois não muda o centro de transformação. Não vincular operações continuamente ao cursor.
 
 ## Individual
 
@@ -994,3 +992,35 @@ Origin, Workplane, hierarchy e gizmo alimentam essas quatro respostas; não prec
 18. transform-gizmo-egui é removido no destino final.
 19. Gizmo recebe TransformFrame pronto.
 20. TransformSession captura somente estado necessário para preview/Undo.
+
+## Terminologia conciliada — pivô do objeto e centro de transformação (2026-10-15)
+
+No vocabulário do produto aprovado pelo usuário, **pivô do objeto** significa `Object Origin`, persistente e pertencente ao frame local. O `Transform Pivot`/`Pivot Policy` descrito acima deve ser lido como **centro de transformação**, estado da sessão. Não são dois pivôs persistentes. A edição da origem preserva a pose no quadro atual; não promete preservar toda a trajetória de animação. Sua migração completa é H19, ainda pendente onde `Asset.origin` e os metadados legados competem com `Asset.transform`.
+
+O Cursor3D continua referência espacial de criação/navegação independente. Selecionar o item legado `PivotPoint::Cursor3D` pelo editor agora executa uma **cópia única** para `EditorSession.transform_center`; mover o cursor depois não desloca esse centro. Consumidores novos usam `copy_cursor_to_transform_center`, não atribuição direta ao enum para criar vínculo. Sem snapshot, a referência legada não lê o cursor ao vivo. Navegação usa `NavigationAnchor`, sem consultar essa política. [Contrato integrado](../02-application/contextual-editor-contract.md#pivo-do-objeto-centro-cursor3d-e-camera).
+
+
+## Checkpoint H19 — origem e frame autoritativo (2026-10-15)
+
+**In migration.** A compatibilidade é identificada por offset legado presente, ou TRS identidade acompanhado de position/rotation/scale assados não padrão. Registros com TRS já não identidade preservam essa autoridade, salvo o offset legado explícito. `Asset.transform` passa a receber G/R/S em Object Mode para objetos normalizados. A geometria autoral permanece local, com seus cantos, UVs, flags e topologia preservados. Component Edit continua alterando geometria; os campos numéricos XYZ também convertem mundo/local pelo frame congelado do gesto.
+
+Os comandos `model.origin_geometry`, `model.origin_bottom`, `model.origin_cursor`, `model.origin_selection` e `model.geometry_to_origin` são registrados no dispatcher. Origem para geometria usa todos os vértices, origem para seleção exige seleção, e Bottom usa a base do bounding box em mundo. A API explícita `SetObjectOriginCmd` identifica o objeto por UUID e exige a revisão de origem. Os adapters existentes usam a mesma transação, sem checkpoint paralelo.
+
+Para reposicionar a origem em `q` de mundo, calcula-se `d = inverse(M) q`, subtrai-se `d` das posições locais e define-se a translação do frame como `q`. Rotação e escala são preservadas. Assim `M' p' = M p` no quadro atual. O arrasto de origem aplica a mesma operação a partir do snapshot inicial, com cancel e um Undo. Neste checkpoint Edit Origin aceita apenas Move; Rotate/Scale da origem retornam erro contextual, sem mutação. Mover o Cursor3D depois não acompanha a origem; seu ponto só é copiado na ação explícita.
+
+Median em Object Mode usa as origens dos objetos; Bounding Box Center usa os limites da superfície em mundo; Individual Origins usa cada origem congelada. Edit Origin sempre apresenta a origem ativa. Escala global não uniforme que produziria shear é rejeitada antes de publicar qualquer alvo, preservando a última prévia válida. Não há aproximação silenciosa para TRS.
+
+Rebase recusa primitivas paramétricas vivas, qualquer modifier retido (mesmo desabilitado) e objetos com skeleton/skin: essas fontes ainda precisam de compensação própria ou Make Editable/aplicação explícitos. Não há bake automático. Frames singulares, coordenadas não finitas, overflow e rebase distante que perde precisão da superfície são erros. A tolerância de decomposição TRS é calculada pelo bloco linear, sem permitir que uma translação grande esconda shear; matrizes projetivas são recusadas. A GUI Qt/Slint não foi alterada.
+
+Para objetos normalizados, limpar localização/rotação/escala atua sobre o TRS sem congelar primitivas. Separar seleção herda o frame de origem. Instanciar um objeto posiciona sua origem no ponto solicitado por translação do frame; prefabs calculam os limites do grupo em mundo e deslocam frames, preservando a geometria local. O snap consulta geometria e frame do snapshot inicial; superfícies paradas continuam disponíveis durante a edição da origem, enquanto outros objetos selecionados que se movem são excluídos como alvos.
+
+`Asset.origin` permanece legível como offset local legado para compatibilidade. Objetos ainda marcados por offset ou metadados assados sem TRS conservam o caminho de compatibilidade de G/R/S e reset, evitando apagar seu histórico autoral por sobrescrita de metadados. Suas prévias rígidas continuam reaproveitando a geometria triangulada quando não há modifiers habilitados; isso não encerra a migração desses objetos. Casos legados com rig ou reset de fonte procedural incompatível são recusados, sem bake. Um offset ausente com metadados assados usa o centro geométrico de compatibilidade. Para fontes estáticas suportadas, um rebase explícito o normaliza para `None`, deixando local zero como origem. Arquivos com cursor legado gravado em mundo sob transform não identidade são ambíguos e não recebem migração automática inferida. Hierarquia, compensação de bind/animação e migração completa de todos os produtores legados continuam pendentes; H19 permanece **IN PROGRESS**. Gates e limites desta etapa estão em `evidence/origin-frame-2026-10-15/README.md`.
+
+
+## Continuação H19 — criação e regeneração de primitivas (2026-10-15)
+
+Novas primitivas usam a malha local produzida pelo descritor e `Asset.transform.translation` para capturar o Cursor3D no momento da criação. A origem canônica é zero local (`Asset.origin = None`). A sessão não retém um segundo offset espacial. Mover o cursor depois não altera o objeto nem a próxima regeneração.
+
+Editar parâmetros preserva identidade e TRS atuais, inclusive rotação e escala negativa/não uniforme. A sessão de criação mantém um Undo; reedição confirmada solicita checkpoint próprio. Valores não finitos, frame inválido, alvo bloqueado, rig/skin e conflito com transformação em andamento são recusados antes de trocar a malha ou gerar histórico. A sessão exige que o objeto criado ainda seja o ativo e continue paramétrico; um Cancel posterior com contexto obsoleto não remove a criação.
+
+Fontes legadas cuja malha corresponde ao descritor mais o offset de translação continuam reeditáveis na representação anterior. Deformações assadas ou edições livres que não correspondem à fonte são recusadas: Euler acumulado não reconstrói seguramente a sequência de transforms. Não inferir frame nem apagar a superfície; Make Editable é decisão explícita. A mesma verificação protege primitivas modernas com descritor obsoleto após edição livre. Isso não fecha compensação de origem paramétrica, hierarquia, skin ou migração completa de legado. H19 permanece **IN PROGRESS**; comandos e provas desta continuação: `evidence/primitive-frame-2026-10-15/README.md`.

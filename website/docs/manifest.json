@@ -65,6 +65,10 @@
         {
           "path": "02-application/tools-interaction-implementation.md",
           "title": "Ferramentas: proposta e matriz de implementação"
+        },
+        {
+          "path": "02-application/contextual-editor-contract.md",
+          "title": "Editor contextual — seleção, percepção e Smart Rig"
         }
       ]
     },
@@ -109,6 +113,10 @@
           "title": "Object e Geometry Source — aprovado"
         },
         {
+          "path": "03-geometry/operation-graph.md",
+          "title": "Operation Graph — sistema de nós simples e modular — proposta"
+        },
+        {
           "path": "03-geometry/scene-hierarchy-transforms.md",
           "title": "Scene Hierarchy e Transforms — aprovado"
         },
@@ -143,6 +151,10 @@
         {
           "path": "03-geometry/transforms-origin-pivot-gizmos.md",
           "title": "Transforms, Origin, Pivot & Gizmos — aprovado"
+        },
+        {
+          "path": "03-geometry/draw-workspace-implementation.md",
+          "title": "DRAW: integração atual e evidências"
         }
       ]
     },
@@ -239,6 +251,34 @@
         {
           "path": "09-ui/qt-library-adoption.md",
           "title": "Qt — adoção de bibliotecas e componentes nativos"
+        },
+        {
+          "path": "09-ui/gui-audit-dossier.md",
+          "title": "Dossiê de auditoria da GUI Qt — diagnóstico"
+        },
+        {
+          "path": "09-ui/shell-v2-proposal.md",
+          "title": "Shell v2 — proposta de refatoração da GUI Qt"
+        },
+        {
+          "path": "09-ui/shell-v2-refinement.md",
+          "title": "Shell v2 — refinamento de uso — implementado, visual pendente"
+        },
+        {
+          "path": "09-ui/shell-v2-roadmap.md",
+          "title": "Shell v2 — roteiro de Poly, Paint, UV, Animate, Nós e Assets"
+        },
+        {
+          "path": "09-ui/visual-language.md",
+          "title": "Linguagem visual da vista e da GUI — proposta (B8)"
+        },
+        {
+          "path": "09-ui/shell-v2-polish-waves.md",
+          "title": "Acabamento da UI: comparação Slint × Qt e ondas D–F"
+        },
+        {
+          "path": "09-ui/shell-v2-manual-test-checklist.md",
+          "title": "Roteiro de teste manual do Shell v2"
         }
       ]
     },

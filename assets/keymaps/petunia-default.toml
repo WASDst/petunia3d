@@ -22,6 +22,8 @@ hardness_decrease = "Shift+["
 hardness_increase = "Shift+]"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+make_face = "Shift+F"
 box_select = "B"
 select_vertex = "1"
 select_edge = "2"

@@ -44,7 +44,6 @@ pub(crate) const DRAW_ACTIONS: &[(&str, &str)] = &[
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn execute_draw_extension(&mut self, id: &str) -> bool {
         if !DRAW_ACTIONS.iter().any(|(key, _)| *key == id)
-            || self.modeling_mode != ModelingMode::Draw
             || self.state.workspace != Workspace::Model
             || self.profile_volume_mode.is_some()
             || self.state.modal.is_some()
@@ -207,7 +206,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             &points,
                             params.radius,
                             6,
-                            self.profile_selected_point
+                            self.state
+                                .session
+                                .planar_selection
+                                .point
                                 .and_then(|id| spline.points.iter().position(|p| p.id == id)),
                         )
                     }
@@ -296,7 +298,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(error.to_string());
             return false;
         }
-        self.active_profile_id = Some(id);
+        self.state.session.active_shape = Some(id);
         self.state.session.tools.active_tool = "draw_profile".into();
         true
     }
@@ -306,8 +308,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         let mut spline = spline.clone();
         spline.closed = true;
+        let mut source_profile = profile.clone();
+        source_profile.holes = self
+            .state
+            .project
+            .project
+            .shape_hole_contours(profile, 0.005)
+            .unwrap_or_default();
+        source_profile.hole_splines.clear();
         let profiles = if self.draw_parameters.mirror {
-            vec![mirrored_profile(profile, &spline)]
+            vec![mirrored_profile(&source_profile, &spline)]
         } else {
             vec![]
         };

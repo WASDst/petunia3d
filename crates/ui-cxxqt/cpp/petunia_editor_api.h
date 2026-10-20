@@ -46,6 +46,10 @@ struct PetuniaViewScope {
 class QWidget;
 void petuniaSetTranslations(const QJsonObject &translations);
 void petuniaLocalize(QWidget *root);
+class QTabWidget;
+/// Dá nome acessível a um QTabWidget hospedado, às áreas de rolagem de cada aba
+/// (pelo texto da aba) e às setas de rolagem da barra de abas.
+void petuniaNameTabContainers(QTabWidget *tabs, const QString &name);
 
 inline QString petuniaKeyText(const QKeyEvent *event) {
     if (event->modifiers() & Qt::KeypadModifier) {

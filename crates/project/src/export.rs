@@ -150,6 +150,60 @@ fn decal_sets_json(asset: &Asset) -> Option<String> {
 
 /// Exporta assets como um único GLB (uma mesh por asset).
 pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, ExportError> {
+    if indices
+        .iter()
+        .filter_map(|i| project.assets.get(*i))
+        .any(|a| !a.surface_materials.is_empty())
+    {
+        // Resolve surface bindings only in an export snapshot. Authored UVs,
+        // object identity and the project material registry remain untouched.
+        let mut snapshot = project.clone();
+        let mut expanded = Vec::new();
+        for index in indices {
+            let Some(asset) = project.assets.get(*index) else {
+                continue;
+            };
+            if asset.surface_materials.is_empty() {
+                expanded.push(*index);
+                continue;
+            }
+            if asset.surface_materials.len() > 256 {
+                return Err(ExportError::Other("Too many surface materials".into()));
+            }
+            let mesh = asset.evaluated_mesh();
+            for (slot, surface) in asset.surface_materials.iter().enumerate() {
+                let mut part_mesh = mesh.clone();
+                part_mesh
+                    .faces
+                    .retain(|f| f.material_slot.unwrap_or(0) == slot);
+                if part_mesh.faces.is_empty() {
+                    continue;
+                }
+                let mut part = asset.clone();
+                part.id = uuid::Uuid::new_v4();
+                part.name = format!("{} / {}", asset.name, slot + 1);
+                part.mesh = part_mesh.into();
+                part.geometry_source = None;
+                part.parametric = None;
+                part.modifiers.clear();
+                part.surface_materials.clear();
+                part.material_id = if asset.texture.is_some() {
+                    asset.material_id
+                } else {
+                    surface.material_id
+                };
+                part.base_color = if asset.texture.is_some() {
+                    asset.base_color
+                } else {
+                    surface.base_color
+                };
+                part.texture = asset.texture.clone().or_else(|| surface.texture.clone());
+                expanded.push(snapshot.assets.len());
+                snapshot.assets.push(part);
+            }
+        }
+        return export_gltf(&snapshot, &expanded);
+    }
     let picked: Vec<&Asset> = indices
         .iter()
         .filter_map(|&i| project.assets.get(i))
@@ -534,7 +588,7 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
 
 /// Codifica um canvas RGBA8 em PNG (textura pintada no GLB).
 /// `None` em canvas vazio ou falha de encoder (export segue sem textura).
-fn encode_png(canvas: &super::Canvas) -> Option<Vec<u8>> {
+pub(crate) fn encode_png(canvas: &super::Canvas) -> Option<Vec<u8>> {
     use image::ImageEncoder;
     if canvas.w == 0 || canvas.h == 0 || canvas.pixels.is_empty() {
         return None;
@@ -551,7 +605,7 @@ fn encode_png(canvas: &super::Canvas) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn json_str(s: &str) -> String {
+pub(crate) fn json_str(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);
     o.push('"');
     for c in s.chars() {
@@ -581,8 +635,8 @@ pub fn export_report(project: &Project, indices: &[usize], include_gltf: bool) -
             Some(a) => lines.push(format!(
                 "{}: {} verts, {} tris{}",
                 a.name,
-                a.mesh.vert_count(),
-                a.mesh.tri_count(),
+                a.source_mesh().vert_count(),
+                a.source_mesh().tri_count(),
                 if include_gltf { ", GLB ok" } else { ", OBJ ok" }
             )),
             None => lines.push(format!("índice {i} inválido")),

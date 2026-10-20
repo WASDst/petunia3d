@@ -40,6 +40,12 @@ pub struct RayTriangleHit {
     pub barycentric: [f32; 3],
 }
 
+/// Folga baricêntrica (adimensional) nas arestas. Sem ela, um raio exatamente
+/// sobre a aresta compartilhada por dois triângulos (a diagonal de um quad, onde
+/// fica o centro da face) podia ser recusado pelos dois por arredondamento e
+/// "vazar" para a geometria de trás (B10). 1e-5 de uma aresta de 2 m é 0,02 mm.
+const EDGE_TOLERANCE: f32 = 1.0e-5;
+
 /// Möller–Trumbore com distância e coordenadas baricêntricas.
 pub fn ray_tri_hit(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<RayTriangleHit> {
     if !origin.is_finite() || !dir.is_finite() || !a.is_finite() || !b.is_finite() || !c.is_finite()
@@ -56,15 +62,23 @@ pub fn ray_tri_hit(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option
     let inv = 1.0 / det;
     let tvec = origin - a;
     let u = tvec.dot(p) * inv;
-    if !(0.0..=1.0).contains(&u) {
+    if !(-EDGE_TOLERANCE..=1.0 + EDGE_TOLERANCE).contains(&u) {
         return None;
     }
     let q = tvec.cross(e1);
     let v = dir.dot(q) * inv;
-    if v < 0.0 || u + v > 1.0 {
+    if v < -EDGE_TOLERANCE || u + v > 1.0 + EDGE_TOLERANCE {
         return None;
     }
     let t = e2.dot(q) * inv;
+    // Dentro da folga, as baricêntricas voltam ao triângulo (somam 1, ≥ 0).
+    let (u, v) = (u.max(0.0), v.max(0.0));
+    let sum = u + v;
+    let (u, v) = if sum > 1.0 {
+        (u / sum, v / sum)
+    } else {
+        (u, v)
+    };
     (t > 1e-6 && t.is_finite()).then_some(RayTriangleHit {
         distance: t,
         barycentric: [1.0 - u - v, u, v],
@@ -174,4 +188,47 @@ pub fn ear_clip(points: &[[f32; 2]]) -> Result<Vec<[usize; 3]>, String> {
         tris.push([orig(v[0]), orig(v[1]), orig(v[2])]);
     }
     Ok(tris)
+}
+
+#[cfg(test)]
+mod seam_tests {
+    use super::ray_tri;
+    use glam::{Quat, Vec3};
+
+    /// B10: um raio exatamente sobre a diagonal compartilhada de um quad (o centro
+    /// da face fica nela) precisa acertar algum dos dois triângulos. Sem tolerância,
+    /// o arredondamento recusava os dois e o raio vazava para a face de trás.
+    #[test]
+    fn a_ray_on_the_shared_diagonal_of_a_quad_never_slips_through() {
+        let mut misses = Vec::new();
+        for step in 0..400 {
+            let angle = step as f32 * 0.137;
+            let rotation = Quat::from_euler(glam::EulerRot::XYZ, angle, angle * 0.7, -angle * 0.3);
+            let scale = Vec3::new(1.2, 0.8 + (step % 7) as f32 * 0.05, 1.0);
+            let offset = Vec3::new(1.5, 0.3, -0.7);
+            let place = |p: Vec3| rotation * (p * scale) + offset;
+            let (a, b, c, d) = (
+                place(Vec3::new(-1.0, -1.0, 1.0)),
+                place(Vec3::new(1.0, -1.0, 1.0)),
+                place(Vec3::new(1.0, 1.0, 1.0)),
+                place(Vec3::new(-1.0, 1.0, 1.0)),
+            );
+            let normal = (b - a).cross(c - a).normalize();
+            for t in [0.5_f32, 0.25, 0.731, 0.1] {
+                let on_diagonal = a.lerp(c, t);
+                let origin = on_diagonal + normal * 5.0 + (b - a) * 0.0;
+                let dir = (on_diagonal - origin).normalize();
+                let hit = ray_tri(origin, dir, a, b, c).or_else(|| ray_tri(origin, dir, a, c, d));
+                if hit.is_none() {
+                    misses.push((step, t));
+                }
+            }
+        }
+        assert!(
+            misses.is_empty(),
+            "{} raios vazaram pela diagonal: {:?}",
+            misses.len(),
+            &misses[..misses.len().min(8)]
+        );
+    }
 }

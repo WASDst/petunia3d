@@ -64,6 +64,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Abre a sessão modal de uma ferramenta paramétrica com preview próprio.
     pub fn begin_tool_modal(&mut self, kind: ToolModalKind) -> bool {
+        if self
+            .state
+            .project
+            .active()
+            .is_some_and(|a| a.geometry_source.is_some())
+        {
+            self.state.set_status(
+                "This object is parametric. Choose Make Editable before editing its faces",
+            );
+            return false;
+        }
         // Um valor digitado numa operação anterior nunca vaza para a próxima.
         self.tool_session.clear_numeric();
         if self.state.primitive_session_valid() {
@@ -193,6 +204,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub(crate) fn cancel_active_operation(&mut self) -> bool {
         let mut cancelled = self.cancel_profile_transform();
+        cancelled |= self.cancel_profile_authoring_preview();
+        cancelled |= self.cancel_solid_shape_builder();
+        cancelled |= self.generator_parameter_gesture(2);
         cancelled |= self.cancel_paint_stroke();
         cancelled |= self.cancel_tool_modal();
         cancelled |= self.cancel_loop_cut();
@@ -218,6 +232,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.gizmo_drag = None;
         self.tool_session.clear_numeric();
         self.instant_transform = false;
+        self.last_tool_press = None;
         cancelled
     }
 
@@ -232,6 +247,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if let Some(entry) = self.overlays.esc() {
                 self.hide_overlay(entry.id);
             }
+            return true;
+        }
+        if self.state.cancel_uv_transform() {
             return true;
         }
         if self.close_context_menu() {
@@ -301,10 +319,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return true;
         }
         if self.state.session.tools.active_tool == "draw_profile" {
-            self.profile_pointer_up();
+            self.cancel_profile_point_drag();
             self.state.profile.clear();
-            self.active_profile_id = None;
-            self.profile_selected_point = None;
+            self.state.session.active_shape = None;
+            self.state.session.planar_selection.point = None;
             self.profile_drag_target = None;
             self.profile_edit_gesture = None;
             self.state.session.tools.active_tool = "select".to_string();
@@ -335,14 +353,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.cancel_transform() {
             return true;
         }
-        if self.state.session.edit_pivot {
-            self.state.session.edit_pivot = false;
-            self.state.mark_dirty();
-            self.state.set_status(
-                self.state
-                    .t_id(petunia_config::text_id::STATUS_EDIT_PIVOT_EXITED),
-            );
+        if self.cancel_measure() {
             return true;
+        }
+        if self.state.session.edit_pivot {
+            return self.cancel_edit_pivot();
         }
         if let Some(entry) = self.overlays.esc() {
             self.hide_overlay(entry.id);
@@ -402,6 +417,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub(crate) fn confirm_active_operation(&mut self) -> bool {
+        if self.state.session.tools.uv_transform.is_some() {
+            if let Err(error) = self.state.commit_uv_transform() {
+                self.state.set_status(error.to_string());
+            }
+            return true;
+        }
+        if self.solid_shape_builder.is_some() {
+            return self.commit_solid_shape_builder();
+        }
         if self.decal_gesture.is_some() {
             let effect = self.tool_session.key(petunia_core::ToolKey::Confirm);
             if effect == petunia_core::ToolEffect::Nothing {
@@ -439,12 +463,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_some() {
             return self.commit_profile_volume();
         }
-        if self.state.session.tools.active_tool == "draw_profile" && self.active_profile_closed() {
-            return self.enter_profile_volume("extrude");
+        if self.state.session.tools.active_tool == "draw_profile" {
+            return self.finish_draw_curve();
         }
         if self.drag.is_some() {
             return self.end_viewport_transform();
         }
-        self.commit_transform()
+        if self.commit_transform() {
+            return true;
+        }
+        // Nenhum gesto aberto: Enter confirma a sessão de Editar pivô.
+        self.state.session.edit_pivot && self.confirm_edit_pivot()
     }
 }

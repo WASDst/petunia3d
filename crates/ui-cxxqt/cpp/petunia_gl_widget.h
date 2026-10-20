@@ -1,6 +1,7 @@
 #pragma once
 
 #include "petunia_editor_api.h"
+#include "petunia_nav_cube.h"
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QOpenGLFunctions>
@@ -31,8 +32,27 @@ class PetuniaGlWidget : public QWidget {
         update();
     }
     bool isSnapEnabled() const { return m_snapEnabled; }
+    /// Shell v2: o cromo da vista (rótulo da vista, pílula de sombreamento) vive no
+    /// cabeçalho do shell e o estado vem do controlador (sem snapshot por quadro).
+    void setShellChrome(bool enabled) { m_shellChrome = enabled; }
+    void setExternalState(const QJsonObject &state) {
+        m_externalState = state;
+        m_hasExternalState = true;
+        m_cameraDirty = false;
+    }
+    /// Estado de overlay usado no último quadro, depois de forçar um quadro novo.
+    /// Existe para testes (QTestLib/harness): confere o que foi realmente desenhado.
+    QJsonObject paintedOverlayState();
     void setZoomSensitivity(float s) { m_zoomSensitivity = qBound(0.1f, s, 5.0f); }
     float zoomSensitivity() const { return m_zoomSensitivity; }
+
+    /// Quais famílias de alça o gizmo desenha para a ferramenta ativa. Uma só regra,
+    /// igual à da detecção de cliques (`gizmo_target_at`): Selecionar e Transformar
+    /// são o gizmo universal (setas, anéis de giro e cubos de escala juntos).
+    struct GizmoFamilies {
+        bool arrows{false}, planes{false}, rings{false}, scaleBoxes{false}, universal{false};
+    };
+    static GizmoFamilies gizmoFamiliesFor(const QString &activeTool);
 
   signals:
     void cameraOrbitRequested(float deltaX, float deltaY);
@@ -41,6 +61,8 @@ class PetuniaGlWidget : public QWidget {
     void tabletStrokeUpdated(float x, float y, float pressure, float tiltX,
                              float tiltY, bool isEraser);
     void selectionChanged();
+    /// Ação do menu de contexto tratada só pela GUI (alvo `ui.*`).
+    void uiActionRequested(const QString &target);
 
   protected:
     void paintEvent(QPaintEvent *) override;
@@ -55,8 +77,13 @@ class PetuniaGlWidget : public QWidget {
     void wheelEvent(QWheelEvent *event) override;
     void tabletEvent(QTabletEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
 
   private:
+    /// Encerra um gesto interrompido (foco perdido ou Escape): traço de pintura
+    /// confirma ou cancela conforme `commitPaint`; gesto geométrico cancela.
+    void finishInterruptedGesture(bool commitPaint);
     friend class PetuniaNativeGlCanvas;
     void initializeGL();
     void resizeGL(int w, int h);
@@ -65,12 +92,17 @@ class PetuniaGlWidget : public QWidget {
     PetuniaNativeGlCanvas *m_gl{nullptr};
     bool m_software{false};
     void drawNavigationGizmo(QPainter &painter);
+    bool syncNavCube();
+    void runNavAction(const PetuniaNavCube::Hit &hit);
     void drawViewportHud(QPainter &painter);
     void drawShadingPill(QPainter &painter);
     void drawTransformGizmo(QPainter &painter);
     void drawSnapIndicator(QPainter &painter);
-    void drawSelectionOutline(QPainter &painter);
+    /// Quadro de prévia da ferramenta (B3): âncora, seta e valor perto da operação.
+    void drawToolPreview(QPainter &painter);
     void draw3dCursor(QPainter &painter);
+    /// Pivô de transformação e origem do objeto (distintos do 3D Cursor).
+    void drawPivotMarker(QPainter &painter);
     /// Anel do pincel de pintura: mesmo diâmetro (px de tela) que o carimbo,
     /// com o achatamento e o giro da superfície sob o cursor.
     void drawBrushCursor(QPainter &painter);
@@ -82,8 +114,16 @@ class PetuniaGlWidget : public QWidget {
 
     void cleanupGl();
     QJsonObject pointer(int phase, const QPointF &, Qt::KeyboardModifiers);
+    void refreshOverlayState();
+    void adoptSnapshot(const QJsonObject &snapshot);
     uint64_t m_surfaceId{1};
     QJsonObject m_overlayState;
+    QJsonObject m_externalState;
+    bool m_hasExternalState{false};
+    /// A câmera mudou por um gesto do próprio widget: o snapshot do shell (gizmo,
+    /// pivô, 3D Cursor em pixels) ficou velho até o próximo quadro.
+    bool m_cameraDirty{false};
+    bool m_shellChrome{false};
     QPointF m_pressPoint;
     QPolygonF m_regionPoints;
     bool m_toolPressed{false}, m_regionSelecting{false}, m_lasso{false};
@@ -99,6 +139,11 @@ class PetuniaGlWidget : public QWidget {
     bool m_snapEnabled{false};
     bool m_rendererInitialized{false};
 
+    PetuniaNavCube m_navCube;
+    PetuniaNavCube::Hit m_navHover;
+    PetuniaNavCube::Hit m_navPress;
+    QPointF m_navPressPoint;
+    bool m_navPressed{false};
     QPoint m_gizmoCenter{0, 0};
     int m_gizmoRadius{44};
     QRect m_shadingPillRect;

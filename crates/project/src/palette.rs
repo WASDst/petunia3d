@@ -4,6 +4,71 @@
 //! - GIMP Palette (.gpl), compatível com Blender, Aseprite e GIMP
 //! - Presets clássicos de estética retro: Pico-8, Game Boy, C64.
 
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// Limites das paletas nomeadas (o arquivo é entrada hostil).
+pub const MAX_PALETTES: usize = 64;
+pub const MAX_PALETTE_COLORS: usize = 256;
+pub const MAX_PALETTE_NAME_CHARS: usize = 64;
+
+/// Paleta nomeada do documento (seletor de cor): cores RGBA em 0..=1.
+/// A paleta do projeto (`Project::palette`, RGB) continua existindo à parte.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NamedPalette {
+    pub id: Uuid,
+    pub name: String,
+    #[serde(default)]
+    pub colors: Vec<[f32; 4]>,
+}
+
+impl NamedPalette {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            colors: Vec::new(),
+        }
+    }
+}
+
+/// Cor RGBA válida: finita e dentro de 0..=1 (o que entra numa paleta).
+pub fn valid_rgba(color: &[f32; 4]) -> bool {
+    color
+        .iter()
+        .all(|c| c.is_finite() && (0.0..=1.0).contains(c))
+}
+
+/// Corrige paletas vindas de arquivo: corta excessos, descarta cores inválidas,
+/// conserta nomes vazios ou longos e ids repetidos. Devolve quantas correções fez.
+pub fn repair_palettes(palettes: &mut Vec<NamedPalette>) -> usize {
+    let mut fixes = 0;
+    if palettes.len() > MAX_PALETTES {
+        fixes += palettes.len() - MAX_PALETTES;
+        palettes.truncate(MAX_PALETTES);
+    }
+    let mut seen = std::collections::HashSet::new();
+    for palette in palettes.iter_mut() {
+        if !seen.insert(palette.id) {
+            palette.id = Uuid::new_v4();
+            fixes += 1;
+        }
+        let before = palette.colors.len();
+        palette.colors.retain(valid_rgba);
+        palette.colors.truncate(MAX_PALETTE_COLORS);
+        fixes += before - palette.colors.len();
+        if palette.name.trim().is_empty() {
+            palette.name = "Paleta".into();
+            fixes += 1;
+        }
+        if palette.name.chars().count() > MAX_PALETTE_NAME_CHARS {
+            palette.name = palette.name.chars().take(MAX_PALETTE_NAME_CHARS).collect();
+            fixes += 1;
+        }
+    }
+    fixes
+}
+
 /// Exporta paleta para formato hexadecimal (#RRGGBB por linha).
 pub fn export_hex(palette: &[[f32; 3]]) -> String {
     let mut out = String::new();

@@ -1,0 +1,10 @@
+    Blocking waiting for file lock on build directory
+    Checking petunia_core v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/core)
+    Checking petunia_render v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/render)
+    Checking petunia_module_assets v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-assets)
+    Checking petunia_module_uv v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-uv)
+    Checking petunia_module_paint v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-paint)
+    Checking petunia_module_model v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-model)
+    Checking petunia_application v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/application)
+    Checking petunia_editor v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/editor)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 26s

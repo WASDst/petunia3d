@@ -48,6 +48,8 @@ pub enum SnapKind {
     Angle(u16),
     /// Cruzamento da grade do plano de trabalho.
     Grid,
+    /// Relative step from the gesture anchor, distinct from the world grid.
+    Increment,
 }
 
 impl SnapKind {
@@ -68,6 +70,7 @@ impl SnapKind {
             Self::Perpendicular => t::SNAP_KIND_PERPENDICULAR,
             Self::Angle(_) => t::SNAP_KIND_ANGLE,
             Self::Grid => t::SNAP_KIND_GRID,
+            Self::Increment => TextId::new("snap_kind.increment"),
         }
     }
 
@@ -79,7 +82,7 @@ impl SnapKind {
             Self::Axis(_) | Self::Parallel | Self::Perpendicular => 2,
             Self::Angle(_) => 3,
             Self::OnFace => 4,
-            Self::Grid => 5,
+            Self::Grid | Self::Increment => 5,
         }
     }
 
@@ -87,7 +90,12 @@ impl SnapKind {
     fn occludable(self) -> bool {
         !matches!(
             self,
-            Self::Axis(_) | Self::Parallel | Self::Perpendicular | Self::Angle(_) | Self::Grid
+            Self::Axis(_)
+                | Self::Parallel
+                | Self::Perpendicular
+                | Self::Angle(_)
+                | Self::Grid
+                | Self::Increment
         )
     }
 }
@@ -113,8 +121,8 @@ impl SnapMask {
 
     /// Tradução da escolha de alvo do usuário.
     ///
-    /// `Grid` (padrão) é o modo automático: pontos, arestas e guias de eixo,
-    /// com a grade como último recurso. `Increment` só infere eixos; o passo
+    /// `Smart` considera pontos, arestas e guias de eixo,
+    /// com a grade como último recurso; `Grid` considera somente a grade. `Increment` só infere eixos; o passo
     /// relativo é aplicado por quem chama. Os demais restringem ao tipo.
     pub fn for_target(target: SnapTarget) -> Self {
         let none = Self {
@@ -125,10 +133,8 @@ impl SnapMask {
             grid: false,
         };
         match target {
-            SnapTarget::Grid => Self {
-                faces: false,
-                ..Self::ALL
-            },
+            SnapTarget::Smart => Self::ALL,
+            SnapTarget::Grid => Self { grid: true, ..none },
             SnapTarget::Increment => Self { axes: true, ..none },
             SnapTarget::Vertex => Self {
                 points: true,
@@ -209,6 +215,12 @@ pub struct SnapSource<'a> {
     pub moving: &'a [bool],
 }
 
+#[derive(Debug, Clone)]
+struct SplineSnapSegment {
+    control: [Vec3; 4],
+    reference: SnapReference,
+}
+
 /// Geometria parada de uma ou mais malhas, pronta para várias consultas.
 ///
 /// Construída uma vez por gesto (ou por revisão de geometria): a passada de
@@ -217,6 +229,10 @@ pub struct SnapSource<'a> {
 #[derive(Debug, Clone, Default)]
 pub struct SnapAccel {
     points: Vec<Vec3>,
+    spline_segments: Vec<SplineSnapSegment>,
+    point_references: Vec<Option<SnapReference>>,
+    edge_references: Vec<Option<SnapReference>>,
+    face_references: Vec<Option<SnapReference>>,
     edges: Vec<(Vec3, Vec3)>,
     face_centers: Vec<Vec3>,
     occluder: TriangleBvh,
@@ -224,14 +240,26 @@ pub struct SnapAccel {
 
 impl SnapAccel {
     pub fn build(sources: &[SnapSource<'_>]) -> Self {
+        Self::build_scoped(sources, &[])
+    }
+
+    pub fn build_scoped(sources: &[SnapSource<'_>], identities: &[(uuid::Uuid, bool)]) -> Self {
         let mut accel = Self::default();
         let mut solid = Vec::new();
-        for source in sources {
+        for (source_index, source) in sources.iter().enumerate() {
+            let identity = identities.get(source_index).copied();
             let mesh = source.mesh;
             let moving = |index: usize| source.moving.get(index).copied().unwrap_or(false);
             for (index, vertex) in mesh.verts.iter().enumerate() {
                 if !moving(index) {
                     accel.points.push(vertex.vec());
+                    accel
+                        .point_references
+                        .push(identity.map(|(object, stable)| SnapReference::MeshVertex {
+                            object,
+                            vertex: index as u32,
+                            stable,
+                        }));
                 }
             }
             for (a, b) in mesh.edges_unique() {
@@ -241,6 +269,14 @@ impl SnapAccel {
                 }
                 if let (Some(va), Some(vb)) = (mesh.verts.get(ia), mesh.verts.get(ib)) {
                     accel.edges.push((va.vec(), vb.vec()));
+                    accel.edge_references.push(identity.map(|(object, stable)| {
+                        SnapReference::MeshEdge {
+                            object,
+                            edge: (a, b),
+                            parameter: 0.5,
+                            stable,
+                        }
+                    }));
                 }
             }
             for (face_index, face) in mesh.faces.iter().enumerate() {
@@ -256,13 +292,20 @@ impl SnapAccel {
                 let sum: Vec3 = face
                     .verts
                     .iter()
-                    .map(|&v| mesh.verts[v as usize].vec())
+                    .filter_map(|&v| mesh.verts.get(v as usize).map(|vertex| vertex.vec()))
                     .sum();
                 accel.face_centers.push(sum / face.verts.len() as f32);
+                accel.face_references.push(identity.map(|(object, stable)| {
+                    SnapReference::MeshFace {
+                        object,
+                        face: face_index,
+                        stable,
+                    }
+                }));
                 for corners in mesh.face_triangle_corners(face_index) {
                     solid.push((
                         corners.map(|corner| mesh.verts[face.verts[corner] as usize].vec()),
-                        face_index as u32,
+                        accel.face_centers.len().saturating_sub(1) as u32,
                     ));
                 }
             }
@@ -272,12 +315,46 @@ impl SnapAccel {
     }
 }
 
+/// Provenance accompanies the displayed hit; no second picking query is needed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SnapReference {
+    MeshVertex {
+        object: uuid::Uuid,
+        vertex: u32,
+        stable: bool,
+    },
+    MeshEdge {
+        object: uuid::Uuid,
+        edge: (u32, u32),
+        parameter: f32,
+        stable: bool,
+    },
+    MeshFace {
+        object: uuid::Uuid,
+        face: usize,
+        stable: bool,
+    },
+    SplinePoint {
+        object: uuid::Uuid,
+        spline: uuid::Uuid,
+        point: uuid::Uuid,
+    },
+    SplineSegment {
+        object: uuid::Uuid,
+        spline: uuid::Uuid,
+        start: uuid::Uuid,
+        end: uuid::Uuid,
+        parameter: f32,
+    },
+}
+
 /// Resultado: o ponto encaixado, o tipo e a distância ao cursor.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScreenSnapHit {
     pub point: Vec3,
     pub kind: SnapKind,
     pub pixel_distance: f32,
+    pub reference: Option<SnapReference>,
 }
 
 struct Candidate {
@@ -335,6 +412,7 @@ pub fn snap_screen_with(query: &ScreenSnapQuery, accel: &SnapAccel) -> Option<Sc
     let mut best: Option<Candidate> = None;
     // `probe` mede a distância ao cursor; `position` é o ponto entregue (a
     // guia quantizada pela grade é medida pelo ponto antes do passo).
+    let candidate_reference = std::cell::Cell::new(None);
     let mut consider = |kind: SnapKind, probe: Vec3, position: Vec3, limit: f32| {
         let Some(ndc) = picking::project(matrix, probe) else {
             return;
@@ -364,23 +442,27 @@ pub fn snap_screen_with(query: &ScreenSnapQuery, accel: &SnapAccel) -> Option<Sc
                 point: position,
                 kind,
                 pixel_distance,
+                reference: candidate_reference.get(),
             },
             depth: ndc.z,
         });
     };
 
     if query.mask.points {
-        for &point in &accel.points {
+        for (index, &point) in accel.points.iter().enumerate() {
+            candidate_reference.set(accel.point_references.get(index).copied().flatten());
             consider(SnapKind::Point, point, point, radius);
         }
-        for &center in &accel.face_centers {
+        for (index, &center) in accel.face_centers.iter().enumerate() {
+            candidate_reference.set(accel.face_references.get(index).copied().flatten());
             consider(SnapKind::FaceCenter, center, center, radius);
         }
     }
     let mut near_edges: Vec<(Vec3, Vec3)> = Vec::new();
     if query.mask.points || query.mask.edges {
         let pixel_scale = viewport * 0.5;
-        for &(pa, pb) in &accel.edges {
+        for (index, &(pa, pb)) in accel.edges.iter().enumerate() {
+            candidate_reference.set(accel.edge_references.get(index).copied().flatten());
             if query.mask.points {
                 consider(SnapKind::Midpoint, (pa + pb) * 0.5, (pa + pb) * 0.5, radius);
             }
@@ -413,9 +495,82 @@ pub fn snap_screen_with(query: &ScreenSnapQuery, accel: &SnapAccel) -> Option<Sc
             {
                 near_edges.push((pa, pb));
             }
+            let edge = pb - pa;
+            let parameter = if edge.length_squared() > 1.0e-12 {
+                ((on_edge - pa).dot(edge) / edge.length_squared()).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            candidate_reference.set(
+                candidate_reference
+                    .get()
+                    .map(|r| r.at_edge_parameter(parameter)),
+            );
             consider(SnapKind::OnEdge, on_edge, on_edge, radius);
         }
     }
+    if query.mask.points || query.mask.edges {
+        let mut budget = 65_536usize;
+        for curve in &accel.spline_segments {
+            if query.mask.points {
+                let midpoint = cubic_snap_point(curve.control, 0.5);
+                candidate_reference.set(Some(curve.reference.at_edge_parameter(0.5)));
+                consider(SnapKind::Midpoint, midpoint, midpoint, radius);
+            }
+            if !query.mask.edges || budget == 0 {
+                continue;
+            }
+            let mut pending = vec![(curve.control, 0.0_f32, 1.0_f32, 0u8)];
+            while let Some((control, start, end, depth)) = pending.pop() {
+                if budget == 0 {
+                    break;
+                }
+                budget = budget.saturating_sub(1);
+                let clip = control.map(|p| matrix * p.extend(1.0));
+                if clip.iter().all(|p| p.w <= 0.05)
+                    || clip.iter().all(|p| p.z < 0.0)
+                    || clip.iter().all(|p| p.z > p.w)
+                {
+                    continue;
+                }
+                let projected =
+                    control.map(|p| picking::project(matrix, p).map(|p| to_pixels(p.truncate())));
+                let flat = if let [Some(a), Some(b), Some(c), Some(d)] = projected {
+                    let min = a.min(b).min(c).min(d) - Vec2::splat(radius);
+                    let max = a.max(b).max(c).max(d) + Vec2::splat(radius);
+                    if cursor.cmplt(min).any() || cursor.cmpgt(max).any() {
+                        continue;
+                    }
+                    screen_line_distance(b, a, d) <= 0.25 && screen_line_distance(c, a, d) <= 0.25
+                } else {
+                    false
+                };
+                if flat || depth >= 20 {
+                    let [a, _, _, b] = control;
+                    let Some(fraction) = closest_screen_fraction(matrix, viewport, cursor, a, b)
+                    else {
+                        continue;
+                    };
+                    let parameter = start + (end - start) * fraction;
+                    let point = cubic_snap_point(curve.control, parameter);
+                    candidate_reference.set(Some(curve.reference.at_edge_parameter(parameter)));
+                    consider(SnapKind::OnEdge, point, point, radius);
+                    if near_edges.len() < INTERSECTION_EDGE_BUDGET
+                        && picking::project(matrix, point)
+                            .is_some_and(|p| to_pixels(p.truncate()).distance(cursor) <= radius)
+                    {
+                        near_edges.push((a, b));
+                    }
+                } else {
+                    let (left, right) = split_snap_cubic(control);
+                    let middle = (start + end) * 0.5;
+                    pending.push((right, middle, end, depth + 1));
+                    pending.push((left, start, middle, depth + 1));
+                }
+            }
+        }
+    }
+    candidate_reference.set(None);
     if query.mask.edges {
         for (i, &(a0, a1)) in near_edges.iter().enumerate() {
             for &(b0, b1) in &near_edges[i + 1..] {
@@ -439,6 +594,7 @@ pub fn snap_screen_with(query: &ScreenSnapQuery, accel: &SnapAccel) -> Option<Sc
                 .is_none_or(|ndc| (to_pixels(ndc.truncate()) - anchor_pixels).length() < radius)
         };
         let quantize = |point: Vec3, axis: Vec3| {
+            candidate_reference.set(None);
             if query.mask.grid
                 && let Some(grid) = query.grid
                 && grid.spacing.is_finite()
@@ -510,9 +666,10 @@ pub fn snap_screen_with(query: &ScreenSnapQuery, accel: &SnapAccel) -> Option<Sc
 
     if query.mask.faces
         && let Some((origin, direction)) = cursor_ray
-        && let Some((distance, _)) = solid.nearest(origin, direction, f32::INFINITY, |_| true)
+        && let Some((distance, face)) = solid.nearest(origin, direction, f32::INFINITY, |_| true)
     {
         let on_face = origin + direction * distance;
+        candidate_reference.set(accel.face_references.get(face as usize).copied().flatten());
         consider(SnapKind::OnFace, on_face, on_face, f32::INFINITY);
     }
 
@@ -520,6 +677,7 @@ pub fn snap_screen_with(query: &ScreenSnapQuery, accel: &SnapAccel) -> Option<Sc
         && let (Some(grid), Some((origin, direction))) = (query.grid, cursor_ray)
         && let Some(point) = grid_point(grid, origin, direction)
     {
+        candidate_reference.set(None);
         consider(SnapKind::Grid, point, point, f32::INFINITY);
     }
 
@@ -585,6 +743,201 @@ fn project_pixels(camera: &Camera, viewport: Vec2, point: Vec3) -> Vec2 {
     let matrix = camera.view_proj();
     let ndc = picking::project(matrix, point).unwrap().truncate();
     Vec2::new(ndc.x + 1.0, 1.0 - ndc.y) * viewport * 0.5
+}
+
+impl SnapAccel {
+    /// Add a visible persistent spline to the same acceleration prepared for meshes.
+    pub fn append_planar_spline(
+        &mut self,
+        object: uuid::Uuid,
+        spline: &petunia_project::SplineResource,
+        plane: petunia_project::Workplane,
+    ) {
+        let Ok(plane) = plane.try_normalized() else {
+            return;
+        };
+        let transform = glam::Mat4::from_cols(
+            Vec3::from_array(plane.right.map(|v| v as f32)).extend(0.0),
+            Vec3::from_array(plane.up.map(|v| v as f32)).extend(0.0),
+            Vec3::from_array(plane.normal.map(|v| v as f32)).extend(0.0),
+            Vec3::from_array(plane.origin.map(|v| v as f32)).extend(1.0),
+        );
+        if !transform.is_finite() {
+            return;
+        }
+        self.append_spline_mapped(object, spline, |point| {
+            let world = transform.transform_point3(Vec3::from_array(point.map(|v| v as f32)));
+            world.is_finite().then_some(world)
+        });
+    }
+
+    /// Spatial paths use the same candidate pipeline without flattening Z.
+    pub fn append_spatial_spline(
+        &mut self,
+        object: uuid::Uuid,
+        spline: &petunia_project::SplineResource,
+    ) {
+        self.append_spline_mapped(object, spline, |point| {
+            let point = Vec3::from_array(point.map(|v| v as f32));
+            point.is_finite().then_some(point)
+        });
+    }
+
+    fn append_spline_mapped(
+        &mut self,
+        object: uuid::Uuid,
+        spline: &petunia_project::SplineResource,
+        map: impl Fn([f64; 3]) -> Option<Vec3>,
+    ) {
+        if spline.points.len() > 4096
+            || self.points.len().saturating_add(spline.points.len()) > 262_144
+            || self
+                .spline_segments
+                .len()
+                .saturating_add(spline.segment_count())
+                > 65_536
+        {
+            return;
+        }
+        for point in &spline.points {
+            let Some(world) = map(point.position) else {
+                continue;
+            };
+            self.points.push(world);
+            self.point_references.push(Some(SnapReference::SplinePoint {
+                object,
+                spline: spline.id,
+                point: point.id,
+            }));
+        }
+        for segment in 0..spline.segment_count() {
+            let Some(first) = spline.points.get(segment) else {
+                continue;
+            };
+            let next = segment.checked_add(1).map(|i| i % spline.points.len());
+            let Some(last) = next.and_then(|i| spline.points.get(i)) else {
+                continue;
+            };
+            let (Some(a), Some(b)) = (map(first.position), map(last.position)) else {
+                continue;
+            };
+            let control =
+                if spline.interpolation == petunia_project::SplineInterpolation::CubicBezier {
+                    let first_handle =
+                        std::array::from_fn(|axis| first.position[axis] + first.handle_out[axis]);
+                    let last_handle =
+                        std::array::from_fn(|axis| last.position[axis] + last.handle_in[axis]);
+                    let (Some(h0), Some(h1)) = (map(first_handle), map(last_handle)) else {
+                        continue;
+                    };
+                    [a, h0, h1, b]
+                } else {
+                    [a, a.lerp(b, 1.0 / 3.0), a.lerp(b, 2.0 / 3.0), b]
+                };
+            self.spline_segments.push(SplineSnapSegment {
+                control,
+                reference: SnapReference::SplineSegment {
+                    object,
+                    spline: spline.id,
+                    start: first.id,
+                    end: last.id,
+                    parameter: 0.5,
+                },
+            });
+        }
+    }
+}
+
+impl SnapReference {
+    fn at_edge_parameter(self, value: f32) -> Self {
+        match self {
+            Self::MeshEdge {
+                object,
+                edge,
+                stable,
+                ..
+            } => Self::MeshEdge {
+                object,
+                edge,
+                stable,
+                parameter: value,
+            },
+            Self::SplineSegment {
+                object,
+                spline,
+                start,
+                end,
+                ..
+            } => Self::SplineSegment {
+                object,
+                spline,
+                start,
+                end,
+                parameter: value,
+            },
+            other => other,
+        }
+    }
+}
+
+fn cubic_snap_point([a, b, c, d]: [Vec3; 4], t: f32) -> Vec3 {
+    let left = a.lerp(b, t).lerp(b.lerp(c, t), t);
+    let right = b.lerp(c, t).lerp(c.lerp(d, t), t);
+    left.lerp(right, t)
+}
+fn split_snap_cubic([a, b, c, d]: [Vec3; 4]) -> ([Vec3; 4], [Vec3; 4]) {
+    let ab = a.lerp(b, 0.5);
+    let bc = b.lerp(c, 0.5);
+    let cd = c.lerp(d, 0.5);
+    let abc = ab.lerp(bc, 0.5);
+    let bcd = bc.lerp(cd, 0.5);
+    let middle = abc.lerp(bcd, 0.5);
+    ([a, ab, abc, middle], [middle, bcd, cd, d])
+}
+fn screen_line_distance(point: Vec2, a: Vec2, b: Vec2) -> f32 {
+    let edge = b - a;
+    let t = if edge.length_squared() > 1.0e-12 {
+        ((point - a).dot(edge) / edge.length_squared()).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    point.distance(a + edge * t)
+}
+fn closest_screen_fraction(
+    matrix: glam::Mat4,
+    viewport: Vec2,
+    cursor: Vec2,
+    a: Vec3,
+    b: Vec3,
+) -> Option<f32> {
+    let (ca, cb) = picking::clip_depth(matrix, a, b)?;
+    let (sa, sb) = (picking::project(matrix, ca)?, picking::project(matrix, cb)?);
+    let pixels = |p: Vec3| {
+        Vec2::new(
+            (p.x * 0.5 + 0.5) * viewport.x,
+            (0.5 - p.y * 0.5) * viewport.y,
+        )
+    };
+    let start = pixels(sa);
+    let edge = pixels(sb) - start;
+    let t = if edge.length_squared() > 1.0e-12 {
+        ((cursor - start).dot(edge) / edge.length_squared()).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let wa = (matrix * ca.extend(1.0)).w;
+    let wb = (matrix * cb.extend(1.0)).w;
+    let denominator = (1.0 - t) * wb + t * wa;
+    if !denominator.is_finite() || denominator.abs() < 1.0e-12 {
+        return None;
+    }
+    let on_edge = ca.lerp(cb, t * wa / denominator);
+    let world_edge = b - a;
+    Some(if world_edge.length_squared() > 1.0e-18 {
+        ((on_edge - a).dot(world_edge) / world_edge.length_squared()).clamp(0.0, 1.0)
+    } else {
+        0.0
+    })
 }
 
 #[cfg(test)]

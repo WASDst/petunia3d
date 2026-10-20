@@ -16,10 +16,12 @@
 use crate::command::{Command, CommandError};
 use crate::context::{CommandContext, EditorView};
 use petunia_project::{
-    AnimationAsset, AnimationClip, BakeOptions, IkChain, IkSolver, Interpolation, Keyframe,
-    MotionGenerator, MotionRecipe, MotionStyle, RigPreset, RigRole, RootMode, Transform3D,
-    auto_fit_humanoid, compute_auto_skin_weights, compute_blended_skin_weights,
-    default_blend_radius, fit_skeleton_to_bounds, mesh_bounds,
+    AnimationAsset, AnimationClip, BakeOptions, ConnectionKind, IkChain, IkSolver, Interpolation,
+    JointId, Keyframe, LiveRigData, MotionGenerator, MotionRecipe, MotionStyle, PartId, RigError,
+    RigPreset, RigRole, RootMode, Skeleton, SkinBindMethod, SkinData, StructuralShapeGraph,
+    Transform3D, VertexSkinWeight, auto_fit_humanoid, compute_auto_skin_weights,
+    compute_blended_skin_weights, compute_skin_weights, default_blend_radius,
+    fit_skeleton_to_bounds, mesh_bounds, remap_skin_weights, update_structural_rig_localized,
 };
 use uuid::Uuid;
 
@@ -535,6 +537,64 @@ impl Command for UpdateIkChainCmd {
         }
         chain.revision += 1;
         *slot = chain;
+        Ok(())
+    }
+}
+
+/// Aplica a pose de uma cadeia IK aos ossos do esqueleto em uma transação atômica de Undo (Task H15).
+#[derive(Debug, Clone)]
+pub struct ApplyIkPoseCmd {
+    pub skeleton_id: Uuid,
+    pub chain_id: Uuid,
+    pub bone_rotations: Vec<(u32, [f32; 4])>,
+}
+
+impl Command for ApplyIkPoseCmd {
+    fn label(&self) -> &'static str {
+        "apply IK pose"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if self.bone_rotations.is_empty() {
+            return Err("No bone rotations in IK pose");
+        }
+        for (bone_id, rot) in &self.bone_rotations {
+            if skel.get_bone(*bone_id).is_none() {
+                return Err("Bone in IK chain not found");
+            }
+            if !rot.iter().all(|x| x.is_finite()) {
+                return Err("Rotation quaternion is not finite");
+            }
+            if rot.iter().map(|x| x * x).sum::<f32>() < 1e-8 {
+                return Err("Rotation quaternion is zero");
+            }
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+        for (bone_id, rot) in &self.bone_rotations {
+            if let Some(bone) = skel.get_bone_mut(*bone_id) {
+                bone.local_transform.rotation = *rot;
+            }
+        }
+        state.set_status("IK pose applied");
         Ok(())
     }
 }
@@ -1213,10 +1273,39 @@ impl Command for ResetBonePoseCmd {
     }
 }
 
-/// Grava um keyframe para um osso na trilha de animação do esqueleto com histórico de Undo.
+/// Shared validation for explicit animation authoring targets.
+fn validate_keyframe_target(
+    state: &EditorView<'_>,
+    skeleton_id: Uuid,
+    bone_id: u32,
+    clip_id: Option<Uuid>,
+) -> Result<(), &'static str> {
+    let skeleton = state
+        .document
+        .project
+        .get_skeleton(skeleton_id)
+        .ok_or("Skeleton not found")?;
+    if skeleton.get_bone(bone_id).is_none() {
+        return Err("Bone not found");
+    }
+    if let Some(id) = clip_id {
+        let asset = state
+            .document
+            .project
+            .get_animation(id)
+            .ok_or("Animation clip not found")?;
+        if !asset.tags.contains(&format!("skeleton:{skeleton_id}")) {
+            return Err("Animation clip belongs to a different skeleton");
+        }
+    }
+    Ok(())
+}
+
+/// Author into an explicit clip; None creates the first clip only.
 #[derive(Debug, Clone)]
 pub struct InsertBoneKeyframeCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Option<Uuid>,
     pub bone_id: u32,
     pub time: f32,
     pub transform: Transform3D,
@@ -1227,215 +1316,200 @@ impl Command for InsertBoneKeyframeCmd {
     fn label(&self) -> &'static str {
         "insert bone keyframe"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
-            .document
-            .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, self.clip_id)?;
+        if self.clip_id.is_none()
+            && state
+                .document
+                .project
+                .get_animation_for_skeleton(self.skeleton_id)
+                .is_some()
+        {
+            return Err("Select an animation clip explicitly");
         }
         if !self.time.is_finite() || self.time < 0.0 {
             return Err("Invalid keyframe time");
         }
+        if !finite3(&self.transform.translation)
+            || !finite3(&self.transform.scale)
+            || !self.transform.rotation.iter().all(|v| v.is_finite())
+            || !glam::Quat::from_array(self.transform.rotation)
+                .length_squared()
+                .is_finite()
+            || glam::Quat::from_array(self.transform.rotation).length_squared() <= f32::EPSILON
+        {
+            return Err("Invalid keyframe transform");
+        }
         Ok(())
     }
-
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let bone_name = {
-            let skel = state
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let bone_name = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .and_then(|s| s.get_bone(self.bone_id))
+            .ok_or_else(|| exec_err("Bone not found"))?
+            .name
+            .clone();
+        let clip = if let Some(id) = self.clip_id {
+            &mut state
                 .document
                 .project
-                .get_skeleton(self.skeleton_id)
-                .ok_or_else(|| exec_err("Skeleton not found"))?;
-            let bone = skel
-                .get_bone(self.bone_id)
-                .ok_or_else(|| exec_err("Bone not found"))?;
-            bone.name.clone()
+                .get_animation_mut(id)
+                .ok_or_else(|| exec_err("Animation clip not found"))?
+                .clip
+        } else {
+            state.document.project.get_or_create_animation_clip(
+                self.skeleton_id,
+                "Action",
+                (self.time + 1.0).max(2.0),
+            )
         };
-
-        let clip = state.document.project.get_or_create_animation_clip(
-            self.skeleton_id,
-            "Action",
-            (self.time + 1.0).max(2.0),
-        );
         if self.time > clip.duration {
             clip.duration = (self.time + 0.5).max(clip.duration);
         }
-
         let track = clip.get_or_create_track(self.bone_id, &bone_name);
         track.add_translation(self.time, self.transform.translation);
         track.add_rotation(self.time, self.transform.rotation);
         track.add_scale(self.time, self.transform.scale);
         track.set_keyframe_interpolation(self.time, self.interpolation, 1e-4);
-
         state.set_status(format!(
-            "Keyframe inserted for {} at {:.2}s",
-            bone_name, self.time
+            "Keyframe inserted for {bone_name} at {:.4}s",
+            self.time
         ));
         Ok(())
     }
 }
 
-/// Remove keyframe de um osso no tempo informado com histórico de Undo.
+/// Delete one authored key time, never every key in the search window.
 #[derive(Debug, Clone)]
 pub struct DeleteBoneKeyframeCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Uuid,
     pub bone_id: u32,
     pub time: f32,
     pub tolerance: f32,
+}
+
+fn nearest_key_time(track: &petunia_project::BoneTrack, time: f32, tolerance: f32) -> Option<f32> {
+    track
+        .keyframe_times()
+        .into_iter()
+        .filter(|t| t.is_finite() && (*t - time).abs() <= tolerance)
+        .min_by(|a, b| {
+            (a - time)
+                .abs()
+                .total_cmp(&(b - time).abs())
+                .then_with(|| a.total_cmp(b))
+        })
 }
 
 impl Command for DeleteBoneKeyframeCmd {
     fn label(&self) -> &'static str {
         "delete bone keyframe"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
-            .document
-            .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, Some(self.clip_id))?;
+        if !self.time.is_finite()
+            || self.time < 0.0
+            || !self.tolerance.is_finite()
+            || self.tolerance < 0.0
+        {
+            return Err("Invalid keyframe time or tolerance");
         }
         Ok(())
     }
-
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let tag = format!("skeleton:{}", self.skeleton_id);
-        let mut removed = false;
-        for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag)
-                && asset.clip.remove_keyframe_on_bone(
-                    self.bone_id,
-                    self.time,
-                    self.tolerance.max(1e-3),
-                )
-            {
-                removed = true;
-            }
-        }
-        if !removed {
-            return Err(CommandError::NoChange(
-                "No keyframe found at that time".into(),
-            ));
-        }
-        state.set_status(format!("Keyframe deleted at {:.2}s", self.time));
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let track = state
+            .document
+            .project
+            .get_animation_mut(self.clip_id)
+            .and_then(|a| a.clip.get_track_mut(self.bone_id))
+            .ok_or_else(|| CommandError::NoChange("No keyframe track".into()))?;
+        let time = nearest_key_time(track, self.time, self.tolerance)
+            .ok_or_else(|| CommandError::NoChange("No keyframe found at that time".into()))?;
+        track.remove_keyframe_at(time, 0.0);
+        state.set_status(format!("Keyframe deleted at {time:.4}s"));
         Ok(())
     }
 }
 
-/// Altera a interpolação do keyframe no tempo informado.
+/// Change interpolation only on the explicitly targeted clip and key time.
 #[derive(Debug, Clone)]
 pub struct SetBoneKeyframeInterpolationCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Uuid,
     pub bone_id: u32,
     pub time: f32,
     pub interpolation: Interpolation,
 }
-
 impl Command for SetBoneKeyframeInterpolationCmd {
     fn label(&self) -> &'static str {
         "set bone keyframe interpolation"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
-            .document
-            .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, Some(self.clip_id))?;
+        if !self.time.is_finite() || self.time < 0.0 {
+            return Err("Invalid keyframe time");
         }
         Ok(())
     }
-
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let tag = format!("skeleton:{}", self.skeleton_id);
-        let mut changed = false;
-        for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag)
-                && let Some(track) = asset.clip.get_track_mut(self.bone_id)
-                && track.has_keyframe_at(self.time, 1e-3)
-            {
-                track.set_keyframe_interpolation(self.time, self.interpolation, 1e-3);
-                changed = true;
-            }
-        }
-        if !changed {
-            return Err(CommandError::NoChange(
-                "No keyframe found at that time".into(),
-            ));
-        }
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let track = state
+            .document
+            .project
+            .get_animation_mut(self.clip_id)
+            .and_then(|a| a.clip.get_track_mut(self.bone_id))
+            .ok_or_else(|| CommandError::NoChange("No keyframe track".into()))?;
+        let time = nearest_key_time(track, self.time, 1e-4)
+            .ok_or_else(|| CommandError::NoChange("No keyframe found at that time".into()))?;
+        track.set_keyframe_interpolation(time, self.interpolation, 0.0);
         state.set_status("Keyframe interpolation updated");
         Ok(())
     }
 }
 
-/// Limpa toda a trilha de um osso na animação.
+/// Clear a bone track only in the explicit animation clip.
 #[derive(Debug, Clone)]
 pub struct ClearBoneTrackCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Uuid,
     pub bone_id: u32,
 }
-
 impl Command for ClearBoneTrackCmd {
     fn label(&self) -> &'static str {
         "clear bone track"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, Some(self.clip_id))
+    }
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let track = state
             .document
             .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
-        }
-        Ok(())
-    }
-
-    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let tag = format!("skeleton:{}", self.skeleton_id);
-        let mut cleared = false;
-        for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag)
-                && let Some(track) = asset.clip.get_track_mut(self.bone_id)
-                && (!track.translations.is_empty()
-                    || !track.rotations.is_empty()
-                    || !track.scales.is_empty())
-            {
-                track.clear();
-                cleared = true;
-            }
-        }
-        if !cleared {
-            return Err(CommandError::NoChange(
-                "Bone track was already empty".into(),
-            ));
-        }
+            .get_animation_mut(self.clip_id)
+            .and_then(|a| a.clip.get_track_mut(self.bone_id))
+            .filter(|t| {
+                !t.translations.is_empty() || !t.rotations.is_empty() || !t.scales.is_empty()
+            })
+            .ok_or_else(|| CommandError::NoChange("Bone track was already empty".into()))?;
+        track.clear();
         state.set_status("Bone track cleared");
         Ok(())
     }
@@ -1632,6 +1706,1573 @@ impl Command for ToggleMotionLayerEnabledCmd {
             .ok_or_else(|| exec_err("Motion layer not found"))?;
         layer.enabled = !layer.enabled;
         state.set_status("Layer enabled toggled");
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P3D-170 / H31: Smart Rig Manual & Assistido (RIG-001/002/004/008/009/010/011)
+// ---------------------------------------------------------------------------
+
+fn find_asset(
+    project: &petunia_project::Project,
+    id: Option<Uuid>,
+) -> Option<&petunia_project::Asset> {
+    match id {
+        Some(aid) => project.assets.iter().find(|a| a.id == aid),
+        None => project.active(),
+    }
+}
+
+fn find_asset_mut(
+    project: &mut petunia_project::Project,
+    id: Option<Uuid>,
+) -> Option<&mut petunia_project::Asset> {
+    match id {
+        Some(aid) => project.assets.iter_mut().find(|a| a.id == aid),
+        None => project.active_mut(),
+    }
+}
+
+/// Cria um novo esqueleto vazio e o registra no projeto (RIG-001/010/011).
+#[derive(Debug, Clone)]
+pub struct CreateEmptySkeletonCmd {
+    pub name: String,
+    pub asset_id: Option<Uuid>,
+}
+
+impl Command for CreateEmptySkeletonCmd {
+    fn label(&self) -> &'static str {
+        "create empty skeleton"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let name = self.name.trim();
+        if name.is_empty() {
+            return Err("Skeleton name cannot be empty");
+        }
+        if state
+            .document
+            .project
+            .skeletons
+            .iter()
+            .any(|s| s.name == name)
+        {
+            return Err("A skeleton with this name already exists");
+        }
+        if let Some(aid) = self.asset_id
+            && state.document.project.assets.iter().all(|a| a.id != aid)
+        {
+            return Err("Target asset not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let name = self.name.trim();
+        let skeleton = Skeleton::new(name);
+        let skel_id = skeleton.id;
+        state.document.project.add_skeleton(skeleton);
+
+        if let Some(asset) = find_asset_mut(&mut state.document.project, self.asset_id) {
+            asset.skeleton_id = Some(skel_id);
+        }
+
+        state.set_status(format!("Created skeleton '{name}'"));
+        Ok(())
+    }
+}
+
+/// Adiciona manualmente um osso com posições head e tail ao esqueleto (RIG-001/010/011).
+#[derive(Debug, Clone)]
+pub struct AddBoneCmd {
+    pub skeleton_id: Uuid,
+    pub name: String,
+    pub parent: Option<u32>,
+    pub head: [f32; 3],
+    pub tail: [f32; 3],
+}
+
+impl Command for AddBoneCmd {
+    fn label(&self) -> &'static str {
+        "add bone"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        let name = self.name.trim();
+        if name.is_empty() {
+            return Err("Bone name cannot be empty");
+        }
+        if skel.bones.iter().any(|b| b.name == name) {
+            return Err("A bone with this name already exists in the skeleton");
+        }
+        if let Some(pid) = self.parent
+            && skel.get_bone(pid).is_none()
+        {
+            return Err("Parent bone not found in skeleton");
+        }
+        if !finite3(&self.head) || !finite3(&self.tail) {
+            return Err("Bone coordinates must be finite numbers");
+        }
+        if glam::Vec3::from(self.head).distance(glam::Vec3::from(self.tail)) < 1e-6 {
+            return Err("Bone length must be greater than zero");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        let name = self.name.trim();
+        let bone_id = skel
+            .add_bone(name, self.parent, self.head, self.tail)
+            .map_err(exec_err)?;
+
+        state.set_status(format!("Added bone '{name}' (id: {bone_id})"));
+        Ok(())
+    }
+}
+
+/// Remove um osso do esqueleto, reatribuindo os filhos ao pai do osso removido (RIG-001/010).
+#[derive(Debug, Clone)]
+pub struct RemoveBoneCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+}
+
+impl Command for RemoveBoneCmd {
+    fn label(&self) -> &'static str {
+        "remove bone"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        skel.remove_bone(self.bone_id).map_err(exec_err)?;
+        state.set_status(format!("Removed bone id: {}", self.bone_id));
+        Ok(())
+    }
+}
+
+/// Reatribui a hierarquia de um osso com detecção estrita de ciclos (RIG-001/010).
+#[derive(Debug, Clone)]
+pub struct ReparentBoneCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub new_parent: Option<u32>,
+}
+
+impl Command for ReparentBoneCmd {
+    fn label(&self) -> &'static str {
+        "reparent bone"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        let bone = skel.get_bone(self.bone_id).ok_or("Bone not found")?;
+        if bone.parent == self.new_parent {
+            return Err("Bone already has this parent");
+        }
+        if let Some(target) = self.new_parent {
+            if target == self.bone_id {
+                return Err("Cannot reparent bone to itself");
+            }
+            if skel.get_bone(target).is_none() {
+                return Err("Target parent bone not found");
+            }
+            let mut curr = Some(target);
+            while let Some(pid) = curr {
+                if pid == self.bone_id {
+                    return Err(
+                        "Hierarchy cycle detected: target parent is a descendant of the bone",
+                    );
+                }
+                curr = skel.get_bone(pid).and_then(|b| b.parent);
+            }
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        skel.reparent_bone(self.bone_id, self.new_parent)
+            .map_err(exec_err)?;
+        state.set_status(format!("Reparented bone id: {}", self.bone_id));
+        Ok(())
+    }
+}
+
+/// Edita as coordenadas head e tail de um osso no Rest Pose (RIG-001/008).
+#[derive(Debug, Clone)]
+pub struct EditBoneRestPoseCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub head: [f32; 3],
+    pub tail: [f32; 3],
+}
+
+impl Command for EditBoneRestPoseCmd {
+    fn label(&self) -> &'static str {
+        "edit bone rest pose"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        if !finite3(&self.head) || !finite3(&self.tail) {
+            return Err("Bone coordinates must be finite numbers");
+        }
+        if glam::Vec3::from(self.head).distance(glam::Vec3::from(self.tail)) < 1e-6 {
+            return Err("Bone length must be greater than zero");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        let bone = skel
+            .get_bone(self.bone_id)
+            .ok_or_else(|| exec_err("Bone not found"))?;
+
+        if bone.head == self.head && bone.tail == self.tail {
+            return Err(CommandError::NoChange(
+                "Bone rest pose already has these coordinates".into(),
+            ));
+        }
+
+        skel.edit_bone_rest_pose(self.bone_id, self.head, self.tail)
+            .map_err(exec_err)?;
+
+        state.set_status(format!("Edited rest pose of bone id: {}", self.bone_id));
+        Ok(())
+    }
+}
+
+/// Renomeia um osso existente garantindo unicidade no esqueleto (RIG-001/010).
+#[derive(Debug, Clone)]
+pub struct RenameBoneCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub new_name: String,
+}
+
+impl Command for RenameBoneCmd {
+    fn label(&self) -> &'static str {
+        "rename bone"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        let bone = skel.get_bone(self.bone_id).ok_or("Bone not found")?;
+        let name = self.new_name.trim();
+        if name.is_empty() {
+            return Err("Bone name cannot be empty");
+        }
+        if skel
+            .bones
+            .iter()
+            .any(|b| b.id != self.bone_id && b.name == name)
+        {
+            return Err("A bone with this name already exists in the skeleton");
+        }
+        if bone.name == name {
+            return Err("Bone already has this name");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        let name = self.new_name.trim();
+        skel.rename_bone(self.bone_id, name).map_err(exec_err)?;
+        state.set_status(format!("Renamed bone to '{name}'"));
+        Ok(())
+    }
+}
+
+/// Vincula uma malha a um esqueleto usando o método configurado (RIG-002/004/009).
+/// Suporta Proximity, RigidPerPart e SmoothEnvelope, com limite de influências e normalização.
+#[derive(Debug, Clone)]
+pub struct BindRigCmd {
+    pub skeleton_id: Uuid,
+    pub asset_id: Option<Uuid>,
+    pub method: SkinBindMethod,
+    pub max_influences: usize,
+    pub custom_skin: Option<SkinData>,
+}
+
+impl BindRigCmd {
+    pub fn new(
+        skeleton_id: Uuid,
+        asset_id: Option<Uuid>,
+        method: SkinBindMethod,
+        max_influences: usize,
+    ) -> Self {
+        Self {
+            skeleton_id,
+            asset_id,
+            method,
+            max_influences,
+            custom_skin: None,
+        }
+    }
+}
+
+impl Command for BindRigCmd {
+    fn label(&self) -> &'static str {
+        "bind rig"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.bones.is_empty() {
+            return Err("Skeleton has no bones to bind");
+        }
+        let asset =
+            find_asset(&state.document.project, self.asset_id).ok_or("Target asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.mesh.verts.is_empty() {
+            return Err("Asset mesh has no vertices");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .cloned()
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        let asset = find_asset(&state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let mesh = asset.mesh.clone();
+
+        let skin_data = match &self.custom_skin {
+            Some(custom) => {
+                custom
+                    .validate(mesh.verts.len(), skel.bones.len())
+                    .map_err(exec_err)?;
+                custom.clone()
+            }
+            None => compute_skin_weights(&mesh, &skel, self.method, self.max_influences)
+                .map_err(exec_err)?,
+        };
+
+        let asset_name = {
+            let asset_mut = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            asset_mut.skeleton_id = Some(self.skeleton_id);
+            asset_mut.skin_data = Some(skin_data);
+            asset_mut.skinning_enabled = true;
+            asset_mut.name.clone()
+        };
+
+        state.set_status(format!("Bound rig to asset '{asset_name}'"));
+        Ok(())
+    }
+}
+
+/// Desvincula o esqueleto e remove os dados de skinning do asset (RIG-002/009).
+#[derive(Debug, Clone, Default)]
+pub struct UnbindRigCmd {
+    pub asset_id: Option<Uuid>,
+}
+
+impl Command for UnbindRigCmd {
+    fn label(&self) -> &'static str {
+        "unbind rig"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset =
+            find_asset(&state.document.project, self.asset_id).ok_or("Target asset not found")?;
+        if asset.skeleton_id.is_none() && asset.skin_data.is_none() {
+            return Err("Asset is not bound to any rig");
+        }
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset_name = {
+            let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            if asset.skeleton_id.is_none() && asset.skin_data.is_none() {
+                return Err(CommandError::NoChange("Asset is not bound to a rig".into()));
+            }
+
+            asset.skeleton_id = None;
+            asset.skin_data = None;
+            asset.name.clone()
+        };
+
+        state.set_status(format!("Unbound rig from asset '{asset_name}'"));
+        Ok(())
+    }
+}
+
+/// Restaura todos os ossos do esqueleto para a pose neutra (Rest Pose) (RIG-008).
+#[derive(Debug, Clone)]
+pub struct ResetAllBonePosesCmd {
+    pub skeleton_id: Uuid,
+}
+
+impl Command for ResetAllBonePosesCmd {
+    fn label(&self) -> &'static str {
+        "reset all bone poses"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.bones.is_empty() {
+            return Err("Skeleton has no bones");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        let identity_rot = [0.0, 0.0, 0.0, 1.0];
+        let identity_scale = [1.0, 1.0, 1.0];
+
+        let mut changed = false;
+        for bone in &mut skel.bones {
+            if bone.local_transform.rotation != identity_rot
+                || bone.local_transform.scale != identity_scale
+            {
+                bone.local_transform.rotation = identity_rot;
+                bone.local_transform.scale = identity_scale;
+                changed = true;
+            }
+        }
+
+        if !changed {
+            return Err(CommandError::NoChange(
+                "All bones are already in rest pose".into(),
+            ));
+        }
+
+        state.set_status("All bones reset to rest pose");
+        Ok(())
+    }
+}
+
+/// Aplica a pose atual do esqueleto como novo Rest Pose (RIG-008).
+/// Atualiza as posições de repouso head e tail dos ossos, recalcula as matrizes
+/// de bind e, se fornecido asset com skin_data, deforma a malha base para a nova pose.
+#[derive(Debug, Clone)]
+pub struct ApplyPoseAsRestCmd {
+    pub skeleton_id: Uuid,
+    pub asset_id: Option<Uuid>,
+}
+
+impl Command for ApplyPoseAsRestCmd {
+    fn label(&self) -> &'static str {
+        "apply pose as rest"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.bones.is_empty() {
+            return Err("Skeleton has no bones");
+        }
+        if let Some(aid) = self.asset_id {
+            let asset = state
+                .document
+                .project
+                .assets
+                .iter()
+                .find(|a| a.id == aid)
+                .ok_or("Asset not found")?;
+            if asset.locked {
+                return Err("Asset is locked");
+            }
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+        let pose_transforms: Vec<Transform3D> =
+            skel.bones.iter().map(|b| b.local_transform).collect();
+        let world_matrices = skel
+            .world_pose_matrices(&pose_transforms)
+            .map_err(exec_err)?;
+        let skinning_matrices = skel
+            .compute_skinning_matrices(&pose_transforms)
+            .map_err(exec_err)?;
+
+        // Verificar se houve alguma alteração em relação ao rest pose
+        let identity_rot = [0.0, 0.0, 0.0, 1.0];
+        let identity_scale = [1.0, 1.0, 1.0];
+        let is_identity = skel.bones.iter().all(|b| {
+            b.local_transform.rotation == identity_rot && b.local_transform.scale == identity_scale
+        });
+        if is_identity {
+            return Err(CommandError::NoChange(
+                "Skeleton is already in rest pose".into(),
+            ));
+        }
+
+        // Para cada osso, calcular novas coordenadas head e tail no espaço do esqueleto
+        for (i, b) in skel.bones.iter_mut().enumerate() {
+            let wm = world_matrices[i];
+            let orig_tail = glam::Vec3::from(b.tail);
+            let inv_bind = glam::Mat4::from_cols_array(&b.inverse_bind_matrix);
+            let local_tail = inv_bind.transform_point3(orig_tail);
+
+            let new_head = wm.transform_point3(glam::Vec3::ZERO);
+            let new_tail = wm.transform_point3(local_tail);
+
+            b.head = [new_head.x, new_head.y, new_head.z];
+            b.tail = [new_tail.x, new_tail.y, new_tail.z];
+            b.local_transform.rotation = identity_rot;
+            b.local_transform.scale = identity_scale;
+        }
+
+        skel.compute_bind_pose_matrices();
+
+        // Se houver asset associado, deformar a malha base para corresponder à nova rest pose
+        if let Some(asset) = find_asset_mut(&mut state.document.project, self.asset_id)
+            && let Some(skin_data) = &asset.skin_data
+            && skin_data.skeleton_id == self.skeleton_id
+            && asset.skinning_enabled
+        {
+            let orig_mesh = asset.mesh.clone();
+            let deformed_mesh = skin_data.deform_mesh(&orig_mesh, &skinning_matrices);
+            asset.mesh = deformed_mesh.into();
+        }
+
+        state.set_status("Current pose applied as new rest pose");
+        Ok(())
+    }
+}
+
+/// Habilita ou desabilita a deformação de skinning no asset sem apagar dados (RIG-012).
+#[derive(Debug, Clone)]
+pub struct SetSkinningEnabledCmd {
+    pub asset_id: Option<Uuid>,
+    pub enabled: bool,
+}
+
+impl Command for SetSkinningEnabledCmd {
+    fn label(&self) -> &'static str {
+        "set skinning enabled"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset =
+            find_asset(&state.document.project, self.asset_id).ok_or("Target asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset_name = {
+            let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            if asset.skinning_enabled == self.enabled {
+                return Err(CommandError::NoChange(format!(
+                    "Skinning is already {}",
+                    if self.enabled { "enabled" } else { "disabled" }
+                )));
+            }
+
+            asset.skinning_enabled = self.enabled;
+            asset.name.clone()
+        };
+
+        state.set_status(format!(
+            "Skinning {} for asset '{asset_name}'",
+            if self.enabled { "enabled" } else { "disabled" }
+        ));
+        Ok(())
+    }
+}
+
+/// Estado de pré-visualização de skinning antes da confirmação do bind (RIG-002/004/009).
+/// Permite inspecionar e revisar pesos sem poluir ou alterar o documento prematuramente.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SkinningPreviewState {
+    pub skeleton_id: Uuid,
+    pub asset_id: Uuid,
+    pub method: SkinBindMethod,
+    pub max_influences: usize,
+    pub skin_data: SkinData,
+    pub is_valid: bool,
+    pub diagnostic: Option<String>,
+}
+
+impl SkinningPreviewState {
+    pub fn compute(
+        asset_id: Uuid,
+        mesh: &petunia_mesh::Mesh,
+        skeleton: &Skeleton,
+        method: SkinBindMethod,
+        max_influences: usize,
+    ) -> Self {
+        match compute_skin_weights(mesh, skeleton, method, max_influences) {
+            Ok(skin_data) => Self {
+                skeleton_id: skeleton.id,
+                asset_id,
+                method,
+                max_influences,
+                skin_data,
+                is_valid: true,
+                diagnostic: None,
+            },
+            Err(e) => Self {
+                skeleton_id: skeleton.id,
+                asset_id,
+                method,
+                max_influences,
+                skin_data: SkinData::new(skeleton.id, mesh.verts.len()),
+                is_valid: false,
+                diagnostic: Some(e.to_string()),
+            },
+        }
+    }
+
+    /// Permite editar manualmente o peso de um vértice durante a pré-visualização revisável.
+    pub fn override_vertex_weight(
+        &mut self,
+        vertex_idx: usize,
+        bones: [u32; 4],
+        weights: [f32; 4],
+    ) -> Result<(), RigError> {
+        if vertex_idx >= self.skin_data.vertex_weights.len() {
+            return Err(RigError::InvalidWeights {
+                vertex_index: vertex_idx,
+                reason: "Índice de vértice fora dos limites".to_string(),
+            });
+        }
+        let mut vw = VertexSkinWeight::new(bones, weights);
+        vw.normalize();
+        self.skin_data.vertex_weights[vertex_idx] = vw;
+        Ok(())
+    }
+
+    /// Cria o comando transacional de bind a partir da pré-visualização revisada.
+    pub fn commit_cmd(&self) -> BindRigCmd {
+        BindRigCmd {
+            skeleton_id: self.skeleton_id,
+            asset_id: Some(self.asset_id),
+            method: self.method,
+            max_influences: self.max_influences,
+            custom_skin: Some(self.skin_data.clone()),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// H32: Smart Rig Estrutural & Live Opcional (RIG-003/005/006/007/012)
+// ---------------------------------------------------------------------------
+
+/// Habilita ou desabilita a auto-atualização do Live Rig sem apagar dados (RIG-012).
+#[derive(Debug, Clone)]
+pub struct SetLiveAutoUpdateCmd {
+    pub asset_id: Option<Uuid>,
+    pub enabled: bool,
+}
+
+impl Command for SetLiveAutoUpdateCmd {
+    fn label(&self) -> &'static str {
+        "set live auto-update"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset does not have a live rig configured");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset_name = {
+            let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            let live = asset
+                .live_rig
+                .as_mut()
+                .ok_or_else(|| exec_err("Live rig not found"))?;
+
+            if live.auto_update_enabled == self.enabled {
+                return Err(CommandError::NoChange(format!(
+                    "Live auto-update is already {}",
+                    if self.enabled { "enabled" } else { "disabled" }
+                )));
+            }
+
+            live.auto_update_enabled = self.enabled;
+            asset.name.clone()
+        };
+
+        state.set_status(format!(
+            "Live auto-update {} for asset '{asset_name}'",
+            if self.enabled { "enabled" } else { "disabled" }
+        ));
+        Ok(())
+    }
+}
+
+/// Cria e inicializa um Grafo de Forma Estrutural (StructuralShapeGraph) no asset (RIG-003).
+#[derive(Debug, Clone)]
+pub struct CreateStructuralGraphCmd {
+    pub asset_id: Option<Uuid>,
+    pub name: String,
+}
+
+impl Command for CreateStructuralGraphCmd {
+    fn label(&self) -> &'static str {
+        "create structural shape graph"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if self.name.trim().is_empty() {
+            return Err("Graph name cannot be empty");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let name = self.name.trim().to_string();
+        let asset_name = {
+            let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            let graph = StructuralShapeGraph::new(&name);
+            asset.live_rig = Some(LiveRigData::new(graph));
+            asset.name.clone()
+        };
+
+        state.set_status(format!(
+            "Created structural shape graph '{name}' for '{asset_name}'"
+        ));
+        Ok(())
+    }
+}
+
+/// Adiciona uma parte anatômica/estrutural ao grafo de forma (RIG-003/005).
+#[derive(Debug, Clone)]
+pub struct AddStructuralPartCmd {
+    pub asset_id: Option<Uuid>,
+    pub name: String,
+    pub vertex_indices: Vec<usize>,
+    pub center: [f32; 3],
+    pub bounds: ([f32; 3], [f32; 3]),
+}
+
+impl Command for AddStructuralPartCmd {
+    fn label(&self) -> &'static str {
+        "add structural part"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        let name = self.name.trim();
+        if name.is_empty() {
+            return Err("Part name cannot be empty");
+        }
+        if live.graph.parts.iter().any(|p| p.name == name) {
+            return Err("A structural part with this name already exists");
+        }
+        if !finite3(&self.center) || !finite3(&self.bounds.0) || !finite3(&self.bounds.1) {
+            return Err("Coordinates and bounds must be finite numbers");
+        }
+        let n_verts = asset.mesh.verts.len();
+        if self.vertex_indices.iter().any(|&i| i >= n_verts) {
+            return Err("Vertex index out of mesh bounds");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let name = self.name.trim();
+        let part_id = live
+            .graph
+            .add_part(name, self.vertex_indices.clone(), self.center, self.bounds)
+            .map_err(exec_err)?;
+
+        state.set_status(format!("Added structural part '{name}' (id: {part_id})"));
+        Ok(())
+    }
+}
+
+/// Remove uma parte estrutural do grafo (RIG-003).
+#[derive(Debug, Clone)]
+pub struct RemoveStructuralPartCmd {
+    pub asset_id: Option<Uuid>,
+    pub part_id: PartId,
+}
+
+impl Command for RemoveStructuralPartCmd {
+    fn label(&self) -> &'static str {
+        "remove structural part"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if live.graph.get_part(self.part_id).is_none() {
+            return Err("Structural part not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        live.graph.remove_part(self.part_id).map_err(exec_err)?;
+        state.set_status(format!("Removed structural part id: {}", self.part_id));
+        Ok(())
+    }
+}
+
+/// Adiciona uma junta ao grafo de forma estrutural (RIG-003/005).
+#[derive(Debug, Clone)]
+pub struct AddStructuralJointCmd {
+    pub asset_id: Option<Uuid>,
+    pub name: String,
+    pub bone_id: Option<u32>,
+    pub position: [f32; 3],
+    pub parent: Option<JointId>,
+}
+
+impl Command for AddStructuralJointCmd {
+    fn label(&self) -> &'static str {
+        "add structural joint"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        let name = self.name.trim();
+        if name.is_empty() {
+            return Err("Joint name cannot be empty");
+        }
+        if live.graph.joints.iter().any(|j| j.name == name) {
+            return Err("A structural joint with this name already exists");
+        }
+        if !finite3(&self.position) {
+            return Err("Position coordinates must be finite numbers");
+        }
+        if let Some(pid) = self.parent
+            && live.graph.get_joint(pid).is_none()
+        {
+            return Err("Parent joint not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let name = self.name.trim();
+        let joint_id = live
+            .graph
+            .add_joint(name, self.bone_id, self.position, self.parent)
+            .map_err(exec_err)?;
+
+        state.set_status(format!("Added structural joint '{name}' (id: {joint_id})"));
+        Ok(())
+    }
+}
+
+/// Conecta duas partes estruturais no grafo (RIG-003).
+#[derive(Debug, Clone)]
+pub struct ConnectStructuralPartsCmd {
+    pub asset_id: Option<Uuid>,
+    pub from_part: PartId,
+    pub to_part: PartId,
+    pub kind: ConnectionKind,
+}
+
+impl Command for ConnectStructuralPartsCmd {
+    fn label(&self) -> &'static str {
+        "connect structural parts"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if self.from_part == self.to_part {
+            return Err("Cannot connect a part to itself");
+        }
+        if live.graph.get_part(self.from_part).is_none() {
+            return Err("Source part not found");
+        }
+        if live.graph.get_part(self.to_part).is_none() {
+            return Err("Target part not found");
+        }
+        if live.graph.connections.iter().any(|c| {
+            (c.from_part == self.from_part && c.to_part == self.to_part)
+                || (c.from_part == self.to_part && c.to_part == self.from_part)
+        }) {
+            return Err("Connection between these parts already exists");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let conn_id = live
+            .graph
+            .connect_parts(self.from_part, self.to_part, self.kind)
+            .map_err(exec_err)?;
+
+        state.set_status(format!(
+            "Connected parts {} and {} (connection id: {conn_id})",
+            self.from_part, self.to_part
+        ));
+        Ok(())
+    }
+}
+
+/// Define o estado de bloqueio (lock) de uma parte estrutural (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct SetStructuralPartLockedCmd {
+    pub asset_id: Option<Uuid>,
+    pub part_id: PartId,
+    pub locked: bool,
+}
+
+impl Command for SetStructuralPartLockedCmd {
+    fn label(&self) -> &'static str {
+        "set structural part locked"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if live.graph.get_part(self.part_id).is_none() {
+            return Err("Structural part not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let part = live
+            .graph
+            .get_part_mut(self.part_id)
+            .ok_or_else(|| exec_err("Part not found"))?;
+
+        if part.locked == self.locked {
+            return Err(CommandError::NoChange(format!(
+                "Part {} is already {}",
+                self.part_id,
+                if self.locked { "locked" } else { "unlocked" }
+            )));
+        }
+
+        part.locked = self.locked;
+        state.set_status(format!(
+            "Part {} {}",
+            self.part_id,
+            if self.locked { "locked" } else { "unlocked" }
+        ));
+        Ok(())
+    }
+}
+
+/// Define o estado de bloqueio (lock) de um osso no Live Rig (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct SetStructuralBoneLockedCmd {
+    pub asset_id: Option<Uuid>,
+    pub bone_id: u32,
+    pub locked: bool,
+}
+
+impl Command for SetStructuralBoneLockedCmd {
+    fn label(&self) -> &'static str {
+        "set structural bone locked"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        let skel_id = asset.skeleton_id.ok_or("Asset has no skeleton bound")?;
+        let skel = state
+            .document
+            .project
+            .get_skeleton(skel_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found in skeleton");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        let changed = if self.locked {
+            live.locked_bones.insert(self.bone_id)
+        } else {
+            live.locked_bones.remove(&self.bone_id)
+        };
+
+        if !changed {
+            return Err(CommandError::NoChange(format!(
+                "Bone {} is already {}",
+                self.bone_id,
+                if self.locked { "locked" } else { "unlocked" }
+            )));
+        }
+
+        state.set_status(format!(
+            "Bone {} {}",
+            self.bone_id,
+            if self.locked { "locked" } else { "unlocked" }
+        ));
+        Ok(())
+    }
+}
+
+/// Define um override manual de pesos para um vértice que DEVE ser preservado (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct SetVertexWeightOverrideCmd {
+    pub asset_id: Option<Uuid>,
+    pub vertex_index: usize,
+    pub bones: [u32; 4],
+    pub weights: [f32; 4],
+}
+
+impl Command for SetVertexWeightOverrideCmd {
+    fn label(&self) -> &'static str {
+        "set vertex weight override"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        if self.vertex_index >= asset.mesh.verts.len() {
+            return Err("Vertex index out of mesh bounds");
+        }
+        if !self.weights.iter().all(|w| w.is_finite() && *w >= 0.0) {
+            return Err("Weights must be finite non-negative numbers");
+        }
+        if self.weights.iter().sum::<f32>() < 1e-6 {
+            return Err("Weight sum cannot be zero");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let mut vw = VertexSkinWeight::new(self.bones, self.weights);
+        vw.normalize();
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        live.overrides.insert(self.vertex_index, vw);
+
+        if let Some(skin) = asset.skin_data.as_mut()
+            && let Some(target) = skin.vertex_weights.get_mut(self.vertex_index)
+        {
+            *target = vw;
+        }
+
+        state.set_status(format!(
+            "Set weight override for vertex {}",
+            self.vertex_index
+        ));
+        Ok(())
+    }
+}
+
+/// Remove o override manual de um vértice (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct ClearVertexWeightOverrideCmd {
+    pub asset_id: Option<Uuid>,
+    pub vertex_index: usize,
+}
+
+impl Command for ClearVertexWeightOverrideCmd {
+    fn label(&self) -> &'static str {
+        "clear vertex weight override"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if !live.overrides.contains_key(&self.vertex_index) {
+            return Err("Vertex does not have a weight override");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        if live.overrides.remove(&self.vertex_index).is_none() {
+            return Err(CommandError::NoChange("No override found to clear".into()));
+        }
+
+        state.set_status(format!(
+            "Cleared weight override for vertex {}",
+            self.vertex_index
+        ));
+        Ok(())
+    }
+}
+
+/// Executa a atualização localizada e idempotente do Smart Rig estrutural (RIG-003/005/006/007).
+#[derive(Debug, Clone)]
+pub struct UpdateStructuralRigCmd {
+    pub asset_id: Option<Uuid>,
+    pub method: SkinBindMethod,
+    pub max_influences: usize,
+}
+
+impl Command for UpdateStructuralRigCmd {
+    fn label(&self) -> &'static str {
+        "update structural rig"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        if asset.skeleton_id.is_none() {
+            return Err("Asset has no skeleton bound");
+        }
+        if asset.skin_data.is_none() {
+            return Err("Asset has no skin data");
+        }
+        if self.max_influences == 0 || self.max_influences > 4 {
+            return Err("Max influences must be between 1 and 4");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let (skel_clone, mesh_clone, pos_rev, topo_rev, mat_rev, uv_rev) = {
+            let asset = find_asset(&state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+            let skel_id = asset
+                .skeleton_id
+                .ok_or_else(|| exec_err("Asset has no skeleton"))?;
+            let skel = state
+                .document
+                .project
+                .get_skeleton(skel_id)
+                .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+            (
+                skel.clone(),
+                asset.mesh.clone(),
+                state.document.project.position_revision,
+                state.document.project.topology_revision,
+                state.document.project.material_revision,
+                state.document.project.uv_revision,
+            )
+        };
+
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let skin_data = asset
+            .skin_data
+            .as_mut()
+            .ok_or_else(|| exec_err("Skin data not found"))?;
+
+        let live_data = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        let report = update_structural_rig_localized(
+            &mesh_clone,
+            &skel_clone,
+            skin_data,
+            live_data,
+            pos_rev,
+            topo_rev,
+            mat_rev,
+            uv_rev,
+            self.method,
+            self.max_influences,
+        )
+        .map_err(exec_err)?;
+
+        if !report.changed {
+            return Err(CommandError::NoChange(report.message));
+        }
+
+        state.set_status(report.message);
+        Ok(())
+    }
+}
+
+/// Remapeia explicitamente os pesos e o grafo após alterações na topologia (RIG-005/007).
+#[derive(Debug, Clone)]
+pub struct RemapRigWeightsCmd {
+    pub asset_id: Option<Uuid>,
+    pub old_to_new_indices: Vec<Option<usize>>,
+    pub new_vertex_count: usize,
+}
+
+impl Command for RemapRigWeightsCmd {
+    fn label(&self) -> &'static str {
+        "remap rig weights"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let skin = asset.skin_data.as_ref().ok_or("Asset has no skin data")?;
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        if self.old_to_new_indices.len() != skin.vertex_weights.len() {
+            return Err("Remap table size does not match skin weights count");
+        }
+        if self.new_vertex_count != asset.mesh.verts.len() {
+            return Err("New vertex count does not match mesh vertex count");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let skin_data = asset
+            .skin_data
+            .as_mut()
+            .ok_or_else(|| exec_err("Skin data not found"))?;
+
+        let live_data = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        remap_skin_weights(
+            skin_data,
+            live_data,
+            &self.old_to_new_indices,
+            self.new_vertex_count,
+        )
+        .map_err(exec_err)?;
+
+        state.set_status(format!(
+            "Successfully remapped rig weights to {} vertices",
+            self.new_vertex_count
+        ));
         Ok(())
     }
 }

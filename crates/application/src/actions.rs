@@ -20,6 +20,10 @@ pub enum ActionOutcome {
     SaveRequested,
     /// Enquadrar a seleção (cálculo de câmera da camada de UI).
     FrameSelection,
+    /// The caller can surface the unsupported semantic ID without silent success.
+    UnknownAction,
+    /// A supported action failed contextual validation. Status contains the reason.
+    Rejected,
 }
 
 impl Application {
@@ -29,10 +33,27 @@ impl Application {
         self.state.dispatch(command)
     }
 
+    /// Executa um comando tipado devolvendo o relatório DTO com invalidações,
+    /// efeitos aplicados, contadores de histórico e revisão pós-commit (A04).
+    pub fn execute_command_detailed(
+        &mut self,
+        command: &dyn Command,
+    ) -> Result<petunia_core::command::CommandExecutionReport, CommandError> {
+        self.state.dispatch_detailed(command)
+    }
+
     /// Fronteira para comandos registrados; desconhecidos ou indisponíveis
     /// devolvem o erro canônico sem alterar documento nem histórico.
     pub fn execute_registered_command(&mut self, id: &str) -> Result<(), CommandError> {
         self.state.dispatch_command(id)
+    }
+
+    /// Executa um comando registrado por id devolvendo o relatório DTO pós-commit (A04).
+    pub fn execute_registered_command_detailed(
+        &mut self,
+        id: &str,
+    ) -> Result<petunia_core::command::CommandExecutionReport, CommandError> {
+        self.state.dispatch_command_detailed(id)
     }
 
     /// Undo e Redo usam o histórico e as sessões de preview já existentes.
@@ -44,7 +65,7 @@ impl Application {
         self.state.redo()
     }
 
-    /// Executa a ação nomeada. Ações desconhecidas são ignoradas.
+    /// Execute a semantic action; unknown IDs return an explicit outcome.
     pub fn run_action(&mut self, action: &str) -> ActionOutcome {
         let mut outcome = ActionOutcome::None;
         match action {
@@ -100,6 +121,10 @@ impl Application {
                 }
                 self.state.mark_dirty();
             }
+            "model.tool_select" | "model.select" | "model.select_tool" => {
+                self.set_tool("select", None)
+            }
+            "model.box_select" => self.set_tool("box_select", None),
             "model.select_vertex" => self.set_tool("select", Some(SelectMode::Vertex)),
             "model.select_edge" => self.set_tool("select", Some(SelectMode::Edge)),
             "model.select_face" => self.set_tool("select", Some(SelectMode::Face)),
@@ -174,6 +199,54 @@ impl Application {
             "model.select_linked" => {
                 let _ = self.state.dispatch(&petunia_core::SelectLinkedCmd);
             }
+            "animate.toggle_play" if self.state.workspace.is_animate() => {
+                self.state.animate_toggle_play()
+            }
+            "animate.step_backward" | "animate.step_forward"
+                if self.state.workspace.is_animate() =>
+            {
+                let fps = self.state.session.animate.timeline_frame_rate();
+                if fps.is_finite() && fps > 0.0 {
+                    let direction = if action == "animate.step_backward" {
+                        -1.0
+                    } else {
+                        1.0
+                    };
+                    let time = (self.state.session.animate.time + direction / fps).max(0.0);
+                    self.state.animate_seek(time);
+                } else {
+                    outcome = ActionOutcome::Rejected;
+                }
+            }
+            "animate.insert_keyframe" | "animate.delete_keyframe"
+                if self.state.workspace.is_animate() =>
+            {
+                let result = if action == "animate.insert_keyframe" {
+                    self.state.animate_insert_keyframe()
+                } else {
+                    self.state.animate_delete_keyframe(None)
+                };
+                if let Err(error) = result {
+                    self.state.set_status(error.to_string());
+                    outcome = ActionOutcome::Rejected;
+                }
+            }
+            "animate.jump_to_start" if self.state.workspace.is_animate() => {
+                self.state.animate_seek(0.0)
+            }
+            "uv.move" | "uv.rotate" | "uv.scale"
+                if self.state.workspace == petunia_core::Workspace::Uv =>
+            {
+                let kind = match action {
+                    "uv.rotate" => petunia_core::UvTransformKind::Rotate,
+                    "uv.scale" => petunia_core::UvTransformKind::Scale,
+                    _ => petunia_core::UvTransformKind::Move,
+                };
+                if let Err(error) = self.state.begin_uv_transform(kind) {
+                    self.state.set_status(error.to_string());
+                    outcome = ActionOutcome::Rejected;
+                }
+            }
             "paint.paint" => self.set_tool("paint", None),
             "paint.size_decrease"
             | "paint.size_increase"
@@ -211,7 +284,7 @@ impl Application {
                 }
                 self.state.mark_dirty();
             }
-            _ => {}
+            _ => outcome = ActionOutcome::UnknownAction,
         }
         outcome
     }

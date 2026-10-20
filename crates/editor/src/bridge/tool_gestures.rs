@@ -121,7 +121,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             return changed || previous_edge.is_some();
         }
-        let next = self.pick_viewport_target(normalized_x, normalized_y);
+        let mut next = self.pick_viewport_target(normalized_x, normalized_y);
+        // B10: onde a alça do gizmo recebe o clique, nada de pré-seleção por
+        // baixo dela (antes o hover destacava um vértice que o clique ignorava).
+        if self
+            .gizmo_target_at(self.pointer_position[0], self.pointer_position[1])
+            .is_some()
+            && !self.component_beats_gizmo(next)
+        {
+            next = petunia_core::HoverTarget::None;
+        }
 
         if next == self.state.session.tools.hover {
             return self.state.session.tools.active_tool == "cut";
@@ -151,7 +160,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 face @ petunia_core::HoverTarget::Face(_) => face,
                 _ => petunia_core::HoverTarget::None,
             };
-            let mut mask = if self.state.session.snap_enabled || self.state.profile.snap {
+            let mut mask = if self.state.session.snap_settings.enabled {
                 petunia_core::SnapMask::for_target(self.state.session.snap_settings.target)
             } else {
                 petunia_core::SnapMask {
@@ -225,6 +234,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::ShapeBuilder) => {
                 self.shape_builder_click(at)
             }
+            Effect::Click { at }
+                if matches!(self.grammar_tool(), Some(GrammarTool::PlanarPrimitive(_))) =>
+            {
+                let effect = self
+                    .tool_session
+                    .begin_latched(at, petunia_core::PressTarget::Surface);
+                self.apply_tool_effect(effect, fine, snap)
+            }
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::DrawProfile) => {
                 self.draw_profile_click(at)
             }
@@ -287,6 +304,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         let on_handle = matches!(target, petunia_core::PressTarget::Handle(_));
         match tool {
+            GrammarTool::Select => {
+                let force_box = self.state.session.tools.active_tool == "box_select";
+                if on_handle && !force_box {
+                    if self.begin_gizmo_drag(anchor[0], anchor[1]) {
+                        self.tool_gesture = Some(ToolGesture::Transform { gizmo: true });
+                        return true;
+                    }
+                    return false;
+                }
+                let [width, height] = self.viewport_size;
+                if width <= 1.0 || height <= 1.0 {
+                    return false;
+                }
+                let empty = !self
+                    .pick_viewport_target(anchor[0] / width, anchor[1] / height)
+                    .is_some()
+                    && self.profile_hit_at(anchor).is_none();
+                self.tool_gesture = Some(if force_box || empty {
+                    ToolGesture::SelectionBox {
+                        anchor,
+                        current: anchor,
+                        mode: viewport_intents::RegionSelectionMode::from_flags(
+                            self.tool_press_extend,
+                            self.tool_press_subtract,
+                        ),
+                    }
+                } else {
+                    ToolGesture::ProtectedSelection
+                });
+                true
+            }
             GrammarTool::Transform(kind) => {
                 let profile_target = matches!(target, petunia_core::PressTarget::Handle(0));
                 let begun = if profile_target {
@@ -317,6 +365,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             GrammarTool::PolyPen => self.begin_poly_pen_drag(anchor),
             GrammarTool::ShapeBuilder => self.begin_shape_builder(anchor),
             GrammarTool::DrawProfile => self.begin_draw_profile_gesture(anchor, target),
+            GrammarTool::PlanarPrimitive(kind) => self.begin_planar_primitive(kind, anchor),
             // O Knife é por cliques: arrastar não abre gesto.
             GrammarTool::Knife => false,
             GrammarTool::LoopCut => {
@@ -413,7 +462,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// antes do 1º clique, o destaque da face sob o cursor mostra o candidato.
     pub(crate) fn workplane_overlay(&self) -> Option<petunia_render::WorkplaneOverlay> {
         let drawing = self.state.workspace == Workspace::Model
-            && self.modeling_mode == ModelingMode::Draw
             && self.state.session.tools.active_tool == "draw_profile";
         let decided =
             self.state.profile.workplane_locked || self.active_profile_resources().is_some();
@@ -432,14 +480,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if width <= 1.0 || height <= 1.0 || !pixel[0].is_finite() || !pixel[1].is_finite() {
             return None;
         }
-        if self.shape_cache().planes.is_empty() {
+        let cache = self.shape_cache()?;
+        if cache.planes.is_empty() {
             return None;
         }
         let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
         let camera = &self.state.session.camera;
         let (origin, direction) = camera.ray(ndc.x, ndc.y);
         let hit = petunia_core::region_at_ray(
-            &self.shape_cache().planes,
+            &cache.planes,
             origin,
             direction,
             camera.proj == petunia_core::Projection::Perspective,
@@ -447,8 +496,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         // Qualquer objeto visível claramente à frente esconde a região (a
         // cena em cache tem BVH; não triangula a malha por evento). Fora do
         // Raio-X/Wireframe, como a oclusão do picking.
-        let through = self.state.session.show_xray
-            || self.state.session.shading == petunia_core::Shading::Wireframe;
+        let through = self.state.session.selects_through();
         let hidden = !through
             && self
                 .scene_query()
@@ -467,6 +515,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.tool_session.clear_numeric();
         if self.state.primitive_session_valid() {
             self.state.finalize_primitive_session();
+        }
+        if self.state.view().region_host_face(hit).is_none() {
+            if !self.begin_free_region_volume(hit) {
+                return false;
+            }
+            self.tool_gesture = Some(ToolGesture::ProfileDepth {
+                start: self.state.profile.depth,
+                anchor_y: anchor[1],
+            });
+            return true;
         }
         if let Err(error) = self.state.begin_region_push_pull(hit) {
             self.state.set_status(error.to_string());
@@ -499,36 +557,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Shape (Object) continua no caminho de formas inteiras. Clique no vazio
     /// limpa a seleção do domínio.
     pub(crate) fn select_draw_component(&mut self, pixel: [f32; 2]) -> bool {
-        if self.state.session.tools.active_tool == "draw_profile" {
+        if self.state.session.tools.active_tool == "draw_profile"
+            || self.state.selection_domain() != SelectionDomain::Object
+        {
             return false;
         }
-        let domain = self.state.selection_domain();
-        let found = match domain {
-            SelectionDomain::Edge => self.profile_segment_hit(pixel).map(|hit| {
-                self.profile_selected_segment = Some(hit.segment);
-                self.profile_selected_point = None;
+        let found = match self.draw_component_context.as_str() {
+            "segments" => self.profile_segment_hit(pixel).map(|hit| {
+                self.state.session.planar_selection.segment = Some(hit.segment);
+                self.state.session.planar_selection.point = None;
                 self.region_selected = None;
                 petunia_config::text_id::STATUS_CURVE_SELECTED
             }),
-            SelectionDomain::Vertex => match self.hit_test_profile(pixel[0], pixel[1]) {
+            "points" => match self.hit_test_profile(pixel[0], pixel[1]) {
                 Some(ProfileHitTarget::Anchor(id)) => {
-                    self.profile_selected_point = Some(id);
-                    self.profile_selected_segment = None;
+                    self.state.session.planar_selection.point = Some(id);
+                    self.state.session.planar_selection.segment = None;
                     self.region_selected = None;
                     Some(petunia_config::text_id::STATUS_PROFILE_POINT_SELECTED)
                 }
                 _ => None,
             },
-            SelectionDomain::Face => self.region_hit_at(pixel).map(|hit| {
+            "regions" => self.region_hit_at(pixel).map(|hit| {
                 self.region_selected = Some(hit);
-                self.profile_selected_point = None;
-                self.profile_selected_segment = None;
+                self.state.session.planar_selection.point = None;
+                self.state.session.planar_selection.segment = None;
                 petunia_config::text_id::STATUS_REGION_SELECTED
             }),
-            SelectionDomain::Object => return false,
+            _ => return false,
         };
         let Some(message) = found else {
-            let had = self.profile_selected_segment.take().is_some()
+            let had = self.state.session.planar_selection.segment.take().is_some()
                 | self.region_selected.take().is_some();
             if had {
                 self.state.mark_dirty();
@@ -544,10 +603,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Segmento selecionado (domínio Curve) em comandos de tela.
     pub(crate) fn profile_selection_commands(&self) -> String {
         let mut commands = String::new();
-        let Some(segment) = self.profile_selected_segment else {
+        let Some(segment) = self.state.session.planar_selection.segment else {
             return commands;
         };
-        let Some((profile, spline)) = self.active_profile_resources() else {
+        let Some((profile, spline)) = self.active_contour_resources() else {
             return commands;
         };
         if segment >= spline.segment_count() {
@@ -573,6 +632,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub(crate) fn region_hover_commands(&self) -> String {
+        if self.solid_shape_builder.is_some() {
+            return self.solid_region_commands();
+        }
         let mut commands = String::new();
         // A região selecionada (domínio Region) fica destacada sem hover.
         if let Some(hit) = &self.region_selected {
@@ -672,6 +734,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
+    /// Logical-pixel box preview for a presentation adapter; selection commits on release.
+    pub fn selection_box_preview(&self) -> Option<([f32; 2], [f32; 2])> {
+        if let Some(ToolGesture::SelectionBox {
+            anchor, current, ..
+        }) = self.tool_gesture
+        {
+            Some((anchor, current))
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn update_tool_gesture(
         &mut self,
         current: [f32; 2],
@@ -682,6 +756,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.update_profile_transform(current, snap);
         }
         match self.tool_gesture {
+            Some(ToolGesture::ProtectedSelection) => false,
+            Some(ToolGesture::SelectionBox { anchor, mode, .. }) => {
+                self.tool_gesture = Some(ToolGesture::SelectionBox {
+                    anchor,
+                    current,
+                    mode,
+                });
+                self.state.mark_dirty();
+                true
+            }
+            Some(ToolGesture::PlanarPrimitive { kind, anchor }) => {
+                self.update_planar_primitive(kind, anchor, current)
+            }
             Some(ToolGesture::Transform { .. }) => {
                 self.update_viewport_transform_modified(current[0], current[1], fine, snap)
             }
@@ -722,10 +809,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 )
             }
             Some(ToolGesture::ProfileDepth { start, anchor_y }) => {
+                if !self.tool_session.numeric_text().is_empty() {
+                    return false;
+                }
                 let rate = if fine { 0.005 } else { 0.02 };
-                self.set_profile_depth((start + (anchor_y - current[1]) * rate).max(0.05))
+                self.set_profile_depth(start + (anchor_y - current[1]) * rate)
             }
             Some(ToolGesture::ProfileRevolve { start, anchor_x }) => {
+                if !self.tool_session.numeric_text().is_empty() {
+                    return false;
+                }
                 let rate = if fine { 0.2 } else { 1.0 };
                 self.set_profile_revolve_angle(
                     (start + (current[0] - anchor_x) * rate).clamp(1.0, 360.0),
@@ -747,6 +840,32 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.commit_profile_transform();
         }
         match self.tool_gesture.take() {
+            Some(ToolGesture::ProtectedSelection) => true,
+            Some(ToolGesture::SelectionBox {
+                anchor,
+                current,
+                mode,
+            }) => {
+                let [width, height] = self.viewport_size;
+                if width <= 1.0 || height <= 1.0 {
+                    return false;
+                }
+                let from = viewport_intents::NormalizedViewportPoint::new(
+                    anchor[0] / width,
+                    anchor[1] / height,
+                );
+                let to = viewport_intents::NormalizedViewportPoint::new(
+                    current[0] / width,
+                    current[1] / height,
+                );
+                if let (Some(from), Some(to)) = (from, to) {
+                    self.apply_viewport_selection(ViewportSelectionIntent::Box { from, to, mode });
+                    true
+                } else {
+                    false
+                }
+            }
+            Some(ToolGesture::PlanarPrimitive { .. }) => self.commit_profile_authoring_preview(),
             Some(ToolGesture::Decal) => self.commit_decal_gesture(),
             Some(ToolGesture::SurfacePaint) => {
                 self.surface_paint.anchor = None;
@@ -760,8 +879,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             Some(ToolGesture::ProfileDepth { .. } | ToolGesture::ProfileRevolve { .. }) => {
-                self.state.mark_dirty();
-                true
+                self.commit_profile_volume()
             }
             Some(ToolGesture::LoopSlide { .. }) => self.commit_loop_cut(),
             // O plano fica em prévia até o clique de confirmação (ou Esc).
@@ -797,6 +915,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.cancel_profile_transform();
         }
         match self.tool_gesture.take() {
+            Some(ToolGesture::ProtectedSelection | ToolGesture::SelectionBox { .. }) => {
+                self.state.mark_dirty();
+                true
+            }
+            Some(ToolGesture::PlanarPrimitive { .. }) => self.cancel_profile_authoring_preview(),
             Some(ToolGesture::Transform { gizmo }) => {
                 if gizmo {
                     self.gizmo_drag = None;
@@ -810,9 +933,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(ToolGesture::ProfilePoint | ToolGesture::ProfileHandlePull) => {
                 self.cancel_profile_point_drag()
             }
-            Some(ToolGesture::ProfileDepth { start, .. }) => self.set_profile_depth(start),
+            Some(ToolGesture::ProfileDepth { start, .. }) => {
+                self.state.profile.depth = start;
+                self.cancel_profile_volume()
+            }
             Some(ToolGesture::ProfileRevolve { start, .. }) => {
-                self.set_profile_revolve_angle(start)
+                self.state.profile.revolve_angle = start;
+                self.cancel_profile_volume()
             }
             Some(ToolGesture::LoopSlide { .. }) => self.cancel_loop_cut(),
             Some(ToolGesture::Slice) => self.cancel_slice(),
@@ -826,5 +953,336 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             },
             None => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod contextual_selection_tests {
+    use super::*;
+
+    fn bridge() -> SlintUiBridge<PlaceholderViewport> {
+        let mut b = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+        b.resize_viewport(800, 600);
+        b.apply(UiIntent::SetActiveTool("select".into()));
+        b.state.dispatch(&petunia_core::SelectAllCmd).unwrap();
+        b
+    }
+
+    #[test]
+    fn select_has_a_universal_gizmo_and_geometry_drag_is_protected() {
+        let mut b = bridge();
+        assert_eq!(b.grammar_tool(), Some(GrammarTool::Select));
+        let gizmo = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(gizmo.visible);
+        assert!(!gizmo.x_scale_commands.is_empty());
+        assert!(!gizmo.x_rotate_commands.is_empty());
+        let at = [gizmo.origin_x, gizmo.origin_y];
+        assert!(
+            b.gizmo_target_at(at[0], at[1]).is_none(),
+            "center dead zone protects geometry selection"
+        );
+        let before = serde_json::to_value(&b.state.project.project.assets).unwrap();
+        let selection = b.state.session.selection.clone();
+        let depth = b.state.project.undo.depth();
+        b.tool_pointer(0, at[0], at[1], false, false);
+        b.tool_pointer(1, at[0] + 30.0, at[1] + 30.0, false, false);
+        assert!(matches!(
+            b.tool_gesture,
+            Some(ToolGesture::ProtectedSelection)
+        ));
+        assert!(b.state.modal.is_none());
+        b.tool_pointer(2, at[0] + 30.0, at[1] + 30.0, false, false);
+        assert_eq!(
+            serde_json::to_value(&b.state.project.project.assets).unwrap(),
+            before
+        );
+        assert_eq!(b.state.session.selection, selection);
+        assert_eq!(b.state.project.undo.depth(), depth);
+    }
+
+    #[test]
+    fn nav_cube_opacity_is_clamped_validated_and_published() {
+        let mut b = bridge();
+        assert_eq!(b.state.ui.nav_cube_opacity, 1.0, "padrão: opaco");
+        assert!(b.set_nav_cube_opacity(0.5));
+        assert_eq!(b.view_model().nav_cube_opacity, 0.5);
+        assert!(!b.set_nav_cube_opacity(0.5), "sem mudança");
+        assert!(!b.set_nav_cube_opacity(f32::NAN));
+        assert!(!b.set_nav_cube_opacity(f32::INFINITY));
+        assert!(b.set_nav_cube_opacity(0.0));
+        assert_eq!(b.state.ui.nav_cube_opacity, 0.2, "nunca some por completo");
+        assert!(b.set_nav_cube_opacity(9.0));
+        assert_eq!(b.state.ui.nav_cube_opacity, 1.0);
+    }
+
+    fn origin_of(g: &GizmoModel) -> [f32; 2] {
+        [g.origin_x, g.origin_y]
+    }
+
+    fn apart(a: [f32; 2], b: [f32; 2]) -> f32 {
+        (a[0] - b[0]).hypot(a[1] - b[1])
+    }
+
+    #[test]
+    fn the_gizmo_and_pivot_marker_follow_the_object_during_a_move_gesture() {
+        let mut b = bridge();
+        let start = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(start.visible);
+        b.state
+            .begin_modal(petunia_core::ModalKind::Move)
+            .expect("movimento");
+        let delta = glam::Vec3::new(1.0, 0.0, 0.0);
+        b.state.update_modal(delta, delta.length()).expect("prévia");
+        let during = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(
+            apart(origin_of(&start), origin_of(&during)) > 5.0,
+            "o gizmo ficou parado: {:?} -> {:?}",
+            origin_of(&start),
+            origin_of(&during)
+        );
+        // O gizmo está sobre o objeto movido: o pivô exibido é o pivô + o deslocamento.
+        let expected = b
+            .state
+            .session
+            .camera
+            .project_ndc(b.state.session.tools.modal.as_ref().expect("gesto").pivot + delta);
+        let x = (expected.x + 1.0) * 0.5 * 800.0;
+        let y = (1.0 - (expected.y + 1.0) * 0.5) * 600.0;
+        assert!(apart(origin_of(&during), [x, y]) < 1.0);
+        // Cancelar devolve o gizmo ao lugar de partida.
+        assert!(b.state.cancel_modal());
+        let after = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(apart(origin_of(&start), origin_of(&after)) < 0.5);
+    }
+
+    #[test]
+    fn the_gizmo_stays_on_the_pivot_during_a_rotation() {
+        let mut b = bridge();
+        let start = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        b.state
+            .begin_modal(petunia_core::ModalKind::Rotate)
+            .expect("rotação");
+        b.state
+            .update_modal_components(glam::Vec3::new(0.0, 45.0, 0.0))
+            .expect("prévia");
+        let during = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(
+            apart(origin_of(&start), origin_of(&during)) < 0.5,
+            "o centro da rotação não anda"
+        );
+        assert!(b.state.cancel_modal());
+    }
+
+    fn reach(g: &GizmoModel) -> f32 {
+        ((g.x_end[0] - g.origin_x).powi(2) + (g.x_end[1] - g.origin_y).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn gizmo_follows_the_size_and_thickness_preferences() {
+        let mut b = bridge();
+        let default = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!((default.size - 72.0).abs() < 1.0e-3);
+        assert!(b.set_gizmo_size(120.0));
+        assert!(b.set_gizmo_thickness(4.0));
+        let big = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!((big.size - 120.0).abs() < 1.0e-3);
+        assert!((big.thickness - 4.0).abs() < 1.0e-3);
+        let ratio = reach(&big) / reach(&default);
+        assert!(
+            (ratio - 120.0 / 72.0).abs() < 0.02,
+            "a haste cresce na proporção do tamanho: {ratio}"
+        );
+        // O hit-test usa a mesma geometria do desenho.
+        let at = big.x_end;
+        assert!(b.gizmo_target_at(at[0], at[1]).is_some());
+        // Valores fora da faixa são limitados; não finitos são recusados.
+        assert!(!b.set_gizmo_size(f32::NAN));
+        assert!(!b.set_gizmo_thickness(f32::INFINITY));
+        assert!(b.set_gizmo_size(9999.0));
+        assert_eq!(b.state.ui.gizmo_size, 160.0);
+        assert!(b.set_gizmo_thickness(0.0));
+        assert_eq!(b.state.ui.gizmo_thickness, 1.0);
+    }
+
+    #[test]
+    fn rotation_rings_publish_the_camera_facing_arcs() {
+        let mut b = bridge();
+        b.apply(UiIntent::SetActiveTool("rotate".into()));
+        let g = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        let points = |commands: &str| {
+            commands
+                .split_whitespace()
+                .filter(|token| token.parse::<f32>().is_ok())
+                .count()
+                / 2
+        };
+        for (ring, front) in [
+            (&g.x_commands, &g.x_ring_front),
+            (&g.y_commands, &g.y_ring_front),
+            (&g.z_commands, &g.z_ring_front),
+        ] {
+            assert!(!front.is_empty(), "todo anel tem um lado voltado à câmera");
+            assert!(
+                points(front) < points(ring),
+                "o lado da câmera é só parte do anel ({} de {})",
+                points(front),
+                points(ring)
+            );
+        }
+    }
+
+    #[test]
+    fn pivot_and_origin_markers_follow_the_active_object() {
+        let mut b = bridge();
+        let g = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(g.pivot_visible && g.origin_marker_visible);
+        assert!(
+            (g.pivot_screen[0] - g.origin_x).abs() < 1.0e-3,
+            "o gizmo nasce no pivô"
+        );
+        assert!(!g.pivot_editing);
+        assert!(b.toggle_edit_pivot());
+        assert!(projection::compute_gizmo(&b.state, 800.0, 600.0).pivot_editing);
+        // Sem objeto ativo não há marcador.
+        b.state.project.assets.clear();
+        let empty = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        assert!(!empty.pivot_visible && !empty.origin_marker_visible);
+    }
+
+    #[test]
+    fn select_gizmo_drag_uses_the_existing_transaction_and_cancel_restores_source() {
+        let mut b = bridge();
+        let g = projection::compute_gizmo(&b.state, 800.0, 600.0);
+        let at = g.x_end;
+        assert_eq!(
+            b.gizmo_target_at(at[0], at[1]).unwrap().kind,
+            TransformKind::Position
+        );
+        let source = serde_json::to_value(&b.state.project.project.assets).unwrap();
+        let depth = b.state.project.undo.depth();
+        b.tool_pointer(0, at[0], at[1], false, false);
+        b.tool_pointer(1, at[0] + 35.0, at[1], false, false);
+        assert!(b.state.modal.is_some());
+        b.tool_pointer(3, at[0] + 35.0, at[1], false, false);
+        assert!(b.state.modal.is_none());
+        assert_eq!(
+            serde_json::to_value(&b.state.project.project.assets).unwrap(),
+            source
+        );
+        assert_eq!(b.state.project.undo.depth(), depth);
+        assert_eq!(b.state.active_tool, "select");
+    }
+
+    #[test]
+    fn empty_drag_previews_box_without_mutating_selection_and_cancel_discards_it() {
+        let mut b = bridge();
+        let source = b.state.session.selection.clone();
+        let depth = b.state.project.undo.depth();
+        b.tool_pointer(0, 2.0, 2.0, false, false);
+        b.tool_pointer(1, 790.0, 590.0, false, false);
+        assert!(b.selection_box_preview().is_some());
+        assert_eq!(b.state.session.selection, source);
+        b.tool_pointer(3, 790.0, 590.0, false, false);
+        assert!(b.selection_box_preview().is_none());
+        assert_eq!(b.state.session.selection, source);
+        assert_eq!(b.state.project.undo.depth(), depth);
+    }
+
+    #[test]
+    fn profiles_are_visible_and_shape_builder_available_in_poly() {
+        let mut b = bridge();
+        assert_eq!(b.modeling_mode, ModelingMode::Poly);
+        assert!(b.draw_shapes_visible());
+        b.apply(UiIntent::SetActiveTool("shape_builder".into()));
+        assert_eq!(b.grammar_tool(), Some(GrammarTool::ShapeBuilder));
+        b.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+        assert_eq!(b.state.active_tool, "shape_builder");
+    }
+    #[test]
+    fn persistent_profile_can_be_drawn_picked_and_edited_without_leaving_poly() {
+        let mut b = bridge();
+        b.state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Front);
+        let spline = petunia_core::SplineResource::from_polyline(
+            "Planar",
+            &[
+                [-1.0, -1.0, 0.0],
+                [1.0, -1.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [-1.0, 1.0, 0.0],
+            ],
+            true,
+        );
+        let plane = petunia_core::ProfileWorkplane {
+            origin: [0.0, 0.0, 2.0],
+            ..Default::default()
+        };
+        let profile = petunia_core::ProfileResource::new("Planar", spline.id, plane);
+        let id = profile.id;
+        b.state
+            .dispatch(&petunia_core::CreateProfileCmd { spline, profile })
+            .unwrap();
+        assert!(!b.profile_outline_commands().is_empty());
+        let center = b
+            .state
+            .session
+            .camera
+            .project_ndc(glam::Vec3::new(0.0, 0.0, 2.0));
+        let x = (center.x + 1.0) * 0.5;
+        let y = (1.0 - center.y) * 0.5;
+        assert_eq!(b.profile_hit_at([x * 800.0, y * 600.0]), Some(id));
+        b.select_viewport_ext(x, y, false, false);
+        assert_eq!(b.active_profile_id, Some(id));
+        assert!(
+            !b.view_model().gizmo.visible,
+            "a profile must not accidentally move the underlying mesh"
+        );
+        assert_eq!(b.modeling_mode, ModelingMode::Poly);
+        assert!(b.execute_draw_extension("draw.ellipse"));
+        assert_eq!(b.modeling_mode, ModelingMode::Poly);
+    }
+    #[test]
+    fn explicit_handles_keep_precision_and_snap_modifiers() {
+        for (shift, ctrl) in [(true, false), (false, true)] {
+            let mut b = bridge();
+            let at = b.projected_gizmo().x_end;
+            b.tool_pointer(0, at[0], at[1], shift, ctrl);
+            b.tool_pointer(1, at[0] + 35.0, at[1], shift, ctrl);
+            assert!(
+                b.state.modal.is_some(),
+                "explicit handle must win over selection modifiers"
+            );
+            b.tool_pointer(3, at[0] + 35.0, at[1], shift, ctrl);
+            assert!(b.state.modal.is_none());
+        }
+    }
+
+    #[test]
+    fn empty_drag_commits_box_and_locked_assets_offer_no_handles() {
+        let mut b = bridge();
+        b.state.dispatch(&petunia_core::ClearSelectionCmd).unwrap();
+        let depth = b.state.project.undo.depth();
+        b.tool_pointer(0, 2.0, 2.0, false, false);
+        b.tool_pointer(1, 790.0, 590.0, false, false);
+        b.tool_pointer(2, 790.0, 590.0, false, false);
+        assert!(b.selection_box_preview().is_none());
+        assert!(!b.state.session.selection.assets.is_empty());
+        assert_eq!(b.state.project.undo.depth(), depth);
+        b.state.project.active_mut().unwrap().locked = true;
+        assert!(!b.projected_gizmo().visible);
+    }
+    #[test]
+    fn clicking_a_select_handle_below_drag_threshold_keeps_selection() {
+        let mut b = bridge();
+        let selection = b.state.session.selection.clone();
+        let depth = b.state.project.undo.depth();
+        let at = b.projected_gizmo().x_end;
+        b.tool_pointer(0, at[0], at[1], false, false);
+        b.tool_pointer(2, at[0], at[1], false, false);
+        assert_eq!(b.state.session.selection, selection);
+        assert_eq!(b.state.project.undo.depth(), depth);
+        assert!(b.state.modal.is_none());
     }
 }

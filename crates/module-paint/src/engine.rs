@@ -431,7 +431,7 @@ impl PaintModule {
             .paint_stack
             .as_ref()
             .and_then(|s| s.active())
-            .and_then(|l| l.canvas())
+            .and_then(|l| l.paint_canvas())
             .or(asset.texture.as_ref())
             .map(|c| (c.w, c.h))
     }
@@ -461,8 +461,8 @@ impl PaintModule {
         if layer.locked || !layer.is_paintable() {
             return None;
         }
-        let layer_id = layer.id;
-        let cv = layer.canvas_mut()?;
+        let layer_id = layer.paint_target_key();
+        let cv = layer.paint_canvas_mut()?;
         let buf_slot = &mut state.editor.tools.paint_buffer;
         let stale = buf_slot
             .as_ref()

@@ -24,6 +24,7 @@ pub(super) const POSITION_VS: &str = include_str!("shaders/position.vert");
 pub(super) const MASK_FS: &str = include_str!("shaders/mask.frag");
 pub(super) const EMPTY_FS: &str = include_str!("shaders/empty.frag");
 pub(super) const WIDE_LINE_VS: &str = include_str!("shaders/wide_line.vert");
+pub(super) const EDGE_LINE_VS: &str = include_str!("shaders/edge_line.vert");
 pub(super) const COLOR_FS: &str = include_str!("shaders/color.frag");
 pub(super) const POINT_VS: &str = include_str!("shaders/point.vert");
 pub(super) const POINT_FS: &str = include_str!("shaders/point.frag");
@@ -47,6 +48,7 @@ mod tests {
             SURFACE_VS,
             POSITION_VS,
             WIDE_LINE_VS,
+            EDGE_LINE_VS,
             POINT_VS,
             FLAT_VS,
             GRID_VS,

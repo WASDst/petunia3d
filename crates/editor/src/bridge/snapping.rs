@@ -58,7 +58,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 grid,
                 radius_pixels: session.snap_settings.radius_pixels,
                 mask,
-                xray: session.show_xray || session.shading == petunia_core::Shading::Wireframe,
+                xray: session.selects_through(),
                 reference,
                 angle_step_degrees: angle_step,
             },
@@ -79,6 +79,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             None => (2u8, self.scene_geometry_key(), project.active).hash(&mut hasher),
         }
+        (
+            project.spline_revision,
+            project.procedural_revision,
+            self.profile_authoring_preview.is_some(),
+        )
+            .hash(&mut hasher);
         let key = hasher.finish();
         if let Some((cached, accel)) = self.snap_accel_cache.borrow().as_ref()
             && *cached == key
@@ -93,8 +99,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .assets
             .iter()
             .enumerate()
-            .filter(|(_, asset)| asset.visible)
+            .filter(|(_, asset)| {
+                asset.visible && !modal.is_some_and(|m| m.excludes_snap_object(asset.id))
+            })
             .map(|(index, asset)| {
+                let asset = modal
+                    .and_then(|m| m.snap_source_asset(asset.id))
+                    .unwrap_or(asset);
                 // `SnapSource` não carrega matriz: o snap é de mundo, então as
                 // malhas entram no mundo (índices preservados para `moving`).
                 let mesh = match modal {
@@ -124,7 +135,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             })
             .collect();
         let accel = std::sync::Arc::new(crate::perf::measure("snap_accel_rebuild", || {
-            petunia_core::SnapAccel::build(&sources)
+            let identities: Vec<_> = meshes
+                .iter()
+                .filter_map(|(index, _)| {
+                    project.assets.get(*index).map(|a| {
+                        (
+                            a.id,
+                            a.geometry_source.is_none() && !a.has_enabled_modifiers(),
+                        )
+                    })
+                })
+                .collect();
+            let mut accel = petunia_core::SnapAccel::build_scoped(&sources, &identities);
+            for shape in project.profiles.iter().filter(|s| s.visible) {
+                if self
+                    .profile_authoring_preview
+                    .as_ref()
+                    .is_some_and(|d| d.profile.id == shape.id)
+                {
+                    continue;
+                }
+                for id in std::iter::once(&shape.spline_id).chain(&shape.hole_splines) {
+                    if let Some(spline) = project.get_spline(*id) {
+                        accel.append_planar_spline(shape.id, spline, shape.workplane);
+                    }
+                }
+            }
+            for spline in project.splines.iter().filter(|spline| {
+                !project.profiles.iter().any(|shape| {
+                    shape.spline_id == spline.id || shape.hole_splines.contains(&spline.id)
+                })
+            }) {
+                if let Ok(resolved) = project.resolved_spline(spline.id) {
+                    accel.append_spatial_spline(spline.id, &resolved);
+                }
+            }
+            accel
         }));
         *self.snap_accel_cache.borrow_mut() = Some((key, std::sync::Arc::clone(&accel)));
         accel
@@ -184,9 +230,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn toggle_snap_enabled(&mut self) -> bool {
-        self.state.session.snap_enabled = !self.state.session.snap_enabled;
-        self.state.session.snap_settings.enabled = self.state.session.snap_enabled;
-        let enabled = self.state.session.snap_enabled;
+        self.state.session.snap_settings.enabled = !self.state.session.snap_settings.enabled;
+        let enabled = self.state.session.snap_settings.enabled;
         self.state.render.mark_dirty();
         self.state.set_status(if enabled {
             "Snap magnético ativado"
@@ -199,12 +244,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn set_snap_target(&mut self, target_str: &str) -> bool {
         use petunia_core::SnapTarget;
         let target = match target_str.to_lowercase().as_str() {
+            "smart" => SnapTarget::Smart,
             "grid" => SnapTarget::Grid,
             "increment" => SnapTarget::Increment,
             "vertex" | "point" => SnapTarget::Vertex,
             "edge" => SnapTarget::Edge,
             "face" => SnapTarget::Face,
-            _ => SnapTarget::Grid,
+            _ => return false,
         };
         self.state.session.snap_settings.target = target;
         self.state.render.mark_dirty();
@@ -213,5 +259,83 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             &[("0", target.label().to_string())],
         ));
         true
+    }
+}
+
+#[cfg(test)]
+mod origin_frame_tests {
+    use super::*;
+    use glam::{Quat, Vec2, Vec3};
+    use petunia_core::{EditMode, SnapMask, SnapTarget, modal::ModalKind};
+
+    #[test]
+    fn origin_drag_snaps_to_stationary_surface_using_frozen_frame_on_first_query() {
+        let mut bridge = SlintUiBridge::new(AppState::new("en"), Software3dViewport::new(800, 600));
+        bridge.resize_viewport(800, 600);
+        bridge.state.set_edit_mode(EditMode::Object);
+        bridge
+            .state
+            .project
+            .active_mut()
+            .unwrap()
+            .set_object_transform(petunia_project::ObjectTransform::from_trs(
+                Vec3::new(0.4, 0.2, 0.0),
+                Quat::from_rotation_y(0.3),
+                Vec3::splat(0.8),
+            ));
+        let points = bridge.state.project.active().unwrap().world_positions();
+        bridge.state.session.snap_settings.enabled = true;
+        bridge.state.session.snap_enabled = true;
+        bridge.state.toggle_edit_pivot();
+        bridge.state.begin_modal(ModalKind::Move).unwrap();
+        bridge
+            .state
+            .update_modal(Vec3::new(3.0, 2.0, 1.0), 0.0)
+            .unwrap();
+        // Cache is first built after the origin/mesh have already been rebased.
+        let matrix = bridge.state.session.camera.view_proj();
+        let hits = points
+            .into_iter()
+            .filter(|point| {
+                let clip = matrix * point.extend(1.0);
+                let ndc = clip.truncate() / clip.w;
+                let pixel = Vec2::new((ndc.x + 1.0) * 400.0, (1.0 - ndc.y) * 300.0);
+                bridge
+                    .screen_snap(pixel, SnapMask::for_target(SnapTarget::Vertex), None, None)
+                    .is_some_and(|hit| hit.point.distance(*point) < 1e-4)
+            })
+            .count();
+        assert!(
+            hits >= 2,
+            "stationary corners must remain usable snap targets"
+        );
+    }
+
+    #[test]
+    fn moving_object_group_does_not_snap_to_its_other_selected_objects() {
+        let mut bridge = SlintUiBridge::new(AppState::new("en"), Software3dViewport::new(800, 600));
+        bridge.resize_viewport(800, 600);
+        bridge.state.set_edit_mode(EditMode::Object);
+        let first = bridge.state.project.active().unwrap().id;
+        let mut other = bridge.state.project.active().unwrap().clone();
+        other.id = uuid::Uuid::new_v4();
+        let second = other.id;
+        let points = other.world_positions();
+        bridge.state.project.assets.push(other);
+        bridge.state.session.selection.assets = vec![first, second];
+        bridge.state.session.snap_settings.enabled = true;
+        bridge.state.session.snap_enabled = true;
+        bridge.state.begin_modal(ModalKind::Move).unwrap();
+        let matrix = bridge.state.session.camera.view_proj();
+        for point in points {
+            let clip = matrix * point.extend(1.0);
+            let ndc = clip.truncate() / clip.w;
+            let pixel = Vec2::new((ndc.x + 1.0) * 400.0, (1.0 - ndc.y) * 300.0);
+            assert!(
+                bridge
+                    .screen_snap(pixel, SnapMask::for_target(SnapTarget::Vertex), None, None)
+                    .is_none()
+            );
+        }
     }
 }

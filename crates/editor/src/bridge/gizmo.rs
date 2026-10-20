@@ -3,6 +3,23 @@
 use crate::*;
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
+    /// Only expose handles backed by a transformable target. Profile adapters
+    /// remain explicit until heterogeneous target resolution is implemented.
+    pub(crate) fn projected_gizmo(&self) -> GizmoModel {
+        let mut gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        let unsupported_profile = self.state.workspace == Workspace::Model
+            && self.state.active_tool == "select"
+            && self.active_profile_resources().is_some();
+        // Só o bloqueio tira as alças: um objeto oculto continua transformável.
+        let unavailable_asset = self.state.workspace == Workspace::Model
+            && self.state.project.active().is_none_or(|asset| asset.locked);
+        if unsupported_profile || unavailable_asset {
+            gizmo.visible = false;
+            gizmo.clear_handle_geometry();
+        }
+        gizmo
+    }
+
     /// Handle do gizmo sob o cursor (preselection, sem clique).
     /// Handle do gizmo sob um ponto de tela, dentro de um raio de tolerância.
     ///
@@ -12,8 +29,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.gizmo_target_at(x, y).map(|target| target.handle)
     }
 
+    /// B10: no Selecionar, um vértice ou aresta ainda não selecionado sob o raio
+    /// de picking vence a alça do gizmo, que cobre ~70 px em volta da seleção e
+    /// engolia o clique no vizinho. Face e objeto continuam com a alça (estão sob
+    /// o gizmo inteiro); o que já está selecionado também (arrastar por cima).
+    /// Hover e clique usam esta mesma regra: o destaque é o que o clique faz.
+    pub(crate) fn component_beats_gizmo(&self, target: petunia_core::HoverTarget) -> bool {
+        use petunia_core::HoverTarget as Target;
+        if self.state.session.tools.active_tool != "select" {
+            return false;
+        }
+        let Some(mesh) = self.state.project.active_mesh() else {
+            return false;
+        };
+        match target {
+            Target::Vertex(index) => mesh.verts.get(index as usize).is_some_and(|v| !v.selected),
+            Target::Edge(a, b) => {
+                !(mesh.selected_edges.contains(&(a, b)) || mesh.selected_edges.contains(&(b, a)))
+            }
+            _ => false,
+        }
+    }
+
+    /// A alça do gizmo recebe o clique em `(x, y)` px? (já aplicada a regra acima)
+    pub(crate) fn gizmo_takes_press(&self, x: f32, y: f32) -> bool {
+        if self.gizmo_target_at(x, y).is_none() {
+            return false;
+        }
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return true;
+        }
+        !self.component_beats_gizmo(self.pick_viewport_target(x / width, y / height))
+    }
+
     pub(crate) fn gizmo_target_at(&self, x: f32, y: f32) -> Option<GizmoTarget> {
-        let gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        let gizmo = self.projected_gizmo();
         if !gizmo.visible {
             return None;
         }
@@ -23,6 +74,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "scale" => "scale",
                 _ => "rotate",
             }
+        } else if self.state.session.tools.active_tool == "select" {
+            "transform"
         } else {
             self.state.session.tools.active_tool.as_str()
         };
@@ -47,7 +100,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         // View Roll para a ferramenta Rotate (anel perimetral externo a ~113px)
         if active == "rotate"
-            && (dist_from_origin - projection::GIZMO_VIEW_ROLL_RADIUS).abs()
+            && (dist_from_origin - projection::gizmo_view_roll_radius(&self.state)).abs()
                 <= projection::GIZMO_RING_HIT_HALF_WIDTH
         {
             return Some(GizmoTarget {
@@ -309,8 +362,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// domina, o eixo sob o cursor clareia e os demais esmaecem no arrasto.
     pub(crate) fn gizmo_overlay_shapes(&self) -> Vec<petunia_render::OverlayShape> {
         use petunia_render::OverlayShape;
-        let [width, height] = self.viewport_size;
-        let gizmo = compute_gizmo(&self.state, width, height);
+        let gizmo = self.projected_gizmo();
         if !gizmo.visible || self.state.workspace != Workspace::Model {
             return Vec::new();
         }
