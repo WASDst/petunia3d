@@ -40,6 +40,20 @@ Testes em CI Linux não substituem smoke manual em Windows e nem teste de mesa f
 ## Frontend Qt Widgets e petunia_editor — gates específicos
 
 Com a remoção do Slint e consolidação em `petunia_editor` e Qt Widgets (ADR-C11), os gates de interface combinam validação estrita de contrato Rust com automação nativa offscreen via `QTestLib`:
+## Controlador de editor — gate de CI atual
+
+**2026-10-18:** com a retirada do Slint (ADR-C11/Q07), o workflow `ui-slint.yml` passou a falhar já no primeiro passo (`package petunia_ui_slint is not a member of the workspace`) sempre que um PR tocava `crates/core/**`. Ele foi substituído por `ui-editor.yml` (**UI Editor**), que cobre o controlador neutro `petunia_editor`, onde agora vivem intents, gestos, sessões e projeção de estado:
+
+- cargo fmt -p petunia_editor -- --check
+- cargo clippy -p petunia_editor --features animation-workspace --all-targets -- -D warnings
+- cargo test -p petunia_editor --lib
+- cargo test -p petunia_editor --features animation-workspace --lib
+
+O adaptador `petunia_ui_cxxqt` exige Qt 6 no runner e não faz parte deste job; seus gates (`bridge_test`, `editor_parity`, `qt_parity_acceptance`) continuam locais, conforme [integração Qt](../09-ui/qt-integration.md). YAML atualizado não equivale a execução: o status remoto vale a partir do primeiro run com SHA.
+
+## Frontend Slint — gates específicos (histórico)
+
+Registro anterior à retirada do Slint; os comandos abaixo não se aplicam mais ao workspace. O workflow **UI Slint** verificava formatação do crate, tokens, Clippy e testes de interface/gestos:
 
 Comandos canônicos de gate:
 - `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`
