@@ -34,10 +34,7 @@ confidence-threshold = 0.8
 [advisories]
 unmaintained = "all"
 yanked = "warn"
-ignore = [
-    "RUSTSEC-2026-0192", # ttf-parser 0.25.1 transitive via winit -> sctk-adwaita
-    "RUSTSEC-2026-0206", # rustybuzz 0.20.1 unmaintained, transitive via usvg/resvg (slint, petunia_project)
-]
+ignore = []
 
 [bans]
 multiple-versions = "warn"
